@@ -1,0 +1,20 @@
+# Build output and dependencies
+node_modules/
+.next/
+dist/
+out/
+coverage/
+target/
+neardev/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Misc
+*.log
+.DS_Store
+
+# Submission payload contains personal data — HACKATHON.md §3
+submission*.json
