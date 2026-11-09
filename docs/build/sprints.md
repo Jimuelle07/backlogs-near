@@ -1,10 +1,19 @@
 # Sprints
 
-Remaining work for a team of 5 (3 backend, 2 frontend), cut into **five parallel lanes** so nobody waits on anyone else inside a sprint. A lane is one person's worth of work per sprint; assign lanes or individual tasks by filling in **Owner**. Size: S ≈ half a day, M ≈ a day.
+Remaining work for a team of 6 (4 backend, 2 frontend), cut into **five parallel lanes** so nobody waits on anyone else inside a sprint. A lane is one person's worth of work per sprint; the backend lead also reviews and pairs. Assign tasks by filling in **Owner**. Size: S ≈ half a day, M ≈ a day.
 
 Done before Sprint 1: Guardian caps and hold escrow, `DecisionClient` (Jev primary, NEAR AI LLM fallback), 60 scenarios, dry-run mirroring the contract, testnet end-to-end in relayer mode (paid, refused by cap, timed out), OutLayer checker mode in code (not yet run live). Details: [sdd.md](sdd.md).
 
 Signing steps (deploys, testnet transactions, OutLayer registration) are run by a human ([AGENTS.md §4](../../AGENTS.md#4-human-only-actions)).
+
+## Team
+
+| Team | Lead | Members |
+| --- | --- | --- |
+| Backend (lanes A, B, C) | Jim | Rc, paticolcol, Jesus |
+| Frontend (lanes D, E) | Helena | Ace |
+
+Leads pair with their members on the hardest task of the sprint and review every task in their team before it is marked done.
 
 ## How the lanes stay parallel
 
@@ -12,10 +21,10 @@ Lanes never block each other inside a sprint because every hand-off goes through
 
 | Hand-off | Frozen format | Lets this start early |
 | --- | --- | --- |
-| Checks → fusion | `signals` in [decision-record.schema.json](../../schemas/decision-record.schema.json) (already frozen: `policy`, `injection`, `melon`, `counterparty`, `jev`) | W1 builds on fixture signals while T3/T4/T5 are written |
-| Eval → website | `results.json` (defined in C1, Sprint 1) | H5 renders sample results while H2 runs |
-| Contract → website | Guardian views (`list_receipts`, `get_held`, `get_daily_spent`, `get_config`) and [receipt.schema.json](../../schemas/receipt.schema.json) | F2/W7 build on the live testnet Guardian today |
-| Checker → eval | the checker binary (stdin CheckerInput → stdout Verdict) | H2a runs on the stub checker; numbers fill in as checks land |
+| Checks → fusion | `signals` in [decision-record.schema.json](../../schemas/decision-record.schema.json) (already frozen: `policy`, `injection`, `melon`, `counterparty`, `jev`) | C3 builds on fixture signals while B1/C2/B3 are written |
+| Eval → website | `results.json` (defined in C1, Sprint 1) | E3 renders sample results while C4 runs |
+| Contract → website | Guardian views (`list_receipts`, `get_held`, `get_daily_spent`, `get_config`) and [receipt.schema.json](../../schemas/receipt.schema.json) | E1/E2 build on the live testnet Guardian today |
+| Checker → eval | the checker binary (stdin CheckerInput → stdout Verdict) | A3 runs on the stub checker; numbers fill in as checks land |
 
 Rule for every lane: code against the frozen format and a fixture; swap in the real producer when it lands. A format change needs the owners of both sides.
 
@@ -31,19 +40,28 @@ Rule for every lane: code against the frozen format and a fixture; swap in the r
 
 Sync points (the only moments lanes must meet): **end of Sprint 2** — testnet gate G2; **end of Sprint 3** — numbers frozen for the demo and site.
 
-## Sprint 1
+## Sprint 1 — due Tue 10 Nov, 23:59 PHT (15:59Z)
+
+| Who | Role this sprint |
+| --- | --- |
+| Jim (backend lead) | A1 OutLayer live (signs the testnet steps); reviews all backend tasks; pairs with Rc on B1 |
+| Rc | B1 policy rules, B2 nightly e2e script |
+| paticolcol | C1 results format and fixtures first (unblocks A3 and frontend), then C2 classifier |
+| Jesus | A2 record sink, A3 eval harness skeleton |
+| Helena (frontend lead) | D1 landing page skeleton; picks the stack and host for both frontend lanes; reviews E1 |
+| Ace | E1 live receipts panel (uses Helena's stack choice) |
 
 | ID | Lane | Track | Size | Task | Done when | Starts from | Owner |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A1 | A | Backend | M | OutLayer live: build the checker wasm, upload and deploy, redeploy the Guardian, `set_checker_mode`, run one benign and one attack payment ([sdd.md §6](sdd.md) runbook; human signs) | Receipt `paid` through OutLayer; sdd §6 open questions answered (Text result shape, deposit, timeout delivery) | — | |
-| A2 | A | Backend | S | Record sink: checker POSTs each DecisionRecord to `DECISION_LOG_URL`; POST failure turns `allow` into `hold` ([sdd.md §7](sdd.md)) | Unit tests; records arrive from an OutLayer run once A1 is live | — | |
-| A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format) | Runs on the stub checker today | C1 format (fixture until then) | |
-| B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | |
-| B2 | B | Backend | S | Nightly end-to-end script: one benign and one attack payment on testnet (human runs it) | Script plus expected output | — | |
-| C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests | Schema and example committed; E3 and A3 can use them | — | |
-| C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency | Score per item in the record; latency recorded | frozen `signals.injection` | |
-| D1 | D | Frontend | M | Landing page skeleton: choose a static stack and host (must stay up through 2026-11-18, ideally 2026-11-25); sections: problem, how it works, NEAR's role, Jev's role, safety layers, demo, results, links | Deployed URL with draft copy | — | |
-| E1 | E | Frontend | M | Live receipts panel: read-only calls to Guardian views over a public testnet RPC, explorer links, no wallet | Shows the existing testnet receipts | live testnet Guardian | |
+| A1 | A | Backend | M | OutLayer live: build the checker wasm, upload and deploy, redeploy the Guardian, `set_checker_mode`, run one benign and one attack payment ([sdd.md §6](sdd.md) runbook; human signs) | Receipt `paid` through OutLayer; sdd §6 open questions answered (Text result shape, deposit, timeout delivery) | — | Jim |
+| A2 | A | Backend | S | Record sink: checker POSTs each DecisionRecord to `DECISION_LOG_URL`; POST failure turns `allow` into `hold` ([sdd.md §7](sdd.md)) | Unit tests; records arrive from an OutLayer run once A1 is live | — | Jesus |
+| A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format) | Runs on the stub checker today | C1 format (fixture until then) | Jesus |
+| B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | Rc (pairs with Jim) |
+| B2 | B | Backend | S | Nightly end-to-end script: one benign and one attack payment on testnet (human runs it) | Script plus expected output | — | Rc |
+| C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests | Schema and example committed; E3 and A3 can use them | — | paticolcol |
+| C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency | Score per item in the record; latency recorded | frozen `signals.injection` | paticolcol |
+| D1 | D | Frontend | M | Landing page skeleton: choose a static stack and host (must stay up through 2026-11-18, ideally 2026-11-25); sections: problem, how it works, NEAR's role, Jev's role, safety layers, demo, results, links | Deployed URL with draft copy | — | Helena |
+| E1 | E | Frontend | M | Live receipts panel: read-only calls to Guardian views over a public testnet RPC, explorer links, no wallet | Shows the existing testnet receipts | live testnet Guardian | Ace |
 
 **Decision at the end of Sprint 1:** if A1 is not working, lane A replaces A4 with **A0: HTTPS + signed-verdict fallback mode** ([idea.md Risks](idea.md#risks-and-fallbacks)) in Sprint 2 and A4 moves to Sprint 3.
 
