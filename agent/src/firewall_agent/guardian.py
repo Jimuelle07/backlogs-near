@@ -11,6 +11,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from .config import DEFAULT_TESTNET_RPC, TOKEN_DECIMALS, Settings
 from .formats import PaymentRequest, compact_json
@@ -20,6 +21,22 @@ CHECKER_INPUT_FORMAT = "firewall.checker_input.v1"
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _STATUS_BY_OUTCOME = {"allow": "would_pay", "hold": "held", "block": "refused"}
 TGAS = 10**12
+
+# Hard limits: mirror contract/guardian/src/lib.rs (PER_PAYMENT_CAP_WHOLE, DAILY_CAP_WHOLE,
+# NANOS_PER_DAY) and contract/guardian/src/validate.rs (hold_window_ns).
+PER_PAYMENT_CAP_WHOLE = 200
+DAILY_CAP_WHOLE = 500
+NANOS_PER_DAY = 86_400_000_000_000
+
+
+def hold_window_ns(amount: int, decimals: int) -> int:
+    """Hold window by amount: <20 tokens 10 min, <=100 tokens 1 h, otherwise 6 h."""
+    unit = 10**decimals
+    if amount < 20 * unit:
+        return 600_000_000_000
+    if amount <= 100 * unit:
+        return 3_600_000_000_000
+    return 21_600_000_000_000
 
 
 _PANIC_PREFIX = "Smart contract panicked: "
@@ -69,6 +86,7 @@ class Decision:
     status: str
     detail: str = ""
     record_path: Path | None = None
+    release_at_ns: int | None = None
 
 
 def binds(checker_input: dict, verdict: dict) -> str | None:
@@ -105,20 +123,63 @@ def run_checker(checker_bin, input_bytes: bytes, record_dir) -> dict:
 
 
 class LocalGuardian:
-    """Dry-run guardian: same validation and CheckerInput as the contract, native checker."""
+    """Dry-run guardian: same validation, caps and CheckerInput as the contract, native checker.
 
-    def __init__(self, settings: Settings):
+    Mirrors the contract's hard limits: per-payment cap, daily cap (reserved at request time,
+    released on `block`, kept for `allow`/`hold`) persisted in `<record_dir>/state.json`.
+    A `hold` verdict yields status `held` with `release_at_ns`; dry-run never waits and never
+    auto-releases or cancels the hold. State is single-process (no file lock).
+    """
+
+    def __init__(self, settings: Settings, now_ns: Callable[[], int] | None = None):
         self.s = settings
+        self.now_ns = now_ns or (lambda: time.time_ns())
 
     @property
     def record_dir(self) -> Path:
         return self.s.checker_record_dir / "dry-run"
+
+    @property
+    def state_path(self) -> Path:
+        return self.record_dir / "state.json"
 
     def next_request_id(self) -> int:
         """Persisted counter: 1 + highest integer stem among existing records."""
         d = self.record_dir
         stems = [int(p.stem) for p in d.glob("*.json") if p.stem.isdigit()] if d.is_dir() else []
         return max(stems, default=0) + 1
+
+    def _load_state(self, today: int) -> dict:
+        """Daily spend state, rolled forward to `today` (mirror of the contract's roll_day).
+
+        Only a missing file is a fresh state; anything unreadable or malformed fails closed.
+        A clock that moved back keeps the stored day and spend.
+        """
+        corrupt = ContractRefusal("dry-run state.json is corrupt; rerun with --reset-spend")
+        try:
+            raw = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {"spend_day": today, "spent_today": 0}
+        except (OSError, ValueError):
+            raise corrupt from None
+        if not isinstance(raw, dict):
+            raise corrupt
+        day, spent = raw.get("spend_day"), raw.get("spent_today")
+        if type(day) is not int or type(spent) is not int or day < 0 or spent < 0:
+            raise corrupt
+        if today > day:
+            return {"spend_day": today, "spent_today": 0}
+        return {"spend_day": day, "spent_today": spent}
+
+    def reset_spend(self) -> None:
+        """Dry-run only: forget today's spend (demo convenience; the contract has no such call)."""
+        self.state_path.unlink(missing_ok=True)
+
+    def _save_state(self, state: dict) -> None:
+        self.record_dir.mkdir(parents=True, exist_ok=True)
+        tmp = self.state_path.with_name("state.json.tmp")
+        tmp.write_text(json.dumps(state), encoding="utf-8")
+        os.replace(tmp, self.state_path)
 
     def build_checker_input(self, req: PaymentRequest, request_id: int) -> dict:
         ns = self.s.ns
@@ -139,20 +200,42 @@ class LocalGuardian:
 
     def request_payment(self, req: PaymentRequest) -> Decision:
         req.validate()
-        request_id = self.next_request_id()
-        checker_input = self.build_checker_input(req, request_id)
-        verdict = run_checker(
-            self.s.checker_bin, compact_json(checker_input), self.record_dir
-        )
-        bad = binds(checker_input, verdict)
-        if bad:
-            raise ValueError(f"Verdict does not match request: {bad}")
+        now = self.now_ns()
+        unit = 10**TOKEN_DECIMALS
+        if req.amount > PER_PAYMENT_CAP_WHOLE * unit:
+            raise ContractRefusal("Amount exceeds per-payment cap")
+        state = self._load_state(now // NANOS_PER_DAY)
+        if state["spent_today"] + req.amount > DAILY_CAP_WHOLE * unit:
+            raise ContractRefusal("Daily cap reached")
+        state["spent_today"] += req.amount
+        self._save_state(state)
+
+        try:
+            request_id = self.next_request_id()
+            checker_input = self.build_checker_input(req, request_id)
+            verdict = run_checker(
+                self.s.checker_bin, compact_json(checker_input), self.record_dir
+            )
+            bad = binds(checker_input, verdict)
+            if bad:
+                raise ValueError(f"Verdict does not match request: {bad}")
+        except BaseException:
+            state["spent_today"] -= req.amount
+            self._save_state(state)
+            raise
+        release_at_ns = None
+        if verdict["outcome"] == "block":
+            state["spent_today"] -= req.amount
+            self._save_state(state)
+        elif verdict["outcome"] == "hold":
+            release_at_ns = now + hold_window_ns(req.amount, TOKEN_DECIMALS)
         return Decision(
             outcome=verdict["outcome"],
             reasons=list(verdict["reasons"]),
             record_sha256=verdict["record_sha256"],
             status=_STATUS_BY_OUTCOME[verdict["outcome"]],
             record_path=self.record_dir / f"{request_id}.json",
+            release_at_ns=release_at_ns,
         )
 
 
@@ -207,8 +290,9 @@ class TestnetGuardian:
         await acc.startup()
         try:
             # included=True returns the hash once the tx is included; it never reports a contract panic.
+            # OutLayer checker mode needs ~160 TGas (request_execution 100 + callback 40); relayer mode is unaffected.
             tx_hash = await acc.function_call(
-                self.s.guardian_id, "request_payment", req.to_args(), gas=100 * TGAS, included=True
+                self.s.guardian_id, "request_payment", req.to_args(), gas=200 * TGAS, included=True
             )
             accepted = False
             deadline = time.monotonic() + self.TIMEOUT_SECONDS

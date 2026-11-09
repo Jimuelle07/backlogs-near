@@ -109,26 +109,33 @@ Project-independent:
 
 State: `owner_id`, `agent_id`, `token_id`, `token_decimals`, `checker_id`, `next_request_id` (starts at 1), `pending: IterableMap<u64, Pending>`, `receipts: IterableMap<u64, Receipt>`, `refs: LookupMap<String, u64>` (client_ref → request_id), `held: IterableMap<u64, Held>` (hold escrow: `receiver_id`, `amount`, `release_at_ns`, `charged_day`), `spend_day` (UTC day index, `block_timestamp / 86_400_000_000_000`), `spent_today`. Limits: context ≤ 8192 serialized bytes, ≤ 8 context items, ≤ 16 pending requests.
 
+The mode is not part of this struct: see [OutLayer checker mode](#outlayer-checker-mode).
+
 Hard caps (constants in contract code, tuned by redeploying): 200 tUSDC per payment, 500 tUSDC per UTC day. `request_payment` reserves the amount against `spent_today` at request time (`spend_day` rolls the counter), so pending, held and paying amounts together can never exceed the cap. The reservation is released on block, yield timeout, transfer failure and `cancel_held`; paid and paying amounts stay counted. A hold charged on day D and released on D+1 still counts against D (each request records `charged_day`). So the cap bounds amounts committed per request day, and payouts in one wall-clock day can reach about 2× the daily cap (D's holds released on D+1, plus D+1's own requests). The window for a hold depends on its amount: 10 min below 20 tUSDC, 1 h up to 100, 6 h above.
 
 | Method | Kind | Behavior |
 | --- | --- | --- |
 | `new(owner_id, agent_id, token_id, token_decimals, checker_id)` | init | Sets config |
 | `ft_on_transfer(sender_id, amount, msg)` | change | Panics `Unsupported token` unless the caller is `token_id`; refunds unless `sender_id == owner_id` (owner deposits fund custody) |
-| `request_payment(client_ref, receiver_id, amount, memo, user_request, context)` | change (agent only) | Validates; panics `Amount exceeds per-payment cap` or `Daily cap reached`; reserves the amount; assigns `request_id`, builds CheckerInput, stores `input_sha256` and `charged_day`, yields to `on_verdict`, emits `payment_requested` |
-| `submit_verdict(request_id, verdict)` | change (checker only) | Rejects any verdict whose format, request_id, receiver, token or amount differs, or with bad reasons/hash; resumes the yield |
+| `request_payment(client_ref, receiver_id, amount, memo, user_request, context)` | change (agent only) | Validates; panics `Amount exceeds per-payment cap` or `Daily cap reached`; reserves the amount; assigns `request_id`, builds CheckerInput, stores `input_sha256` and `charged_day`; relayer mode yields to `on_verdict`, OutLayer mode calls `request_execution` then `on_outlayer_verdict`; emits `payment_requested` |
+| `submit_verdict(request_id, verdict)` | change (checker only) | Rejects any verdict whose format, request_id, receiver, token or amount differs, or with bad reasons/hash; panics `Request is decided by OutLayer` for OutLayer-mode requests; resumes the yield |
 | `on_verdict(request_id, verdict)` | private callback | Never panics. `allow` → `ft_transfer`; `hold` → `held` receipt plus a `held` escrow entry with `release_at_ns`; `block` → `refused` (unreserves); yield timeout → `timed_out` (unreserves); emits `payment_decided` with `release_at_ns` (set for holds, otherwise `null`) |
 | `on_transfer_done(request_id, charged_day, amount)` | private callback | `paid`, or `transfer_failed` (unreserves) |
 | `release_held(request_id)` | change (anyone) | Panics `Unknown hold` or `Hold window not over`; after `release_at_ns` removes the hold, sets the receipt to `paying`, transfers like `allow`, emits `hold_released` |
 | `cancel_held(request_id)` | change (owner or checker) | Panics `Only the owner or checker can cancel holds` or `Unknown hold`; removes the hold, receipt becomes `refused` (outcome stays `hold`), unreserves, emits `hold_cancelled` |
+| `set_checker_mode(mode)` | change (owner only) | Panics `Only the owner can set the checker mode` or `Invalid checker mode: <field>`; `mode` is `"relayer"` (default) or `{"outlayer": {...}}`; emits `checker_mode_set` |
+| `get_checker_mode()` | view | The current mode |
+| `on_outlayer_verdict(request_id)` | private callback | OutLayer mode only; parses and binds the verdict, then settles like `on_verdict`; fails closed with `checker_failed` |
 | `get_config()` | view | Config, including `per_payment_cap` and `daily_cap` |
 | `get_daily_spent()` | view | Amount reserved or spent today; 0 once the UTC day has rolled |
 | `get_pending(from_index, limit)` | view | Pending requests with `checker_input` and `input_sha256`, for the relayer |
+| `clear_stuck_outlayer(request_id)` | change (owner only) | Panics `Only the owner can clear stuck requests`, `Unknown OutLayer request` or `Request is not stuck` (needs 300 blocks since `requested_block`); unreserves, receipt `timed_out`, emits `checker_failed` (`stuck_cleared`) |
+| `get_outlayer_usage()` | view | `{day, used, max_per_day}` of the daily OutLayer request budget, read from the persisted counter whenever it exists (`max_per_day` is 0 in relayer mode); `null` only if OutLayer was never used; `used` is 0 if the stored day is not today |
 | `get_held(from_index, limit)` | view | Holds: `request_id`, `receiver_id`, `amount`, `release_at_ns`; limit clamped to 50 |
 | `get_receipt(request_id)` / `get_receipt_by_ref(client_ref)` | view | One receipt |
 | `list_receipts(from_index, limit)` | view | Receipts, limit clamped to 50 |
 
-Validation lives in `validate.rs` as pure functions (`binds`). The callback times out after 200 blocks; validation happens in `submit_verdict`, never in the callback. Events use NEP-297 with standard `payment_firewall`.
+Validation lives in `validate.rs` as pure functions (`binds`, `parse_outlayer_output`, `valid_mode`). In relayer mode the yield times out after 200 blocks and validation happens in `submit_verdict`; in OutLayer mode it happens in `on_outlayer_verdict`. Both modes settle through one shared `settle`. Events use NEP-297 with standard `payment_firewall`; OutLayer mode adds `checker_mode_set` and `checker_failed`.
 
 ### Token (`contract/token`, crate `tusdc`) — scaffold
 
@@ -138,14 +145,48 @@ NEP-141 (FungibleToken), NEP-145 (storage management) and NEP-148 (metadata: "Te
 
 | Addition | Day ([idea.md](idea.md#day-by-day-plan-nov-814)) |
 | --- | --- |
-| `CheckerMode::{Relayer, OutLayer{project_id, version_key}}`: in OutLayer mode `request_payment` calls `outlayer.testnet` `request_execution` with a deposit, `on_verdict` reads stdout via `env::promise_result`; `version_key` pins the checker wasm sha256 | Mon–Tue |
+| ~~`CheckerMode::{Relayer, OutLayer}`~~ implemented, see [OutLayer checker mode](#outlayer-checker-mode); the human registration and the first testnet run remain | Mon–Tue |
 | Per-payee budgets (learned, contract state) | Wed |
 | TEE re-check during the hold window, and refund (`cancel_held`) on a flagged re-check. Release without a re-check is implemented | Wed |
 | Receiver auto-registration with the token before `ft_transfer` | Wed |
 
 The relayer mode (scaffold) is not attested: `firewall-relayer` polls `get_pending`, runs the native checker, and calls `submit_verdict` as `checker_id`. It is the skeleton and the fallback if OutLayer yield/resume is not working by Tuesday night.
 
-OutLayer facts: stdout ≤ 900 bytes, 60 s max execution, secrets arrive as env vars, HTTP needs `wasm32-wasip2`. The TDX attestation is published by OutLayer per execution and is not delivered to the contract; the receipt binds a result to code through the pinned `version_key` plus `input_sha256` and `record_sha256`.
+### OutLayer checker mode
+
+Implemented in `contract/guardian` and `checker`; **not yet exercised on testnet** (needs the human steps below). Facts below come from OutLayer's own docs and repo (URLs inline).
+
+- `outlayer.testnet` (mainnet `outlayer.near`) `request_execution` (payable): `{source: {Project: {project_id: "<owner>/<name>", version_key: null | "<wasm sha256>"}}, resource_limits: {...}, input_data, secrets_ref?, response_format?, payer_account_id?, params?}`. `resource_limits` must always be passed (even `{}`), or nothing runs. Defaults 1e9 instructions / 128 MB / 60 s; caps 5e11 / 4096 MB / **180 s** ([near-integration](https://app.outlayer.ai/docs/near-integration), [contract README](https://github.com/out-layer/outlayer/blob/main/contract/README.md)).
+- The deposit is attached NEAR; unused part is refunded to the caller (`payer_account_id` default). Attach the on-chain view `estimate_execution_cost(resource_limits, input_len)`. Gas: OutLayer's settlement callback takes 50 TGas from the attached gas; docs attach 100 TGas ([contract README](https://github.com/out-layer/outlayer/blob/main/contract/README.md) "Deposit", "Gas").
+- `input_data` is the guest's **stdin**; secrets arrive as **env vars**; the build must be a `[[bin]]` with `fn main`, writing JSON to stdout, **≤ 900 bytes**, flushed; `wasm32-wasip2` has no files, so the checker does not write its DecisionRecord there ([wasi](https://app.outlayer.ai/docs/wasi), [secrets](https://app.outlayer.ai/docs/secrets)).
+- The calling contract's callback receives the output as a JSON value: a string for `Text` (the Guardian requests `Text`), the guest's JSON for `Json`, and `null` when the run failed or produced nothing ([contract README](https://github.com/out-layer/outlayer/blob/main/contract/README.md) "Return value"). A run that outlives the 200-block yield window pays the base fee; how that reaches the callback is not specified, so any failed promise result and `null` are both treated as failure.
+- The TDX attestation (wasm hash, input hash, output hash, worker measurements, quote) is published per execution in OutLayer's coordinator and dashboard (`/executions`); it is **not** delivered to the contract ([tee-attestation](https://app.outlayer.ai/docs/tee-attestation)). The contract trusts that only OutLayer's registered worker key can resume the yield. The receipt ties a result to code via the pinned `version_key` plus `input_sha256` (SHA-256 of the `input_data` the Guardian sent; that it equals OutLayer's attested input hash is an inference, not stated in the docs) and `record_sha256`.
+
+Guardian behavior:
+
+- Mode is `Relayer` (default) or `OutLayer {outlayer_id, project_id, version_key, secrets_ref, deposit_yocto, max_instructions, max_execution_seconds, max_requests_per_day}`. JSON: `"relayer"` or `{"outlayer": {...}}`. `set_checker_mode` is owner-only and validates the fields; `get_checker_mode` is a view. A corrupt stored `checker_mode` panics `Corrupt checker mode` (an absent key is `Relayer`).
+- **Storage layout is unchanged.** The `Guardian` borsh root struct, `Pending`, `Held` and `Receipt` are not touched. The mode is one raw storage entry under key `checker_mode` (absent = `Relayer`; setting `Relayer` removes it), and each request sent to OutLayer gets a raw marker `outlayer_req:<request_id u64 LE>` (removed in the callback). No other key starts with these bytes: collection prefixes are the single bytes 0..=3 and the root key is `STATE`. So the already-deployed state at `guardian.jimuelle-firewall.testnet` deserializes as before.
+- In OutLayer mode `request_payment` keeps every check, cap and reservation, builds the same `CheckerInput` and `input_sha256`, checks the daily request budget, panics `Guardian balance too low for the OutLayer deposit` unless the spendable balance is at least `deposit_yocto + OUTLAYER_BALANCE_MARGIN` (0.05 NEAR) plus the storage for the request (`(checker_input bytes + 600) × storage byte cost`), checked before any state change, then calls `request_execution` (100 TGas, `deposit_yocto` from the Guardian's own balance, because a function-call key cannot attach a deposit, per [NEAR access keys](https://docs.near.org/protocol/accounts-contracts/access-keys): they "do **not allow** to **attach NEAR tokens** to the call") and `.then` `on_outlayer_verdict` (40 TGas). The agent's `request_payment` call therefore needs at least ~160 TGas attached; the agent's `TestnetGuardian` now attaches 200 TGas to `request_payment`.
+- `on_outlayer_verdict` reads the promise result (≤ 2048 bytes), parses a Verdict (≤ 900 bytes), runs `validate::binds` against the pending request, then calls the same `settle` as `on_verdict` (pay / hold escrow / refuse, receipt, `payment_decided`, unreserve). It never panics and fails closed: OutLayer failure, `null`, oversized, unparsable or unbound output → no transfer, reservation released, receipt `timed_out` with no outcome, plus a `checker_failed` event with `reason` ∈ `outlayer_failed`, `null_result`, `bad_result_json`, `bad_result_shape`, `oversized`, `bad_verdict`, `unbound_<field>`.
+- `submit_verdict` panics `Request is decided by OutLayer` for a request that was sent to OutLayer. Requests keep the mode they were made under when the mode changes.
+- **Daily request budget:** `max_requests_per_day` (1..=1000) caps OutLayer requests per UTC day. The counter is one raw entry `outlayer_day` = borsh `(day_index u64, count u64)`, `day_index = block_timestamp / 86_400_000_000_000`. `request_payment` counts each OutLayer request and panics `OutLayer daily request budget reached` before any state change when the budget is used up. Nothing is refunded: block, failure and timeout still count. `get_outlayer_usage` shows `{day, used, max_per_day}` from the persisted counter.
+- **Mode validation** (`valid_mode`) rejects an `outlayer_id` other than `outlayer.testnet` / `outlayer.near`, `deposit_yocto` above `MAX_OUTLAYER_DEPOSIT` (1 NEAR) and `max_requests_per_day` outside 1..=1000. `get_pending` skips requests that carry an `outlayer_req:` marker, so the relayer never tries to answer them.
+- **Stuck requests:** `clear_stuck_outlayer(request_id)` (owner only) needs the marker and `block_height >= requested_block + OUTLAYER_STUCK_BLOCKS` (300, beyond the 200-block yield window). It removes marker and pending, unreserves, writes the receipt `timed_out` the same way as a failed callback and emits `checker_failed` with reason `stuck_cleared`.
+
+Human runbook (testnet; each step signs or spends, so the human runs them):
+
+1. Build the wasm: `cargo build -p checker --target wasm32-wasip2 --release` → `target/wasm32-wasip2/release/checker.wasm`. For a reproducible hash (a different toolchain gives different bytes and a different hash) build with OutLayer's `scripts/build_github_wasm.sh --dir . --target wasm32-wasip2`, which builds "in a pinned Docker image, so anyone gets the same hash every time" ([wasi docs](https://app.outlayer.ai/docs/wasi), "Option 1: Reproducible Build"). The relayer is not needed in OutLayer mode.
+2. Install the OutLayer CLI and `outlayer login testnet` with the owner account ([CLI docs](https://github.com/out-layer/outlayer/blob/main/docs/CLI.md)).
+3. `outlayer upload target/wasm32-wasip2/release/checker.wasm` → note the SHA256 and FastFS URL; then `outlayer deploy firewall-checker <FastFS URL>` → project `<owner>/firewall-checker`, active version = that hash.
+4. Secrets (only once `decide()` calls Jev): `outlayer secrets set '{"TYPESAFE_API_KEY":"..."}' --project <owner>/firewall-checker --profile default`. The Guardian passes the row via `secrets_ref` `{profile, account_id: <owner>}`.
+5. Read the deposit: `near view outlayer.testnet estimate_execution_cost '{"resource_limits":{"max_instructions":1000000000,"max_execution_seconds":30},"input_len":3000}'`; use that value (or a bit more) as `deposit_yocto`.
+6. Redeploy the Guardian wasm (`cd contract/guardian && cargo near build non-reproducible-wasm --no-abi`, then deploy it over the existing account **without calling `new`**; state is kept). Fund the Guardian with NEAR for deposits (each request attaches `deposit_yocto`; the unused part comes back).
+7. As the owner: `near call <guardian> set_checker_mode '{"mode":{"outlayer":{"outlayer_id":"outlayer.testnet","project_id":"<owner>/firewall-checker","version_key":"<sha256 from step 3>","secrets_ref":null,"deposit_yocto":"<step 5>","max_instructions":"1000000000","max_execution_seconds":"30","max_requests_per_day":"50"}}}' --accountId <owner>`. Check `get_checker_mode` and `get_outlayer_usage`. Switch back with `'{"mode":"relayer"}'`. A request stuck past 300 blocks is cleared by the owner with `clear_stuck_outlayer '{"request_id":"<id>"}'`.
+8. Stop `firewall-relayer` for the test (not needed in OutLayer mode), run the demo in testnet mode (the agent attaches 200 TGas to `request_payment`), then check `get_receipt` and the OutLayer dashboard `/executions` for the attestation. A `checker_failed` event means the callback failed closed; its `reason` says which check.
+
+Open questions for the first testnet run: exact shape of the Text result (JSON string expected; JSON object also accepted), how a yield timeout reaches the callback, and the real deposit.
+
+Next steps (not built): `DECISION_LOG_URL` off-chain record sink (the checker cannot write a record on OutLayer, so the OutLayer-mode DecisionRecord stays unwritten until the sink exists, §7); the HTTPS + signed-verdict alternative mode.
 
 ## 7. Decision log
 
@@ -197,7 +238,7 @@ Added later:
 | `CLASSIFIER_URL` | Hosted injection classifier endpoint | Tue |
 | `HF_TOKEN` | Hugging Face token for the gated Prompt Guard 2 | Tue |
 | `DECISION_LOG_URL` | Off-chain record sink for OutLayer runs (OutLayer secret) | Mon/Wed |
-| `OUTLAYER_PROJECT_ID` | OutLayer project for `CheckerMode::OutLayer` | Tue |
+| `OUTLAYER_PROJECT_ID` | Not read by any code: the OutLayer project id is an argument of `set_checker_mode` ([§6 runbook](#outlayer-checker-mode)); kept as a note for the human's shell | runbook only |
 
 ## 9. Testing & evaluation
 

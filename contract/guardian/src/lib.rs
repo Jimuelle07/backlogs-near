@@ -9,7 +9,7 @@ use near_sdk::serde_json::{self, json};
 use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{
     env, near, require, AccountId, BorshStorageKey, Gas, GasWeight, NearToken, PanicOnDefault,
-    Promise, PromiseError, PromiseOrValue,
+    Promise, PromiseError, PromiseOrValue, YieldId,
 };
 
 use types::*;
@@ -17,12 +17,22 @@ use types::*;
 pub const MAX_CONTEXT_BYTES: usize = validate::MAX_CONTEXT_BYTES;
 pub const MAX_PENDING: u32 = 16;
 pub const CALLBACK_GAS: Gas = Gas::from_tgas(40);
+/// Gas attached to OutLayer's `request_execution`. The docs attach 100 TGas and say its
+/// settlement callback takes 50 TGas from it.
+pub const OUTLAYER_REQUEST_GAS: Gas = Gas::from_tgas(100);
 pub const FT_TRANSFER_GAS: Gas = Gas::from_tgas(10);
 pub const TRANSFER_DONE_GAS: Gas = Gas::from_tgas(5);
 const MAX_LIST: u64 = 50;
 pub const PER_PAYMENT_CAP_WHOLE: u128 = 200;
 pub const DAILY_CAP_WHOLE: u128 = 500;
 pub const NANOS_PER_DAY: u64 = 86_400_000_000_000;
+/// Cap on the NEAR deposit per OutLayer request (enforced by `valid_mode`).
+pub const MAX_OUTLAYER_DEPOSIT: NearToken = validate::MAX_OUTLAYER_DEPOSIT;
+/// Balance the Guardian must keep above `deposit_yocto` (and its storage stake) per OutLayer request.
+pub const OUTLAYER_BALANCE_MARGIN: NearToken = NearToken::from_millinear(50);
+/// Blocks after which an unanswered OutLayer request may be cleared by the owner. Beyond the
+/// 200-block yield window, so a cleared request can no longer receive a legitimate callback.
+pub const OUTLAYER_STUCK_BLOCKS: u64 = 300;
 
 #[derive(BorshStorageKey)]
 #[near]
@@ -58,6 +68,129 @@ fn emit(event: &str, data: serde_json::Value) {
         "data": [data],
     });
     env::log_str(&format!("EVENT_JSON:{e}"));
+}
+
+/// Raw storage key of the checker mode. Kept outside the borsh root state so that the `Guardian`
+/// layout of an already-deployed contract is untouched; absent = `Relayer`. All collection
+/// prefixes (`StorageKey`) are a single byte 0..=3 and the root key is `STATE`, so none collide.
+const MODE_KEY: &[u8] = b"checker_mode";
+/// Raw storage key prefix marking a request that was sent to OutLayer.
+const OUTLAYER_REQ_PREFIX: &[u8] = b"outlayer_req:";
+/// Raw storage key of the daily OutLayer request counter: borsh `(day_index, count)`.
+const OUTLAYER_DAY_KEY: &[u8] = b"outlayer_day";
+
+fn today() -> u64 {
+    env::block_timestamp() / NANOS_PER_DAY
+}
+
+/// The persisted `(day_index, count)` counter, if any request was ever counted.
+fn outlayer_counter() -> Option<(u64, u64)> {
+    env::storage_read(OUTLAYER_DAY_KEY)
+        .and_then(|b| near_sdk::borsh::from_slice::<(u64, u64)>(&b).ok())
+}
+
+/// OutLayer requests already made today (0 when the stored day is not today).
+fn outlayer_used_today() -> u64 {
+    outlayer_counter().filter(|(day, _)| *day == today()).map_or(0, |(_, count)| count)
+}
+
+fn count_outlayer_request() {
+    let bytes = near_sdk::borsh::to_vec(&(today(), outlayer_used_today() + 1))
+        .unwrap_or_else(|_| env::abort());
+    env::storage_write(OUTLAYER_DAY_KEY, &bytes);
+}
+
+/// Rough per-request storage overhead beyond `checker_input` (pending/receipt/ref records).
+const OUTLAYER_STORAGE_OVERHEAD_BYTES: u128 = 600;
+
+/// Panics unless the daily budget has room and the balance covers the deposit, the margin and
+/// the storage this request will add.
+fn require_outlayer_capacity(deposit_yocto: u128, max_per_day: u64, checker_input_len: usize) {
+    require!(outlayer_used_today() < max_per_day, "OutLayer daily request budget reached");
+    let byte_cost = env::storage_byte_cost().as_yoctonear();
+    let spendable = env::account_balance()
+        .as_yoctonear()
+        .saturating_sub(env::storage_usage() as u128 * byte_cost);
+    let request_storage = (checker_input_len as u128 + OUTLAYER_STORAGE_OVERHEAD_BYTES) * byte_cost;
+    let required = deposit_yocto
+        .saturating_add(OUTLAYER_BALANCE_MARGIN.as_yoctonear())
+        .saturating_add(request_storage);
+    require!(spendable >= required, "Guardian balance too low for the OutLayer deposit");
+}
+
+/// Absent key = `Relayer`; a present but undecodable value is a hard error, never a silent
+/// fallback to relayer mode.
+fn stored_mode() -> CheckerMode {
+    match env::storage_read(MODE_KEY) {
+        None => CheckerMode::Relayer,
+        Some(b) => near_sdk::borsh::from_slice::<CheckerMode>(&b)
+            .unwrap_or_else(|_| env::panic_str("Corrupt checker mode")),
+    }
+}
+
+fn outlayer_req_key(id: u64) -> Vec<u8> {
+    let mut k = OUTLAYER_REQ_PREFIX.to_vec();
+    k.extend_from_slice(&id.to_le_bytes());
+    k
+}
+
+fn mark_outlayer(id: u64) {
+    env::storage_write(&outlayer_req_key(id), &[1]);
+}
+
+fn is_outlayer(id: u64) -> bool {
+    env::storage_has_key(&outlayer_req_key(id))
+}
+
+/// Removes the marker; true when it was present.
+fn take_outlayer_marker(id: u64) -> bool {
+    env::storage_remove(&outlayer_req_key(id))
+}
+
+/// OutLayer requests have no Guardian yield; `Pending` still carries one, so store an inert id.
+/// `submit_verdict` refuses OutLayer requests before it could ever resume it.
+fn placeholder_yield_id() -> YieldId {
+    near_sdk::borsh::from_slice::<YieldId>(&[0u8; 32]).unwrap_or_else(|_| env::abort())
+}
+
+/// `outlayer.request_execution(...)` paid from the Guardian's balance, then `on_outlayer_verdict`.
+fn outlayer_promise(request_id: u64, checker_input: &str, mode: &CheckerMode) -> Promise {
+    let CheckerMode::OutLayer {
+        outlayer_id,
+        project_id,
+        version_key,
+        secrets_ref,
+        deposit_yocto,
+        max_instructions,
+        max_execution_seconds,
+        ..
+    } = mode
+    else {
+        env::abort()
+    };
+    let args = serde_json::to_vec(&json!({
+        "source": { "Project": { "project_id": project_id, "version_key": version_key } },
+        "resource_limits": {
+            "max_instructions": max_instructions.0,
+            "max_execution_seconds": max_execution_seconds.0,
+        },
+        "input_data": checker_input,
+        "secrets_ref": secrets_ref,
+        "response_format": "Text",
+    }))
+    .unwrap_or_else(|_| env::abort());
+    Promise::new(outlayer_id.clone())
+        .function_call(
+            "request_execution".to_string(),
+            args,
+            NearToken::from_yoctonear(deposit_yocto.0),
+            OUTLAYER_REQUEST_GAS,
+        )
+        .then(
+            Guardian::ext(env::current_account_id())
+                .with_static_gas(CALLBACK_GAS)
+                .on_outlayer_verdict(U64(request_id)),
+        )
 }
 
 #[near]
@@ -161,12 +294,8 @@ impl Guardian {
             "Invalid receiver_id"
         );
         require!(amount.0 <= self.per_payment_cap(), "Amount exceeds per-payment cap");
-        let day = self.roll_day();
-        require!(self.spent_today + amount.0 <= self.daily_cap(), "Daily cap reached");
-        self.spent_today += amount.0;
-
+        let mode = stored_mode();
         let request_id = self.next_request_id;
-        self.next_request_id += 1;
         let requested_block = env::block_height();
 
         let input = CheckerInput {
@@ -186,11 +315,29 @@ impl Guardian {
         let checker_input = serde_json::to_string(&input).unwrap_or_else(|_| env::abort());
         let input_sha256 = hex::encode(env::sha256(checker_input.as_bytes()));
 
-        let args = serde_json::to_vec(&json!({ "request_id": U64(request_id) }))
-            .unwrap_or_else(|_| env::abort());
-        let (promise, yield_id) =
-            Promise::new_yield("on_verdict", args, CALLBACK_GAS, GasWeight(0));
+        // Everything above is read-only: a rejected OutLayer request writes nothing.
+        if let CheckerMode::OutLayer { deposit_yocto, max_requests_per_day, .. } = &mode {
+            require_outlayer_capacity(deposit_yocto.0, max_requests_per_day.0, checker_input.len());
+        }
+        let day = self.roll_day();
+        require!(self.spent_today + amount.0 <= self.daily_cap(), "Daily cap reached");
+        self.spent_today += amount.0;
+        self.next_request_id += 1;
 
+        let (promise, yield_id) = match &mode {
+            CheckerMode::Relayer => {
+                let args = serde_json::to_vec(&json!({ "request_id": U64(request_id) }))
+                    .unwrap_or_else(|_| env::abort());
+                Promise::new_yield("on_verdict", args, CALLBACK_GAS, GasWeight(0))
+            }
+            CheckerMode::OutLayer { .. } => {
+                (outlayer_promise(request_id, &checker_input, &mode), placeholder_yield_id())
+            }
+        };
+        if matches!(mode, CheckerMode::OutLayer { .. }) {
+            mark_outlayer(request_id);
+            count_outlayer_request();
+        }
         self.pending.insert(
             request_id,
             Pending {
@@ -225,6 +372,7 @@ impl Guardian {
             env::predecessor_account_id() == self.checker_id,
             "Only the checker can submit verdicts"
         );
+        require!(!is_outlayer(request_id.0), "Request is decided by OutLayer");
         let pending = self.pending.get(&request_id.0).unwrap_or_else(|| env::panic_str("Unknown request"));
         if let Err(field) = validate::binds(pending, &verdict, request_id, &self.token_id) {
             env::panic_str(&format!("Verdict does not match request: {field}"));
@@ -235,17 +383,62 @@ impl Guardian {
         }
     }
 
-    /// Yield callback. Never panics.
+    /// Yield callback (relayer mode). Never panics.
     #[private]
     pub fn on_verdict(
         &mut self,
         request_id: U64,
         #[callback_result] verdict: Result<Verdict, PromiseError>,
     ) -> PromiseOrValue<ReceiptStatus> {
+        let Some(pending) = self.pending.remove(&request_id.0) else {
+            return PromiseOrValue::Value(ReceiptStatus::TimedOut);
+        };
+        self.settle(request_id, pending, verdict.ok())
+    }
+
+    /// OutLayer callback (OutLayer mode). Reads the execution result, binds the verdict to the
+    /// pending request, then settles exactly as `on_verdict` does. Never panics and fails closed:
+    /// any OutLayer failure, unparsable/oversized/unbound output leaves no outcome, no transfer
+    /// and no reservation (receipt `timed_out`) and emits `checker_failed`.
+    #[private]
+    pub fn on_outlayer_verdict(&mut self, request_id: U64) -> PromiseOrValue<ReceiptStatus> {
         let id = request_id.0;
+        if !take_outlayer_marker(id) {
+            // Not an OutLayer request (or already handled): nothing to decide.
+            return PromiseOrValue::Value(ReceiptStatus::TimedOut);
+        }
         let Some(pending) = self.pending.remove(&id) else {
             return PromiseOrValue::Value(ReceiptStatus::TimedOut);
         };
+        let verdict = match env::promise_result_checked(0, validate::MAX_OUTLAYER_RESULT_BYTES) {
+            Err(PromiseError::Failed) => Err("outlayer_failed".to_string()),
+            Err(_) => Err("oversized".to_string()),
+            Ok(bytes) => validate::parse_outlayer_output(&bytes)
+                .map_err(|e| e.to_string())
+                .and_then(|v| {
+                    validate::binds(&pending, &v, request_id, &self.token_id)
+                        .map(|_| v)
+                        .map_err(|field| format!("unbound_{field}"))
+                }),
+        };
+        match verdict {
+            Ok(v) => self.settle(request_id, pending, Some(v)),
+            Err(reason) => {
+                emit("checker_failed", json!({ "request_id": request_id, "reason": reason }));
+                self.settle(request_id, pending, None)
+            }
+        }
+    }
+
+    /// Shared outcome logic for both checker modes. `None` = no usable verdict (timed out):
+    /// no outcome, no transfer, reservation released.
+    fn settle(
+        &mut self,
+        request_id: U64,
+        pending: Pending,
+        verdict: Option<Verdict>,
+    ) -> PromiseOrValue<ReceiptStatus> {
+        let id = request_id.0;
         let mut receipt = Receipt {
             request_id,
             client_ref: pending.client_ref,
@@ -263,7 +456,7 @@ impl Guardian {
         let mut transfer = None;
         let mut release_at_ns: Option<U64> = None;
         match verdict {
-            Ok(v) => {
+            Some(v) => {
                 receipt.outcome = Some(v.outcome);
                 receipt.reasons = v.reasons;
                 receipt.record_sha256 = Some(v.record_sha256);
@@ -299,7 +492,7 @@ impl Guardian {
                     }
                 };
             }
-            Err(_) => self.unreserve(pending.charged_day, pending.amount.0),
+            None => self.unreserve(pending.charged_day, pending.amount.0),
         }
         let status = receipt.status;
         emit(
@@ -390,6 +583,67 @@ impl Guardian {
         emit("hold_cancelled", json!({ "request_id": request_id }));
     }
 
+    /// Owner only. `Relayer` (default) or `OutLayer { .. }`. Requests already in flight keep the
+    /// mode they were made under.
+    pub fn set_checker_mode(&mut self, mode: CheckerMode) {
+        require!(
+            env::predecessor_account_id() == self.owner_id,
+            "Only the owner can set the checker mode"
+        );
+        if let Err(field) = validate::valid_mode(&mode) {
+            env::panic_str(&format!("Invalid checker mode: {field}"));
+        }
+        match &mode {
+            CheckerMode::Relayer => {
+                env::storage_remove(MODE_KEY);
+            }
+            m => {
+                let bytes = near_sdk::borsh::to_vec(m).unwrap_or_else(|_| env::abort());
+                env::storage_write(MODE_KEY, &bytes);
+            }
+        }
+        emit("checker_mode_set", json!({ "mode": mode }));
+    }
+
+    /// Owner only. Clears an OutLayer request that never got a callback (older than
+    /// `OUTLAYER_STUCK_BLOCKS`): fails it closed like a failed callback. The daily request budget
+    /// is not refunded.
+    pub fn clear_stuck_outlayer(&mut self, request_id: U64) {
+        require!(
+            env::predecessor_account_id() == self.owner_id,
+            "Only the owner can clear stuck requests"
+        );
+        let id = request_id.0;
+        require!(is_outlayer(id), "Unknown OutLayer request");
+        let requested_block = self
+            .pending
+            .get(&id)
+            .unwrap_or_else(|| env::panic_str("Unknown OutLayer request"))
+            .requested_block;
+        require!(
+            env::block_height() >= requested_block.saturating_add(OUTLAYER_STUCK_BLOCKS),
+            "Request is not stuck"
+        );
+        take_outlayer_marker(id);
+        let pending = self.pending.remove(&id).unwrap_or_else(|| env::abort());
+        emit("checker_failed", json!({ "request_id": request_id, "reason": "stuck_cleared" }));
+        let _ = self.settle(request_id, pending, None);
+    }
+
+    pub fn get_outlayer_usage(&self) -> Option<OutlayerUsage> {
+        let counter = outlayer_counter();
+        let max_per_day = match stored_mode() {
+            CheckerMode::Relayer if counter.is_none() => return None,
+            CheckerMode::Relayer => U64(0),
+            CheckerMode::OutLayer { max_requests_per_day, .. } => max_requests_per_day,
+        };
+        Some(OutlayerUsage { day: U64(today()), used: U64(outlayer_used_today()), max_per_day })
+    }
+
+    pub fn get_checker_mode(&self) -> CheckerMode {
+        stored_mode()
+    }
+
     pub fn get_config(&self) -> Config {
         Config {
             owner_id: self.owner_id.clone(),
@@ -413,6 +667,7 @@ impl Guardian {
     pub fn get_pending(&self, from_index: u64, limit: u64) -> Vec<PendingView> {
         self.pending
             .iter()
+            .filter(|(id, _)| !is_outlayer(**id))
             .skip(from_index as usize)
             .take(limit.min(MAX_LIST) as usize)
             .map(|(id, p)| PendingView {
@@ -461,7 +716,7 @@ impl Guardian {
 mod tests {
     use super::*;
     use near_sdk::test_utils::VMContextBuilder;
-    use near_sdk::{testing_env, YieldId};
+    use near_sdk::{testing_env, PromiseResult, YieldId};
 
     const CHECKER_INPUT_EXAMPLE: &str = include_str!("../../../schemas/examples/checker-input.json");
     const VERDICT_EXAMPLE: &str = include_str!("../../../schemas/examples/verdict.json");
@@ -977,5 +1232,668 @@ mod tests {
         assert_eq!(validate::hold_window_ns(20_000_000, 6), one_h);
         assert_eq!(validate::hold_window_ns(100_000_000, 6), one_h);
         assert_eq!(validate::hold_window_ns(100_000_001, 6), six_h);
+    }
+
+    // ---- checker mode ----
+
+    fn ol_mode() -> CheckerMode {
+        ol_mode_max(100)
+    }
+
+    fn ol_mode_max(max_requests_per_day: u64) -> CheckerMode {
+        CheckerMode::OutLayer {
+            outlayer_id: acct("outlayer.testnet"),
+            project_id: "owner.testnet/checker".into(),
+            version_key: None,
+            secrets_ref: None,
+            deposit_yocto: U128(50_000_000_000_000_000_000_000),
+            max_instructions: U64(1_000_000_000),
+            max_execution_seconds: U64(30),
+            max_requests_per_day: U64(max_requests_per_day),
+        }
+    }
+
+    /// New Guardian in OutLayer mode with one request (id 1, client_ref "r1") in flight.
+    fn ol_guardian() -> Guardian {
+        let mut g = new_guardian();
+        set_ctx("owner.testnet");
+        g.set_checker_mode(ol_mode());
+        let _ = request(&mut g, "r1", vec![]);
+        g
+    }
+
+    fn text_result(v: &Verdict) -> PromiseResult {
+        let line = format!("{}\n", serde_json::to_string(v).unwrap());
+        PromiseResult::Successful(serde_json::to_vec(&line).unwrap())
+    }
+
+    fn deliver(g: &mut Guardian, result: PromiseResult) -> PromiseOrValue<ReceiptStatus> {
+        testing_env!(
+            VMContextBuilder::new()
+                .current_account_id(acct("guardian.testnet"))
+                .predecessor_account_id(acct("guardian.testnet"))
+                .block_height(9)
+                .build(),
+            near_sdk::test_vm_config(),
+            near_sdk::RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![result]
+        );
+        g.on_outlayer_verdict(U64(1))
+    }
+
+    /// Fail-closed expectations: timed out, no outcome, no transfer, reservation released.
+    fn assert_failed_closed(g: &Guardian, r: PromiseOrValue<ReceiptStatus>, reason: &str) {
+        assert_eq!(value(r), ReceiptStatus::TimedOut);
+        assert_eq!(g.pending.len(), 0);
+        let rec = g.get_receipt(U64(1)).unwrap();
+        assert_eq!(rec.status, ReceiptStatus::TimedOut);
+        assert_eq!(rec.outcome, None);
+        assert_eq!(rec.record_sha256, None);
+        assert_eq!(g.get_daily_spent(), U128(0));
+        let logs = near_sdk::test_utils::get_logs().join("\n");
+        assert!(logs.contains("checker_failed"), "logs: {logs}");
+        assert!(logs.contains(reason), "expected reason {reason} in logs: {logs}");
+        assert!(!is_outlayer(1));
+    }
+
+    #[test]
+    fn mode_default_is_relayer() {
+        let g = new_guardian();
+        assert_eq!(g.get_checker_mode(), CheckerMode::Relayer);
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the owner can set the checker mode")]
+    fn mode_set_owner_only() {
+        let mut g = new_guardian();
+        set_ctx("mallory.testnet");
+        g.set_checker_mode(ol_mode());
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the owner can set the checker mode")]
+    fn mode_set_checker_cannot() {
+        let mut g = new_guardian();
+        set_ctx("checker.testnet");
+        g.set_checker_mode(CheckerMode::Relayer);
+    }
+
+    #[test]
+    fn mode_roundtrip_and_back_to_relayer() {
+        let mut g = new_guardian();
+        set_ctx("owner.testnet");
+        g.set_checker_mode(ol_mode());
+        assert_eq!(g.get_checker_mode(), ol_mode());
+        g.set_checker_mode(CheckerMode::Relayer);
+        assert_eq!(g.get_checker_mode(), CheckerMode::Relayer);
+        assert!(env::storage_read(MODE_KEY).is_none());
+    }
+
+    #[test]
+    fn mode_json_shape() {
+        let v = serde_json::to_value(ol_mode()).unwrap();
+        assert_eq!(v["outlayer"]["project_id"], "owner.testnet/checker");
+        assert_eq!(serde_json::to_value(CheckerMode::Relayer).unwrap(), "relayer");
+        let back: CheckerMode = serde_json::from_value(v).unwrap();
+        assert_eq!(back, ol_mode());
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid checker mode: project_id")]
+    fn mode_rejects_bad_project_id() {
+        let mut g = new_guardian();
+        set_ctx("owner.testnet");
+        let CheckerMode::OutLayer { outlayer_id, deposit_yocto, max_instructions, max_execution_seconds, .. } = ol_mode() else { unreachable!() };
+        g.set_checker_mode(CheckerMode::OutLayer {
+            outlayer_id,
+            project_id: "no-slash".into(),
+            version_key: None,
+            secrets_ref: None,
+            deposit_yocto,
+            max_instructions,
+            max_execution_seconds,
+            max_requests_per_day: U64(100),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid checker mode: deposit_yocto")]
+    fn mode_rejects_zero_deposit() {
+        let mut g = new_guardian();
+        set_ctx("owner.testnet");
+        let CheckerMode::OutLayer { outlayer_id, project_id, max_instructions, max_execution_seconds, .. } = ol_mode() else { unreachable!() };
+        g.set_checker_mode(CheckerMode::OutLayer {
+            outlayer_id,
+            project_id,
+            version_key: None,
+            secrets_ref: None,
+            deposit_yocto: U128(0),
+            max_instructions,
+            max_execution_seconds,
+            max_requests_per_day: U64(100),
+        });
+    }
+
+    #[test]
+    fn ol_request_reserves_and_marks() {
+        let g = ol_guardian();
+        assert_eq!(g.pending.len(), 1);
+        assert!(is_outlayer(1));
+        assert_eq!(g.get_daily_spent(), U128(18_000_000));
+    }
+
+    #[test]
+    #[should_panic(expected = "Amount exceeds per-payment cap")]
+    fn ol_request_keeps_caps() {
+        let mut g = new_guardian();
+        set_ctx("owner.testnet");
+        g.set_checker_mode(ol_mode());
+        set_ctx("agent.testnet");
+        let _ = g.request_payment(
+            "a".into(), acct("hostco.testnet"), U128(201_000_000), "".into(), "x".into(), vec![],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Guardian balance too low for the OutLayer deposit")]
+    fn ol_request_needs_balance() {
+        let mut g = new_guardian();
+        set_ctx("owner.testnet");
+        g.set_checker_mode(ol_mode());
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(acct("guardian.testnet"))
+            .predecessor_account_id(acct("agent.testnet"))
+            .account_balance(NearToken::from_millinear(1))
+            .build());
+        let _ = g.request_payment(
+            "a".into(), acct("hostco.testnet"), U128(1), "".into(), "x".into(), vec![],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Request is decided by OutLayer")]
+    fn ol_submit_verdict_panics() {
+        let mut g = ol_guardian();
+        set_ctx("checker.testnet");
+        g.submit_verdict(U64(1), verdict(Outcome::Allow));
+    }
+
+    #[test]
+    fn ol_callback_allow_is_paying() {
+        let mut g = ol_guardian();
+        let r = deliver(&mut g, text_result(&verdict(Outcome::Allow)));
+        assert!(matches!(r, PromiseOrValue::Promise(_)));
+        assert_eq!(g.pending.len(), 0);
+        let rec = g.get_receipt(U64(1)).unwrap();
+        assert_eq!(rec.status, ReceiptStatus::Paying);
+        assert_eq!(rec.outcome, Some(Outcome::Allow));
+        assert_eq!(rec.record_sha256.as_deref(), Some(HASH));
+        assert!(!is_outlayer(1));
+    }
+
+    #[test]
+    fn ol_callback_json_object_result_is_accepted() {
+        let mut g = ol_guardian();
+        let bytes = serde_json::to_vec(&verdict(Outcome::Allow)).unwrap();
+        let r = deliver(&mut g, PromiseResult::Successful(bytes));
+        assert!(matches!(r, PromiseOrValue::Promise(_)));
+    }
+
+    #[test]
+    fn ol_callback_hold_is_held() {
+        let mut g = ol_guardian();
+        let r = deliver(&mut g, text_result(&verdict(Outcome::Hold)));
+        assert_eq!(value(r), ReceiptStatus::Held);
+        assert_eq!(g.pending.len(), 0);
+        assert_eq!(g.get_held(0, 10).len(), 1);
+        // The reservation stays charged while the hold is escrowed.
+        assert_eq!(g.get_daily_spent(), U128(18_000_000));
+        assert_eq!(g.get_receipt(U64(1)).unwrap().outcome, Some(Outcome::Hold));
+    }
+
+    #[test]
+    fn ol_callback_block_is_refused_and_unreserved() {
+        let mut g = ol_guardian();
+        let r = deliver(&mut g, text_result(&verdict(Outcome::Block)));
+        assert_eq!(value(r), ReceiptStatus::Refused);
+        assert_eq!(g.get_daily_spent(), U128(0));
+        let rec = g.get_receipt(U64(1)).unwrap();
+        assert_eq!(rec.status, ReceiptStatus::Refused);
+        assert_eq!(rec.outcome, Some(Outcome::Block));
+        assert!(g.get_held(0, 10).is_empty());
+    }
+
+    #[test]
+    fn ol_callback_malformed_json_fails_closed() {
+        let mut g = ol_guardian();
+        let r = deliver(&mut g, PromiseResult::Successful(b"not json".to_vec()));
+        assert_failed_closed(&g, r, "bad_result_json");
+    }
+
+    #[test]
+    fn ol_callback_text_that_is_not_a_verdict_fails_closed() {
+        let mut g = ol_guardian();
+        let bytes = serde_json::to_vec("hello world").unwrap();
+        let r = deliver(&mut g, PromiseResult::Successful(bytes));
+        assert_failed_closed(&g, r, "bad_verdict");
+    }
+
+    #[test]
+    fn ol_callback_null_fails_closed() {
+        let mut g = ol_guardian();
+        let r = deliver(&mut g, PromiseResult::Successful(b"null".to_vec()));
+        assert_failed_closed(&g, r, "null_result");
+    }
+
+    #[test]
+    fn ol_callback_oversize_verdict_fails_closed() {
+        let mut g = ol_guardian();
+        let mut v = verdict(Outcome::Allow);
+        v.checker_version = "x".repeat(900);
+        let r = deliver(&mut g, text_result(&v));
+        assert_failed_closed(&g, r, "oversized");
+    }
+
+    #[test]
+    fn ol_callback_oversize_result_fails_closed() {
+        let mut g = ol_guardian();
+        let r = deliver(&mut g, PromiseResult::Successful(vec![b' '; 3000]));
+        assert_failed_closed(&g, r, "oversized");
+    }
+
+    #[test]
+    fn ol_callback_binding_mismatch_fails_closed() {
+        let mut g = ol_guardian();
+        let mut v = verdict(Outcome::Allow);
+        v.amount = U128(1);
+        let r = deliver(&mut g, text_result(&v));
+        assert_failed_closed(&g, r, "unbound_amount");
+    }
+
+    #[test]
+    fn ol_callback_wrong_request_id_fails_closed() {
+        let mut g = ol_guardian();
+        let mut v = verdict(Outcome::Allow);
+        v.request_id = U64(2);
+        let r = deliver(&mut g, text_result(&v));
+        assert_failed_closed(&g, r, "unbound_request_id");
+    }
+
+    #[test]
+    fn ol_callback_promise_failure_fails_closed() {
+        let mut g = ol_guardian();
+        let r = deliver(&mut g, PromiseResult::Failed);
+        assert_failed_closed(&g, r, "outlayer_failed");
+    }
+
+    #[test]
+    fn ol_callback_without_marker_is_a_noop() {
+        // A relayer-mode request must not be decidable through the OutLayer callback.
+        let mut g = new_guardian();
+        with_pending(&mut g);
+        let r = deliver(&mut g, text_result(&verdict(Outcome::Allow)));
+        assert_eq!(value(r), ReceiptStatus::TimedOut);
+        assert_eq!(g.pending.len(), 1);
+        assert!(g.get_receipt(U64(1)).is_none());
+    }
+
+    #[test]
+    fn relayer_request_is_not_marked() {
+        let mut g = new_guardian();
+        let _ = request(&mut g, "r1", vec![]);
+        assert!(!is_outlayer(1));
+    }
+
+    // ---- OutLayer hardening ----
+
+    const DEPOSIT: u128 = 50_000_000_000_000_000_000_000;
+
+    fn request_at(g: &mut Guardian, client_ref: &str, ts: u64) -> Promise {
+        set_ctx_at("agent.testnet", ts);
+        g.request_payment(
+            client_ref.into(),
+            acct("hostco.testnet"),
+            U128(18_000_000),
+            "".into(),
+            "Pay.".into(),
+            vec![],
+        )
+    }
+
+    fn ol_guardian_with_max(max: u64) -> Guardian {
+        let mut g = new_guardian();
+        set_ctx("owner.testnet");
+        g.set_checker_mode(ol_mode_max(max));
+        g
+    }
+
+    fn usage_at(g: &Guardian, ts: u64) -> Option<OutlayerUsage> {
+        set_ctx_at("anyone.testnet", ts);
+        g.get_outlayer_usage()
+    }
+
+    fn set_ctx_block(predecessor: &str, block: u64) {
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(acct("guardian.testnet"))
+            .predecessor_account_id(acct(predecessor))
+            .block_height(block)
+            .build());
+    }
+
+    /// Extra balance that covers the storage of a small request but not of a max-size one.
+    const STORAGE_SLACK: u128 = 30_000_000_000_000_000_000_000;
+
+    /// OutLayer request with an exact spendable balance (storage stake pinned to zero).
+    fn ol_request_with_balance(balance_yocto: u128, context: Vec<ContextItem>) {
+        let mut g = ol_guardian_with_max(10);
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(acct("guardian.testnet"))
+            .predecessor_account_id(acct("agent.testnet"))
+            .storage_usage(0)
+            .account_balance(NearToken::from_yoctonear(balance_yocto))
+            .build());
+        let _ = g.request_payment(
+            "a".into(), acct("hostco.testnet"), U128(1), "".into(), "x".into(), context,
+        );
+        assert_eq!(g.pending.len(), 1);
+    }
+
+    #[test]
+    fn ol_budget_counts_requests() {
+        let mut g = ol_guardian_with_max(2);
+        let _ = request_at(&mut g, "r1", 0);
+        let _ = request_at(&mut g, "r2", 0);
+        assert_eq!(g.pending.len(), 2);
+        let used = usage_at(&g, 0).unwrap();
+        assert_eq!((used.day, used.used, used.max_per_day), (U64(0), U64(2), U64(2)));
+    }
+
+    #[test]
+    #[should_panic(expected = "OutLayer daily request budget reached")]
+    fn ol_budget_third_request_panics() {
+        let mut g = ol_guardian_with_max(2);
+        let _ = request_at(&mut g, "r1", 0);
+        let _ = request_at(&mut g, "r2", 0);
+        let _ = request_at(&mut g, "r3", 0);
+    }
+
+    #[test]
+    fn ol_budget_panic_leaves_no_state() {
+        let mut g = ol_guardian_with_max(1);
+        let _ = request_at(&mut g, "r1", 0);
+        let spent = g.get_daily_spent();
+        let next = g.next_request_id;
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = request_at(&mut g, "r2", 0);
+        }));
+        assert!(r.is_err());
+        assert_eq!(g.get_daily_spent(), spent);
+        assert_eq!(g.next_request_id, next);
+        assert_eq!(g.pending.len(), 1);
+        assert!(!is_outlayer(next));
+        let counter = near_sdk::borsh::from_slice::<(u64, u64)>(
+            &env::storage_read(OUTLAYER_DAY_KEY).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(counter, (0, 1));
+    }
+
+    #[test]
+    fn ol_budget_not_refunded_on_failed_callback() {
+        let mut g = ol_guardian_with_max(5);
+        let _ = request_at(&mut g, "r1", 0);
+        let r = deliver(&mut g, PromiseResult::Failed);
+        assert_eq!(value(r), ReceiptStatus::TimedOut);
+        assert_eq!(usage_at(&g, 0).unwrap().used, U64(1));
+    }
+
+    #[test]
+    fn ol_budget_not_refunded_on_block() {
+        let mut g = ol_guardian_with_max(5);
+        let _ = request_at(&mut g, "r1", 0);
+        let r = deliver(&mut g, text_result(&verdict(Outcome::Block)));
+        assert_eq!(value(r), ReceiptStatus::Refused);
+        assert_eq!(usage_at(&g, 0).unwrap().used, U64(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "OutLayer daily request budget reached")]
+    fn ol_budget_still_exhausted_after_failed_callback() {
+        let mut g = ol_guardian_with_max(1);
+        let _ = request_at(&mut g, "r1", 0);
+        let _ = deliver(&mut g, PromiseResult::Failed);
+        let _ = request_at(&mut g, "r2", 0);
+    }
+
+    #[test]
+    fn ol_budget_resets_next_utc_day() {
+        let mut g = ol_guardian_with_max(1);
+        let _ = request_at(&mut g, "r1", 0);
+        let _ = request_at(&mut g, "r2", NANOS_PER_DAY);
+        let u = usage_at(&g, NANOS_PER_DAY).unwrap();
+        assert_eq!((u.day, u.used), (U64(1), U64(1)));
+        // Viewed on a later day with no requests yet: used reads as 0.
+        let u = usage_at(&g, 3 * NANOS_PER_DAY).unwrap();
+        assert_eq!((u.day, u.used, u.max_per_day), (U64(3), U64(0), U64(1)));
+    }
+
+    #[test]
+    fn ol_usage_is_none_in_relayer_mode() {
+        let g = new_guardian();
+        assert_eq!(usage_at(&g, 0), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "Guardian balance too low for the OutLayer deposit")]
+    fn ol_balance_exactly_deposit_panics() {
+        ol_request_with_balance(DEPOSIT, vec![]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Guardian balance too low for the OutLayer deposit")]
+    fn ol_balance_one_yocto_short_of_margin_panics() {
+        ol_request_with_balance(DEPOSIT + OUTLAYER_BALANCE_MARGIN.as_yoctonear() - 1, vec![]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Guardian balance too low for the OutLayer deposit")]
+    fn ol_balance_margin_without_storage_panics() {
+        ol_request_with_balance(DEPOSIT + OUTLAYER_BALANCE_MARGIN.as_yoctonear(), vec![]);
+    }
+
+    #[test]
+    fn ol_balance_deposit_margin_and_storage_passes() {
+        ol_request_with_balance(DEPOSIT + OUTLAYER_BALANCE_MARGIN.as_yoctonear() + STORAGE_SLACK, vec![]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Guardian balance too low for the OutLayer deposit")]
+    fn ol_balance_small_request_fits_but_max_context_does_not() {
+        // Passes for a small request (previous test), fails for a max-size context.
+        ol_request_with_balance(
+            DEPOSIT + OUTLAYER_BALANCE_MARGIN.as_yoctonear() + STORAGE_SLACK,
+            ctx_of_bytes(MAX_CONTEXT_BYTES),
+        );
+    }
+
+    #[test]
+    fn ol_balance_max_context_passes_with_enough_storage_balance() {
+        ol_request_with_balance(
+            DEPOSIT + OUTLAYER_BALANCE_MARGIN.as_yoctonear() + 20 * STORAGE_SLACK,
+            ctx_of_bytes(MAX_CONTEXT_BYTES),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Corrupt checker mode")]
+    fn corrupt_checker_mode_panics_instead_of_relayer() {
+        let g = new_guardian();
+        env::storage_write(MODE_KEY, &[0xff, 0xff, 0xff]);
+        let _ = g.get_checker_mode();
+    }
+
+    #[test]
+    fn ol_usage_persists_after_switching_to_relayer() {
+        let mut g = ol_guardian_with_max(3);
+        let _ = request_at(&mut g, "r1", 0);
+        set_ctx("owner.testnet");
+        g.set_checker_mode(CheckerMode::Relayer);
+        let u = usage_at(&g, 0).unwrap();
+        assert_eq!((u.used, u.max_per_day), (U64(1), U64(0)));
+    }
+
+    fn mode_with(outlayer_id: &str, deposit_yocto: u128, max_requests_per_day: u64) -> CheckerMode {
+        CheckerMode::OutLayer {
+            outlayer_id: acct(outlayer_id),
+            project_id: "owner.testnet/checker".into(),
+            version_key: None,
+            secrets_ref: None,
+            deposit_yocto: U128(deposit_yocto),
+            max_instructions: U64(1_000_000_000),
+            max_execution_seconds: U64(30),
+            max_requests_per_day: U64(max_requests_per_day),
+        }
+    }
+
+    #[test]
+    fn valid_mode_accepts_known_outlayer_ids() {
+        assert_eq!(validate::valid_mode(&mode_with("outlayer.testnet", DEPOSIT, 100)), Ok(()));
+        assert_eq!(validate::valid_mode(&mode_with("outlayer.near", DEPOSIT, 100)), Ok(()));
+    }
+
+    #[test]
+    fn valid_mode_rejects_other_outlayer_id() {
+        assert_eq!(
+            validate::valid_mode(&mode_with("evil.testnet", DEPOSIT, 100)),
+            Err("outlayer_id")
+        );
+    }
+
+    #[test]
+    fn valid_mode_deposit_bound() {
+        let one_near = MAX_OUTLAYER_DEPOSIT.as_yoctonear();
+        assert_eq!(validate::valid_mode(&mode_with("outlayer.testnet", one_near, 100)), Ok(()));
+        assert_eq!(
+            validate::valid_mode(&mode_with("outlayer.testnet", one_near + 1, 100)),
+            Err("deposit_yocto")
+        );
+    }
+
+    #[test]
+    fn valid_mode_request_budget_bounds() {
+        for ok in [1, 1000] {
+            assert_eq!(validate::valid_mode(&mode_with("outlayer.testnet", DEPOSIT, ok)), Ok(()));
+        }
+        for bad in [0, 1001] {
+            assert_eq!(
+                validate::valid_mode(&mode_with("outlayer.testnet", DEPOSIT, bad)),
+                Err("max_requests_per_day")
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid checker mode: outlayer_id")]
+    fn set_checker_mode_rejects_other_outlayer_id() {
+        let mut g = new_guardian();
+        set_ctx("owner.testnet");
+        g.set_checker_mode(mode_with("evil.testnet", DEPOSIT, 100));
+    }
+
+    #[test]
+    fn get_pending_hides_outlayer_requests() {
+        let g = ol_guardian();
+        assert_eq!(g.pending.len(), 1);
+        assert!(g.get_pending(0, 50).is_empty());
+    }
+
+    #[test]
+    fn get_pending_lists_relayer_requests() {
+        let mut g = new_guardian();
+        let _ = request(&mut g, "r1", vec![]);
+        let list = g.get_pending(0, 50);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].request_id, U64(1));
+    }
+
+    #[test]
+    fn get_pending_mixed_modes_lists_only_relayer() {
+        let mut g = new_guardian();
+        let _ = request(&mut g, "r1", vec![]);
+        set_ctx("owner.testnet");
+        g.set_checker_mode(ol_mode());
+        let _ = request(&mut g, "r2", vec![]);
+        assert_eq!(g.pending.len(), 2);
+        let list = g.get_pending(0, 50);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].request_id, U64(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "Request is not stuck")]
+    fn clear_stuck_before_300_blocks_panics() {
+        let mut g = ol_guardian();
+        set_ctx_block("owner.testnet", 7 + OUTLAYER_STUCK_BLOCKS - 1);
+        g.clear_stuck_outlayer(U64(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the owner can clear stuck requests")]
+    fn clear_stuck_stranger_panics() {
+        let mut g = ol_guardian();
+        set_ctx_block("mallory.testnet", 7 + OUTLAYER_STUCK_BLOCKS);
+        g.clear_stuck_outlayer(U64(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the owner can clear stuck requests")]
+    fn clear_stuck_agent_panics() {
+        let mut g = ol_guardian();
+        set_ctx_block("agent.testnet", 7 + OUTLAYER_STUCK_BLOCKS);
+        g.clear_stuck_outlayer(U64(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "Unknown OutLayer request")]
+    fn clear_stuck_unknown_id_panics() {
+        let mut g = ol_guardian();
+        set_ctx_block("owner.testnet", 7 + OUTLAYER_STUCK_BLOCKS);
+        g.clear_stuck_outlayer(U64(99));
+    }
+
+    #[test]
+    #[should_panic(expected = "Unknown OutLayer request")]
+    fn clear_stuck_relayer_request_panics() {
+        let mut g = new_guardian();
+        let _ = request(&mut g, "r1", vec![]);
+        set_ctx_block("owner.testnet", 7 + OUTLAYER_STUCK_BLOCKS);
+        g.clear_stuck_outlayer(U64(1));
+    }
+
+    #[test]
+    fn clear_stuck_after_300_blocks_fails_closed() {
+        let mut g = ol_guardian();
+        assert_eq!(g.get_daily_spent(), U128(18_000_000));
+        set_ctx_block("owner.testnet", 7 + OUTLAYER_STUCK_BLOCKS);
+        g.clear_stuck_outlayer(U64(1));
+        let logs = near_sdk::test_utils::get_logs().join("\n");
+        assert!(logs.contains("checker_failed") && logs.contains("stuck_cleared"), "logs: {logs}");
+        assert_eq!(g.pending.len(), 0);
+        assert!(!is_outlayer(1));
+        assert_eq!(g.get_daily_spent(), U128(0));
+        let rec = g.get_receipt(U64(1)).unwrap();
+        assert_eq!(rec.status, ReceiptStatus::TimedOut);
+        assert_eq!(rec.outcome, None);
+        assert_eq!(rec.record_sha256, None);
+        // The daily budget is not refunded by clearing.
+        assert_eq!(usage_at(&g, 0).unwrap().used, U64(1));
+
+        // A late callback for the cleared id is a no-op and cannot pay.
+        let r = deliver(&mut g, text_result(&verdict(Outcome::Allow)));
+        assert_eq!(value(r), ReceiptStatus::TimedOut);
+        let rec = g.get_receipt(U64(1)).unwrap();
+        assert_eq!(rec.status, ReceiptStatus::TimedOut);
+        assert_eq!(rec.outcome, None);
     }
 }

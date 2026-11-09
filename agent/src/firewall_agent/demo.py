@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from datetime import datetime, timezone
 
 from .agent import propose_payment
 from .config import REPO_ROOT, TOKEN_DECIMALS, Settings
@@ -30,6 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--scenario", required=True, help=f"one of: {', '.join(list_scenarios())}")
     ap.add_argument("--mode", choices=["dry-run", "testnet"], default="dry-run")
     ap.add_argument("--llm", choices=["scripted", "near-ai"], default="scripted")
+    ap.add_argument(
+        "--reset-spend", action="store_true", help="dry-run only: clear today's daily spend first"
+    )
     args = ap.parse_args(argv)
 
     s = Settings.load()
@@ -49,13 +53,26 @@ def main(argv: list[str] | None = None) -> int:
         f'to {req.receiver_id} memo="{req.memo}"'
     )
     guardian = LocalGuardian(s) if args.mode == "dry-run" else TestnetGuardian(s)
+    if args.reset_spend:
+        if args.mode == "dry-run":
+            guardian.reset_spend()
+        else:
+            print("note: --reset-spend only applies to dry-run; ignored")
     try:
         d = guardian.request_payment(req)
     except ContractRefusal as e:
         print(f"refused by contract: {e}")
+        if args.mode == "dry-run" and str(e) == "Daily cap reached":
+            print(
+                "dry-run: daily spend is kept across runs like the contract; "
+                "rerun with --reset-spend to start a fresh day"
+            )
         return 1
     print(f"verdict: {d.outcome} reasons={','.join(d.reasons)} record={d.record_sha256}")
     print(f"action: {d.status}")
+    if d.release_at_ns is not None:
+        release = datetime.fromtimestamp(d.release_at_ns // 10**9, tz=timezone.utc)
+        print(f"held until {release.strftime('%Y-%m-%dT%H:%M:%SZ')}")
     if args.mode == "dry-run" and d.record_path is not None:
         try:
             shown = d.record_path.relative_to(REPO_ROOT)

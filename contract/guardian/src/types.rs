@@ -178,3 +178,48 @@ pub struct HeldView {
     pub amount: U128,
     pub release_at_ns: U64,
 }
+
+/// Reference to an OutLayer secrets row (`secrets_ref` of `request_execution`).
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SecretsRef {
+    pub profile: String,
+    pub account_id: AccountId,
+}
+
+/// Who decides a payment request. Stored under its own storage key (not in the root state), so
+/// adding it did not change the borsh layout of `Guardian`.
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckerMode {
+    /// A relayer runs the checker and calls `submit_verdict` as the checker account.
+    #[serde(rename = "relayer")]
+    Relayer,
+    /// The Guardian calls `request_execution` on OutLayer; the verdict comes back in a callback.
+    #[serde(rename = "outlayer")]
+    OutLayer {
+        /// OutLayer contract: `outlayer.testnet` / `outlayer.near`.
+        outlayer_id: AccountId,
+        /// `<owner>/<name>` of the registered OutLayer project.
+        project_id: String,
+        /// A version's wasm sha256; `None` runs the project's active version.
+        version_key: Option<String>,
+        /// Optional secrets row injected as env vars into the checker.
+        secrets_ref: Option<SecretsRef>,
+        /// NEAR attached to each `request_execution`, taken from the Guardian's balance.
+        deposit_yocto: U128,
+        max_instructions: U64,
+        max_execution_seconds: U64,
+        /// Most OutLayer requests per UTC day (1..=1000); bounds how much NEAR the deposits can burn.
+        max_requests_per_day: U64,
+    },
+}
+
+/// Daily OutLayer request budget as reported by `get_outlayer_usage`.
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutlayerUsage {
+    pub day: U64,
+    pub used: U64,
+    pub max_per_day: U64,
+}

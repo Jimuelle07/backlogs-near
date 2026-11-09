@@ -16,7 +16,7 @@ fn main() {
             exit(2);
         }
     };
-    let mut line = match serde_json::to_vec(&verdict) {
+    let line = match serde_json::to_vec(&verdict) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("checker error: {e}");
@@ -43,7 +43,13 @@ fn main() {
     }
     #[cfg(target_os = "wasi")]
     let _ = &record;
-    line.push(b'\n');
+    // OutLayer takes stdout as the whole Verdict and caps it at 900 bytes: no trailing newline there.
+    #[cfg(not(target_os = "wasi"))]
+    let line = {
+        let mut l = line;
+        l.push(b'\n');
+        l
+    };
     let mut out = std::io::stdout();
     if out.write_all(&line).and_then(|_| out.flush()).is_err() {
         exit(2);
