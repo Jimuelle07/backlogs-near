@@ -3,6 +3,9 @@
 HUMAN-GATED: this signs testnet transactions (account creation, deploy, transfers).
 Never run it from an agent session without the human's explicit yes.
 Requires: uv sync --extra testnet, and `cargo near build` outputs for contract/token and contract/guardian.
+Writes .env.testnet (including GUARDIAN_PRIVATE_KEY), backing up any existing one. Each created account's secret
+key goes to .env.testnet.pending right before the account is created (so a lost response cannot strand it), plus the
+agent's function-call key before it is added; the file is removed on success and a leftover one stops the next run.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ ACCOUNTS = {
 }
 
 ENV_TESTNET = REPO_ROOT / ".env.testnet"
+ENV_TESTNET_PENDING = REPO_ROOT / ".env.testnet.pending"  # matches the .env.* gitignore rule
 
 
 def find_wasm(crate: str):
@@ -55,6 +59,38 @@ def new_keypair() -> tuple[str, str]:
     return secret, public
 
 
+def _refuse_if_pending() -> None:
+    """A leftover recovery file holds keys of accounts a previous run may have created; never overwrite it."""
+    if ENV_TESTNET_PENDING.exists():
+        raise SystemExit(
+            f"{ENV_TESTNET_PENDING.name} exists: a previous run stopped and may have created accounts. "
+            "Inspect it (it holds their secret keys), move it away, then rerun."
+        )
+
+
+def _record_key(account_id: str, secret: str) -> None:
+    """Persist an account's secret key before it is created, so a later failure cannot strand its NEAR."""
+    new = not ENV_TESTNET_PENDING.exists()
+    with ENV_TESTNET_PENDING.open("a", encoding="utf-8") as f:
+        if new:
+            f.write("# Keys of accounts created by an unfinished firewall-setup-testnet run. Never commit.\n")
+        f.write(f"{account_id}={secret}\n")
+    print(f"recorded key for {account_id} in {ENV_TESTNET_PENDING.name}")
+
+
+def _write_env_testnet(lines: list[str], label: str) -> None:
+    """Back up any existing .env.testnet, write the new one, then drop the recovery file."""
+    if ENV_TESTNET.is_file():
+        backup = ENV_TESTNET.with_name(ENV_TESTNET.name + ".v1.bak")
+        if backup.exists():
+            backup = ENV_TESTNET.with_name(f"{ENV_TESTNET.name}.before-{label}.bak")
+        backup.write_bytes(ENV_TESTNET.read_bytes())
+        print(f"backed up {ENV_TESTNET.name} to {backup.name}")
+    ENV_TESTNET.write_text("\n".join([*lines, ""]), encoding="utf-8")
+    ENV_TESTNET_PENDING.unlink(missing_ok=True)
+    print(f"done; wrote {ENV_TESTNET.name} (keys not printed)")
+
+
 async def _run(s: Settings) -> None:
     try:
         from py_near.account import Account
@@ -68,6 +104,7 @@ async def _run(s: Settings) -> None:
     ids = {name: f"{name}.{owner_id}" for name in ACCOUNTS}
     token_wasm = find_wasm("tusdc").read_bytes()
     guardian_wasm = find_wasm("guardian").read_bytes()
+    _refuse_if_pending()
 
     opened = []
     try:
@@ -78,6 +115,7 @@ async def _run(s: Settings) -> None:
         keys: dict[str, tuple[str, str]] = {}
         for name, balance in ACCOUNTS.items():
             keys[name] = new_keypair()
+            _record_key(ids[name], keys[name][0])
             print(f"creating {ids[name]}")
             await owner.create_account(ids[name], keys[name][1], balance)
 
@@ -129,26 +167,24 @@ async def _run(s: Settings) -> None:
 
         print("restricting agent key to a function-call key")
         fc_secret, fc_public = new_keypair()
+        _record_key(f"{ids['agent']}#function_call", fc_secret)
         agent = accts["agent"]
         await agent.add_public_key(fc_public, ids["guardian"], ["request_payment"], NEAR)
         await agent.delete_public_key(keys["agent"][1])
 
-        ENV_TESTNET.write_text(
-            "\n".join(
-                [
-                    "# Written by firewall-setup-testnet. Never commit.",
-                    f"GUARDIAN_ID={ids['guardian']}",
-                    f"TOKEN_ID={ids['tusdc']}",
-                    f"AGENT_ACCOUNT_ID={ids['agent']}",
-                    f"AGENT_PRIVATE_KEY={fc_secret}",
-                    f"CHECKER_ACCOUNT_ID={ids['checker']}",
-                    f"CHECKER_PRIVATE_KEY={keys['checker'][0]}",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
+        _write_env_testnet(
+            [
+                "# Written by firewall-setup-testnet. Never commit.",
+                f"GUARDIAN_ID={ids['guardian']}",
+                f"GUARDIAN_PRIVATE_KEY={keys['guardian'][0]}",
+                f"TOKEN_ID={ids['tusdc']}",
+                f"AGENT_ACCOUNT_ID={ids['agent']}",
+                f"AGENT_PRIVATE_KEY={fc_secret}",
+                f"CHECKER_ACCOUNT_ID={ids['checker']}",
+                f"CHECKER_PRIVATE_KEY={keys['checker'][0]}",
+            ],
+            "full",
         )
-        print(f"done; wrote {ENV_TESTNET.name} (keys not printed)")
     finally:
         for acc in opened:
             try:
@@ -174,6 +210,7 @@ async def _redeploy(s: Settings, suffix: str) -> None:
     agent_id = f"agent-{suffix}.{owner_id}"
     token_id = f"tusdc.{owner_id}"
     guardian_wasm = find_wasm("guardian").read_bytes()
+    _refuse_if_pending()
 
     opened = []
     try:
@@ -183,6 +220,8 @@ async def _redeploy(s: Settings, suffix: str) -> None:
 
         guardian_keys = new_keypair()
         agent_keys = new_keypair()
+        _record_key(guardian_id, guardian_keys[0])
+        _record_key(agent_id, agent_keys[0])
         print(f"creating {guardian_id}")
         await owner.create_account(guardian_id, guardian_keys[1], 3 * NEAR // 2 + 2 * NEAR)
         print(f"creating {agent_id}")
@@ -237,32 +276,23 @@ async def _redeploy(s: Settings, suffix: str) -> None:
 
         print("restricting agent key to a function-call key")
         fc_secret, fc_public = new_keypair()
+        _record_key(f"{agent_id}#function_call", fc_secret)
         await agent.add_public_key(fc_public, guardian_id, ["request_payment"], NEAR)
         await agent.delete_public_key(agent_keys[1])
 
-        if ENV_TESTNET.is_file():
-            backup = ENV_TESTNET.with_name(ENV_TESTNET.name + ".v1.bak")
-            if backup.exists():
-                backup = ENV_TESTNET.with_name(f"{ENV_TESTNET.name}.before-{suffix}.bak")
-            backup.write_bytes(ENV_TESTNET.read_bytes())
-            print(f"backed up {ENV_TESTNET.name} to {backup.name}")
-        ENV_TESTNET.write_text(
-            "\n".join(
-                [
-                    "# Written by firewall-setup-testnet --redeploy. Never commit.",
-                    f"GUARDIAN_ID={guardian_id}",
-                    f"GUARDIAN_PRIVATE_KEY={guardian_keys[0]}",
-                    f"TOKEN_ID={token_id}",
-                    f"AGENT_ACCOUNT_ID={agent_id}",
-                    f"AGENT_PRIVATE_KEY={fc_secret}",
-                    f"CHECKER_ACCOUNT_ID={s.checker_account_id}",
-                    f"CHECKER_PRIVATE_KEY={s.checker_private_key}",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
+        _write_env_testnet(
+            [
+                "# Written by firewall-setup-testnet --redeploy. Never commit.",
+                f"GUARDIAN_ID={guardian_id}",
+                f"GUARDIAN_PRIVATE_KEY={guardian_keys[0]}",
+                f"TOKEN_ID={token_id}",
+                f"AGENT_ACCOUNT_ID={agent_id}",
+                f"AGENT_PRIVATE_KEY={fc_secret}",
+                f"CHECKER_ACCOUNT_ID={s.checker_account_id}",
+                f"CHECKER_PRIVATE_KEY={s.checker_private_key}",
+            ],
+            suffix,
         )
-        print(f"done; wrote {ENV_TESTNET.name} (keys not printed)")
     finally:
         for acc in opened:
             try:
