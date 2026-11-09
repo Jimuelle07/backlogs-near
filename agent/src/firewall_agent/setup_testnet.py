@@ -157,9 +157,128 @@ async def _run(s: Settings) -> None:
                 print(f"shutdown failed: {e}", file=sys.stderr)
 
 
+async def _redeploy(s: Settings, suffix: str) -> None:
+    """Deploy a fresh guardian-{suffix} and agent-{suffix}, reusing the existing tusdc, checker and host accounts."""
+    try:
+        from py_near.account import Account
+    except ImportError:
+        raise SystemExit("py-near not installed; run: uv sync --extra testnet")
+
+    if not (s.owner_account_id and s.owner_private_key):
+        raise SystemExit("OWNER_ACCOUNT_ID and OWNER_PRIVATE_KEY must be set in .env")
+    if not (s.checker_account_id and s.checker_private_key):
+        raise SystemExit("CHECKER_ACCOUNT_ID and CHECKER_PRIVATE_KEY must be set in .env.testnet")
+    owner_id = s.owner_account_id
+    rpc = s.near_rpc_url or DEFAULT_TESTNET_RPC
+    guardian_id = f"guardian-{suffix}.{owner_id}"
+    agent_id = f"agent-{suffix}.{owner_id}"
+    token_id = f"tusdc.{owner_id}"
+    guardian_wasm = find_wasm("guardian").read_bytes()
+
+    opened = []
+    try:
+        owner = Account(owner_id, s.owner_private_key, rpc_addr=rpc)
+        opened.append(owner)
+        await owner.startup()
+
+        guardian_keys = new_keypair()
+        agent_keys = new_keypair()
+        print(f"creating {guardian_id}")
+        await owner.create_account(guardian_id, guardian_keys[1], 3 * NEAR // 2 + 2 * NEAR)
+        print(f"creating {agent_id}")
+        await owner.create_account(agent_id, agent_keys[1], NEAR // 2)
+
+        guardian = Account(guardian_id, guardian_keys[0], rpc_addr=rpc)
+        opened.append(guardian)
+        await guardian.startup()
+        agent = Account(agent_id, agent_keys[0], rpc_addr=rpc)
+        opened.append(agent)
+        await agent.startup()
+
+        print("deploying guardian")
+        await guardian.deploy_contract(guardian_wasm)
+        await guardian.function_call(
+            guardian_id,
+            "new",
+            {
+                "owner_id": owner_id,
+                "agent_id": agent_id,
+                "token_id": token_id,
+                "token_decimals": TOKEN_DECIMALS,
+                "checker_id": s.checker_account_id,
+            },
+            gas=30 * TGAS,
+        )
+
+        print(f"storage_deposit for {guardian_id}")
+        await owner.function_call(
+            token_id,
+            "storage_deposit",
+            {"account_id": guardian_id, "registration_only": True},
+            gas=30 * TGAS,
+            amount=STORAGE_DEPOSIT,
+        )
+
+        balance = int((await owner.view_function(token_id, "ft_balance_of", {"account_id": owner_id})).result)
+        if balance < 200 * USDC:
+            print("minting 1000 tUSDC to owner")
+            await owner.function_call(
+                token_id, "mint", {"account_id": owner_id, "amount": str(1000 * USDC)}, gas=30 * TGAS
+            )
+
+        print("funding guardian with 200 tUSDC")
+        await owner.function_call(
+            token_id,
+            "ft_transfer_call",
+            {"receiver_id": guardian_id, "amount": str(200 * USDC), "msg": ""},
+            gas=100 * TGAS,
+            amount=1,
+        )
+
+        print("restricting agent key to a function-call key")
+        fc_secret, fc_public = new_keypair()
+        await agent.add_public_key(fc_public, guardian_id, ["request_payment"], NEAR)
+        await agent.delete_public_key(agent_keys[1])
+
+        if ENV_TESTNET.is_file():
+            backup = ENV_TESTNET.with_name(ENV_TESTNET.name + ".v1.bak")
+            if backup.exists():
+                backup = ENV_TESTNET.with_name(f"{ENV_TESTNET.name}.before-{suffix}.bak")
+            backup.write_bytes(ENV_TESTNET.read_bytes())
+            print(f"backed up {ENV_TESTNET.name} to {backup.name}")
+        ENV_TESTNET.write_text(
+            "\n".join(
+                [
+                    "# Written by firewall-setup-testnet --redeploy. Never commit.",
+                    f"GUARDIAN_ID={guardian_id}",
+                    f"GUARDIAN_PRIVATE_KEY={guardian_keys[0]}",
+                    f"TOKEN_ID={token_id}",
+                    f"AGENT_ACCOUNT_ID={agent_id}",
+                    f"AGENT_PRIVATE_KEY={fc_secret}",
+                    f"CHECKER_ACCOUNT_ID={s.checker_account_id}",
+                    f"CHECKER_PRIVATE_KEY={s.checker_private_key}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        print(f"done; wrote {ENV_TESTNET.name} (keys not printed)")
+    finally:
+        for acc in opened:
+            try:
+                await acc.shutdown()
+            except Exception as e:
+                print(f"shutdown failed: {e}", file=sys.stderr)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="firewall-setup-testnet", description=__doc__.splitlines()[0])
     ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    ap.add_argument(
+        "--redeploy",
+        metavar="SUFFIX",
+        help="deploy only guardian-SUFFIX and agent-SUFFIX, reusing tusdc, checker and the host accounts",
+    )
     args = ap.parse_args()
     s = Settings.load()
     if s.near_network != "testnet":
@@ -170,7 +289,7 @@ def main() -> None:
         )
         if ans.strip() != "yes":
             raise SystemExit("aborted")
-    asyncio.run(_run(s))
+    asyncio.run(_redeploy(s, args.redeploy) if args.redeploy else _run(s))
 
 
 if __name__ == "__main__":
