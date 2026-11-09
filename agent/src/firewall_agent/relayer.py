@@ -9,7 +9,7 @@ import asyncio
 import json
 import sys
 
-from .config import Settings
+from .config import DEFAULT_TESTNET_RPC, Settings
 from .guardian import TGAS, binds, run_checker
 
 POLL_SECONDS = 2
@@ -33,41 +33,44 @@ async def _loop(s: Settings) -> None:
     for name in ("guardian_id", "checker_account_id", "checker_private_key"):
         if not getattr(s, name):
             raise SystemExit(f"{name.upper()} not set (run firewall-setup-testnet first)")
-    rpc = s.near_rpc_url or "https://rpc.testnet.near.org"
+    rpc = s.near_rpc_url or DEFAULT_TESTNET_RPC
     acc = Account(s.checker_account_id, s.checker_private_key, rpc_addr=rpc)
     await acc.startup()
-    submitted: set[str] = set()
-    print(f"relayer watching {s.guardian_id} as {s.checker_account_id}")
-    while True:
-        res = await _retry_once(
-            "get_pending",
-            lambda: acc.view_function(s.guardian_id, "get_pending", {"from_index": 0, "limit": 16}),
-        )
-        for item in (res.result if res else []) or []:
-            rid = str(item["request_id"])
-            if rid in submitted:
-                continue
-            raw = item["checker_input"].encode("utf-8")
-
-            verdict = run_checker(s.checker_bin, raw, s.checker_record_dir / s.guardian_id)
-            bad = binds(json.loads(item["checker_input"]), verdict)
-            if bad:
-                print(f"request {rid}: checker verdict does not bind ({bad}); skipping", file=sys.stderr)
-                continue
-            ok = await _retry_once(
-                f"submit_verdict {rid}",
-                lambda: acc.function_call(
-                    s.guardian_id,
-                    "submit_verdict",
-                    {"request_id": rid, "verdict": verdict},
-                    gas=100 * TGAS,
-                    included=True,
-                ),
+    try:
+        submitted: set[str] = set()
+        print(f"relayer watching {s.guardian_id} as {s.checker_account_id}")
+        while True:
+            res = await _retry_once(
+                "get_pending",
+                lambda: acc.view_function(s.guardian_id, "get_pending", {"from_index": 0, "limit": 16}),
             )
-            if ok is not None:
-                submitted.add(rid)
-                print(f"request {rid} -> {verdict['outcome']}")
-        await asyncio.sleep(POLL_SECONDS)
+            for item in (res.result if res else []) or []:
+                rid = str(item["request_id"])
+                if rid in submitted:
+                    continue
+                raw = item["checker_input"].encode("utf-8")
+
+                verdict = run_checker(s.checker_bin, raw, s.checker_record_dir / s.guardian_id)
+                bad = binds(json.loads(item["checker_input"]), verdict)
+                if bad:
+                    print(f"request {rid}: checker verdict does not bind ({bad}); skipping", file=sys.stderr)
+                    continue
+                ok = await _retry_once(
+                    f"submit_verdict {rid}",
+                    lambda: acc.function_call(
+                        s.guardian_id,
+                        "submit_verdict",
+                        {"request_id": rid, "verdict": verdict},
+                        gas=100 * TGAS,
+                        included=True,
+                    ),
+                )
+                if ok is not None:
+                    submitted.add(rid)
+                    print(f"request {rid} -> {verdict['outcome']}")
+            await asyncio.sleep(POLL_SECONDS)
+    finally:
+        await acc.shutdown()
 
 
 def main() -> None:

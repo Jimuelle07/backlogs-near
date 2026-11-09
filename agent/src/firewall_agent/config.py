@@ -1,4 +1,9 @@
-"""Settings loaded from the repo-root .env, then .env.testnet (no override)."""
+"""Settings from the repo-root .env, then .env.testnet.
+
+Precedence: real process environment > .env > .env.testnet. An empty value in a
+file never shadows a non-empty value from a later file; an empty variable that
+is already exported in the process environment is kept as is.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +12,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 # agent/src/firewall_agent/config.py -> parents[3] == repo root
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -15,10 +20,24 @@ AGENT_DIR = REPO_ROOT / "agent"
 
 TOKEN_DECIMALS = 6
 
+# The legacy near.org testnet RPC is deprecated and rate-limited (-429).
+DEFAULT_TESTNET_RPC = "https://test.rpc.fastnear.com"
 
-def _load_env() -> None:
-    load_dotenv(REPO_ROOT / ".env", override=False)
-    load_dotenv(REPO_ROOT / ".env.testnet", override=False)
+
+def _load_env(
+    env_path: Path = REPO_ROOT / ".env",
+    testnet_path: Path = REPO_ROOT / ".env.testnet",
+) -> None:
+    merged: dict[str, str] = {}
+    for path in (env_path, testnet_path):
+        for key, value in dotenv_values(path).items():
+            if value is None:
+                value = ""
+            if not merged.get(key):
+                merged[key] = value
+    for key, value in merged.items():
+        if key not in os.environ:
+            os.environ[key] = value
 
 
 def _path(value: str, default: Path) -> Path:

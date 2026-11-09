@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 
-from .config import REPO_ROOT, TOKEN_DECIMALS, Settings
+from .config import DEFAULT_TESTNET_RPC, REPO_ROOT, TOKEN_DECIMALS, Settings
 
 TGAS = 10**12
 NEAR = 10**24
@@ -63,89 +64,97 @@ async def _run(s: Settings) -> None:
     if not (s.owner_account_id and s.owner_private_key):
         raise SystemExit("OWNER_ACCOUNT_ID and OWNER_PRIVATE_KEY must be set in .env")
     owner_id = s.owner_account_id
-    rpc = s.near_rpc_url or "https://rpc.testnet.near.org"
+    rpc = s.near_rpc_url or DEFAULT_TESTNET_RPC
     ids = {name: f"{name}.{owner_id}" for name in ACCOUNTS}
     token_wasm = find_wasm("tusdc").read_bytes()
     guardian_wasm = find_wasm("guardian").read_bytes()
 
-    owner = Account(owner_id, s.owner_private_key, rpc_addr=rpc)
-    await owner.startup()
+    opened = []
+    try:
+        owner = Account(owner_id, s.owner_private_key, rpc_addr=rpc)
+        opened.append(owner)
+        await owner.startup()
 
-    keys: dict[str, tuple[str, str]] = {}
-    for name, balance in ACCOUNTS.items():
-        keys[name] = new_keypair()
-        print(f"creating {ids[name]}")
-        await owner.create_account(ids[name], keys[name][1], balance)
+        keys: dict[str, tuple[str, str]] = {}
+        for name, balance in ACCOUNTS.items():
+            keys[name] = new_keypair()
+            print(f"creating {ids[name]}")
+            await owner.create_account(ids[name], keys[name][1], balance)
 
-    accts = {}
-    for name in ACCOUNTS:
-        accts[name] = Account(ids[name], keys[name][0], rpc_addr=rpc)
-        await accts[name].startup()
+        accts = {}
+        for name in ACCOUNTS:
+            accts[name] = Account(ids[name], keys[name][0], rpc_addr=rpc)
+            opened.append(accts[name])
+            await accts[name].startup()
 
-    print("deploying token and guardian")
-    await accts["tusdc"].deploy_contract(token_wasm)
-    await accts["tusdc"].function_call(ids["tusdc"], "new", {"owner_id": owner_id}, gas=30 * TGAS)
-    await accts["guardian"].deploy_contract(guardian_wasm)
-    await accts["guardian"].function_call(
-        ids["guardian"],
-        "new",
-        {
-            "owner_id": owner_id,
-            "agent_id": ids["agent"],
-            "token_id": ids["tusdc"],
-            "token_decimals": TOKEN_DECIMALS,
-            "checker_id": ids["checker"],
-        },
-        gas=30 * TGAS,
-    )
-
-    print("minting 1000 tUSDC to owner")
-    await owner.function_call(
-        ids["tusdc"], "mint", {"account_id": owner_id, "amount": str(1000 * USDC)}, gas=30 * TGAS
-    )
-    for name in ("guardian", "hostco", "hostc0"):
-        print(f"storage_deposit for {ids[name]}")
-        await owner.function_call(
-            ids["tusdc"],
-            "storage_deposit",
-            {"account_id": ids[name], "registration_only": True},
+        print("deploying token and guardian")
+        await accts["tusdc"].deploy_contract(token_wasm)
+        await accts["tusdc"].function_call(ids["tusdc"], "new", {"owner_id": owner_id}, gas=30 * TGAS)
+        await accts["guardian"].deploy_contract(guardian_wasm)
+        await accts["guardian"].function_call(
+            ids["guardian"],
+            "new",
+            {
+                "owner_id": owner_id,
+                "agent_id": ids["agent"],
+                "token_id": ids["tusdc"],
+                "token_decimals": TOKEN_DECIMALS,
+                "checker_id": ids["checker"],
+            },
             gas=30 * TGAS,
-            amount=STORAGE_DEPOSIT,
         )
 
-    print("funding guardian with 500 tUSDC")
-    await owner.function_call(
-        ids["tusdc"],
-        "ft_transfer_call",
-        {"receiver_id": ids["guardian"], "amount": str(500 * USDC), "msg": ""},
-        gas=100 * TGAS,
-        amount=1,
-    )
+        print("minting 1000 tUSDC to owner")
+        await owner.function_call(
+            ids["tusdc"], "mint", {"account_id": owner_id, "amount": str(1000 * USDC)}, gas=30 * TGAS
+        )
+        for name in ("guardian", "hostco", "hostc0"):
+            print(f"storage_deposit for {ids[name]}")
+            await owner.function_call(
+                ids["tusdc"],
+                "storage_deposit",
+                {"account_id": ids[name], "registration_only": True},
+                gas=30 * TGAS,
+                amount=STORAGE_DEPOSIT,
+            )
 
-    print("restricting agent key to a function-call key")
-    fc_secret, fc_public = new_keypair()
-    agent = accts["agent"]
-    await agent.add_public_key(fc_public, ids["guardian"], ["request_payment"], NEAR)
-    await agent.delete_public_key(keys["agent"][1])
+        print("funding guardian with 500 tUSDC")
+        await owner.function_call(
+            ids["tusdc"],
+            "ft_transfer_call",
+            {"receiver_id": ids["guardian"], "amount": str(500 * USDC), "msg": ""},
+            gas=100 * TGAS,
+            amount=1,
+        )
 
-    ENV_TESTNET.write_text(
-        "\n".join(
-            [
-                "# Written by firewall-setup-testnet. Never commit.",
-                f"GUARDIAN_ID={ids['guardian']}",
-                f"TOKEN_ID={ids['tusdc']}",
-                f"AGENT_ACCOUNT_ID={ids['agent']}",
-                f"AGENT_PRIVATE_KEY={fc_secret}",
-                f"CHECKER_ACCOUNT_ID={ids['checker']}",
-                f"CHECKER_PRIVATE_KEY={keys['checker'][0]}",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    print(f"done; wrote {ENV_TESTNET.name} (keys not printed)")
-    for acc in [owner, *accts.values()]:
-        await acc.shutdown()
+        print("restricting agent key to a function-call key")
+        fc_secret, fc_public = new_keypair()
+        agent = accts["agent"]
+        await agent.add_public_key(fc_public, ids["guardian"], ["request_payment"], NEAR)
+        await agent.delete_public_key(keys["agent"][1])
+
+        ENV_TESTNET.write_text(
+            "\n".join(
+                [
+                    "# Written by firewall-setup-testnet. Never commit.",
+                    f"GUARDIAN_ID={ids['guardian']}",
+                    f"TOKEN_ID={ids['tusdc']}",
+                    f"AGENT_ACCOUNT_ID={ids['agent']}",
+                    f"AGENT_PRIVATE_KEY={fc_secret}",
+                    f"CHECKER_ACCOUNT_ID={ids['checker']}",
+                    f"CHECKER_PRIVATE_KEY={keys['checker'][0]}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        print(f"done; wrote {ENV_TESTNET.name} (keys not printed)")
+    finally:
+        for acc in opened:
+            try:
+                await acc.shutdown()
+            except Exception as e:
+                print(f"shutdown failed: {e}", file=sys.stderr)
 
 
 def main() -> None:

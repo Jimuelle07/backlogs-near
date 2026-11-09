@@ -4,13 +4,25 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 
 from .agent import propose_payment
 from .config import REPO_ROOT, TOKEN_DECIMALS, Settings
 from .formats import units_to_display
-from .guardian import LocalGuardian, TestnetGuardian
+from .guardian import ContractRefusal, LocalGuardian, TestnetGuardian
 from .llm import NearAiLLM, ScriptedLLM
 from .scenarios import list_scenarios, load_scenario
+
+
+def make_client_ref(scenario_name: str, mode: str, now_ns: int | None = None) -> str:
+    """Dry-run keeps a fixed ref; testnet must be unique per run (the contract rejects duplicates).
+
+    Result matches the contract's `^[A-Za-z0-9_-]{1,64}$`.
+    """
+    if mode == "dry-run":
+        return f"{scenario_name}-1"
+    suffix = str(time.time_ns() if now_ns is None else now_ns)
+    return f"{scenario_name[: 64 - 1 - len(suffix)]}-{suffix}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
         llm = NearAiLLM(s.near_ai_base_url, s.near_ai_api_key, s.agent_model)
 
     print(f"scenario: {scenario.name} ({scenario.label})")
-    req = propose_payment(scenario, llm, client_ref=f"{scenario.name}-1")
+    req = propose_payment(scenario, llm, client_ref=make_client_ref(scenario.name, args.mode))
     if req is None:
         print("proposed: none")
         return 0
@@ -37,7 +49,11 @@ def main(argv: list[str] | None = None) -> int:
         f'to {req.receiver_id} memo="{req.memo}"'
     )
     guardian = LocalGuardian(s) if args.mode == "dry-run" else TestnetGuardian(s)
-    d = guardian.request_payment(req)
+    try:
+        d = guardian.request_payment(req)
+    except ContractRefusal as e:
+        print(f"refused by contract: {e}")
+        return 1
     print(f"verdict: {d.outcome} reasons={','.join(d.reasons)} record={d.record_sha256}")
     print(f"action: {d.status}")
     if args.mode == "dry-run" and d.record_path is not None:

@@ -102,7 +102,7 @@ Project-independent:
 
 - **Accounts:** testnet accounts for development and the demo; faucet funds only ([HACKATHON.md](../hackathon-context/HACKATHON.md) Q-008, Q-010). Anything that signs a testnet transaction needs human confirmation (AGENTS.md §4).
 - **Keys:** the agent signs with a function-call access key scoped to the Guardian and to `request_payment`, never a full-access key. Caveat: an account holding only function-call keys cannot transfer NEAR or add keys, and is locked out when the gas allowance runs out; the owner restores it by re-adding the key (README).
-- **RPC:** a free public provider from https://docs.near.org/api/rpc/providers (Q-009), configured via `NEAR_RPC_URL`.
+- **RPC:** default is FastNEAR `https://test.rpc.fastnear.com` (rpc.testnet.near.org is deprecated and rate-limited), configurable via `NEAR_RPC_URL`; other providers at https://docs.near.org/api/rpc/providers (Q-009).
 - **NEAR Intents:** not used.
 
 ### Guardian (`contract/guardian`, crate `guardian`)
@@ -176,7 +176,7 @@ All configuration comes from environment variables; `.env.example` is the canoni
 | `NEAR_AI_BASE_URL` | `https://cloud-api.near.ai/v1` | agent config; checker (`JevDecisionClient` nearai provider, `LlmDecisionClient`) |
 | `AGENT_MODEL` | NEAR AI Cloud model id with tool calling (list via `GET $NEAR_AI_BASE_URL/models`) | agent config |
 | `NEAR_NETWORK` | `testnet` (default); mainnet only with human confirmation | agent config, setup_testnet, relayer |
-| `NEAR_RPC_URL` | RPC endpoint from https://docs.near.org/api/rpc/providers | agent config, setup_testnet, relayer |
+| `NEAR_RPC_URL` | RPC endpoint; default `https://test.rpc.fastnear.com` (the legacy near.org testnet RPC is deprecated and rate-limited) | agent config, setup_testnet, relayer |
 | `OWNER_ACCOUNT_ID` | Owner account; also the namespace for sub-accounts (default `demo.testnet`) | agent config, setup_testnet |
 | `OWNER_PRIVATE_KEY` | Owner key; never committed | setup_testnet |
 | `GUARDIAN_ID` | Guardian contract account | agent config (testnet guardian), relayer |

@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import TOKEN_DECIMALS, Settings
+from .config import DEFAULT_TESTNET_RPC, TOKEN_DECIMALS, Settings
 from .formats import PaymentRequest, compact_json
 
 VERDICT_FORMAT = "firewall.verdict.v1"
@@ -20,6 +20,45 @@ CHECKER_INPUT_FORMAT = "firewall.checker_input.v1"
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _STATUS_BY_OUTCOME = {"allow": "would_pay", "hold": "held", "block": "refused"}
 TGAS = 10**12
+
+
+_PANIC_PREFIX = "Smart contract panicked: "
+
+
+class ContractRefusal(Exception):
+    """The Guardian contract rejected request_payment (panic); no receipt exists for it."""
+
+
+def _failure_message(status: dict) -> str:
+    """Message for a `{"Failure": ...}` status; never empty, never raises."""
+    try:
+        err = status["Failure"]["ActionError"]["kind"]["FunctionCallError"]["ExecutionError"]
+        if isinstance(err, str) and err:
+            return err.removeprefix(_PANIC_PREFIX)
+    except (KeyError, TypeError):
+        pass
+    try:
+        return f"transaction failed: {json.dumps(status['Failure'], separators=(',', ':'))}"
+    except (KeyError, TypeError, ValueError):
+        return "transaction failed (unrecognised failure status)"
+
+
+def contract_failure(tx: dict) -> str | None:
+    """Failure message of the request_payment receipt in a raw EXPERIMENTAL_tx_status result.
+
+    None means success, not executed yet, or an unparseable response. The call's receipt is
+    transaction_outcome.outcome.receipt_ids[0], matched in receipts_outcome by "id"; later receipts
+    (ft_transfer, callbacks) and the transaction-level status do not decide refusal.
+    """
+    try:
+        rid = tx["transaction_outcome"]["outcome"]["receipt_ids"][0]
+        for ro in tx["receipts_outcome"]:
+            if ro["id"] == rid:
+                status = ro["outcome"]["status"]
+                return _failure_message(status) if "Failure" in status else None
+    except (KeyError, IndexError, TypeError):
+        return None
+    return None
 
 
 @dataclass
@@ -124,6 +163,7 @@ class TestnetGuardian:
 
     POLL_SECONDS = 2
     TIMEOUT_SECONDS = 300
+    TX_STATUS_TIMEOUT_SECONDS = 5
 
     def __init__(self, settings: Settings):
         self.s = settings
@@ -135,34 +175,85 @@ class TestnetGuardian:
         req.validate()
         return asyncio.run(self._run(req))
 
+    async def _tx_refusal(self, acc, tx_hash: str) -> str | None:
+        """Failure message of the request_payment receipt, or None (success, not executed yet, or query failed).
+
+        Never blocks long: EXPERIMENTAL_tx_status waits for all receipts, and the yield's receipts only
+        finish after the verdict, so each query is time-boxed and errors are retried by the caller.
+        """
+        try:
+            tx = await asyncio.wait_for(
+                acc._provider.json_rpc(
+                    "EXPERIMENTAL_tx_status",
+                    {
+                        "tx_hash": tx_hash,
+                        "sender_account_id": self.s.agent_account_id,
+                        "wait_until": "INCLUDED_FINAL",
+                    },
+                ),
+                self.TX_STATUS_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            return None
+        return contract_failure(tx)
+
     async def _run(self, req: PaymentRequest) -> Decision:
         try:
             from py_near.account import Account
         except ImportError:
             raise SystemExit("py-near not installed; run: uv sync --extra testnet")
-        rpc = self.s.near_rpc_url or "https://rpc.testnet.near.org"
+        rpc = self.s.near_rpc_url or DEFAULT_TESTNET_RPC
         acc = Account(self.s.agent_account_id, self.s.agent_private_key, rpc_addr=rpc)
         await acc.startup()
-        await acc.function_call(
-            self.s.guardian_id, "request_payment", req.to_args(), gas=100 * TGAS, included=True
-        )
-        deadline = time.monotonic() + self.TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            res = await acc.view_function(
-                self.s.guardian_id, "get_receipt_by_ref", {"client_ref": req.client_ref}
+        try:
+            # included=True returns the hash once the tx is included; it never reports a contract panic.
+            tx_hash = await acc.function_call(
+                self.s.guardian_id, "request_payment", req.to_args(), gas=100 * TGAS, included=True
             )
-            receipt = res.result
-            if receipt and receipt.get("status") != "paying":
-                return Decision(
-                    outcome=receipt.get("outcome"),
-                    reasons=list(receipt.get("reasons") or []),
-                    record_sha256=receipt.get("record_sha256"),
-                    status=receipt["status"],
-                    detail=f"request_id={receipt.get('request_id')}",
+            accepted = False
+            deadline = time.monotonic() + self.TIMEOUT_SECONDS
+            while time.monotonic() < deadline:
+                res = await acc.view_function(
+                    self.s.guardian_id, "get_receipt_by_ref", {"client_ref": req.client_ref}
                 )
-            await asyncio.sleep(self.POLL_SECONDS)
-        print(
-            f"timed out after {self.TIMEOUT_SECONDS}s waiting for receipt of {req.client_ref}",
-            file=sys.stderr,
+                receipt = res.result
+                if receipt:
+                    accepted = True
+                    if receipt.get("status") != "paying":
+                        return self._decision(req, receipt)
+                if not accepted:
+                    pend = await acc.view_function(
+                        self.s.guardian_id, "get_pending", {"from_index": 0, "limit": 50}
+                    )
+                    accepted = any(p.get("client_ref") == req.client_ref for p in pend.result or [])
+                if not accepted:
+                    failure = await self._tx_refusal(acc, tx_hash)
+                    if failure is not None:
+                        raise ContractRefusal(failure)
+                await asyncio.sleep(self.POLL_SECONDS)
+            what = "no verdict yet" if accepted else "request was never accepted by the contract"
+            print(
+                f"timed out after {self.TIMEOUT_SECONDS}s waiting for {req.client_ref}: {what} (tx {tx_hash})",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        finally:
+            await acc.shutdown()
+
+    @staticmethod
+    def _decision(req: PaymentRequest, receipt: dict) -> Decision:
+        if receipt.get("receiver_id") != req.receiver_id or str(receipt.get("amount")) != str(req.amount):
+            print(
+                f"receipt for {req.client_ref} does not match the request: "
+                f"receiver_id={receipt.get('receiver_id')} amount={receipt.get('amount')}, "
+                f"expected {req.receiver_id} / {req.amount}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        return Decision(
+            outcome=receipt.get("outcome"),
+            reasons=list(receipt.get("reasons") or []),
+            record_sha256=receipt.get("record_sha256"),
+            status=receipt["status"],
+            detail=f"request_id={receipt.get('request_id')}",
         )
-        raise SystemExit(1)
