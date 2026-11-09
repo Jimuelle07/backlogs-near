@@ -67,6 +67,45 @@ Sync points (the only moments lanes must meet): **end of Sprint 2** — testnet 
 
 **Decision at the end of Sprint 1:** if A1 is not working, lane A replaces A4 with **A0: HTTPS + signed-verdict fallback mode** ([idea.md Risks](idea.md#risks-and-fallbacks)) in Sprint 2 and A4 moves to Sprint 3.
 
+### A1 log (done 2026-11-10)
+
+Merged to `main` on GitHub: branch `a1-outlayer-live`, commit `5d47f5b`, merge `928b0aa`, sign-off `4100de8`.
+
+| Area | What changed |
+| --- | --- |
+| Contract (`contract/guardian/src/lib.rs`) | Every OutLayer request now sends `max_memory_mb: 128` (`OUTLAYER_MAX_MEMORY_MB`). The request args are built in `outlayer_request_args`, covered by the test `outlayer_request_args_set_every_limit`. Storage layout unchanged. |
+| Setup (`agent/src/firewall_agent/setup_testnet.py`) | New `firewall-setup-testnet --redeploy SUFFIX`: creates `guardian-SUFFIX` (3.5 NEAR, 200 tUSDC) and `agent-SUFFIX` (0.5 NEAR, `request_payment`-only key), reusing `tusdc.`, `checker.`, `hostco.` and `hostc0.`. It saves `GUARDIAN_PRIVATE_KEY` to `.env.testnet` and backs up the old file. |
+| Docs (`sdd.md` §6) | [First testnet run](sdd.md#first-testnet-run-2026-11-09): tx hashes, the answers to the three open questions, runbook steps 5–6 updated. |
+
+Testnet state:
+
+- The current Guardian is `guardian-v2.jimuelle-firewall.testnet`, its agent `agent-v2.jimuelle-firewall.testnet`.
+- OutLayer project `jimuelle-firewall.testnet/firewall-checker`, version `c00b7995…d173`. Deposit 0.01 NEAR, 50 requests per day.
+- The old `guardian.jimuelle-firewall.testnet` cannot be upgraded (its full-access key was never saved). It stays as is for its relayer-mode receipts.
+- E1 and E5 should read receipts from `guardian-v2`.
+
+Runs on `guardian-v2`:
+
+| Request | Scenario | Result |
+| --- | --- | --- |
+| 1 | benign, 18 tUSDC | `timed_out`; no memory limit sent, 0.0048 NEAR deposit. Failed closed, no transfer. |
+| 2 | benign, 18 tUSDC | `paid` in 13 blocks; hostco's balance rose 36 → 54 tUSDC |
+| 3 | attack `attack-morse-lookalike`, 180 tUSDC | `paid` with `stub_allow`, as expected until C3 lands |
+
+Answers to the open questions:
+
+- **Result shape:** a `Text` result arrives as a JSON string holding the verdict.
+- **Real cost:** about 0.001 NEAR per run against a 0.004 NEAR estimate; the rest is refunded.
+- **Timeout:** after 200 blocks the callback gets `null`, and the receipt is recorded `timed_out`.
+
+Verified with `cargo test --workspace` (112 passed) and `uv run pytest` (134 passed), plus two independent tester/reviewer passes with no blockers.
+
+Follow-ups, not scheduled:
+
+- Make the full setup path save `GUARDIAN_PRIVATE_KEY` and list it in `.env.example`.
+- `TYPESAFE_API_KEY` is already set. guardian-v2's mode still has `secrets_ref: null`, so once `decide()` calls Jev (C3), call `set_checker_mode` with `secrets_ref` `{profile, account_id}` so the checker receives the key.
+- `--redeploy` writes the guardian key only at the end, so a failed run loses the new accounts' keys.
+
 ## Sprint 2
 
 | ID | Lane | Track | Size | Task | Done when | Starts from | Owner |
