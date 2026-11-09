@@ -15,6 +15,8 @@ Signing steps (deploys, testnet transactions, OutLayer registration) are run by 
 
 Leads pair with their members on the hardest task of the sprint and review every task in their team before it is marked done.
 
+**Backend testing is always Jim's.** Backend members write the code and the tests that come with it; Jim runs the checks (`cargo test --workspace`, `cd agent && uv run pytest`, the builds and any testnet run) and confirms each "done when" line before a backend task counts as done. A backend task is not done until Jim has signed it off.
+
 ## How the lanes stay parallel
 
 Lanes never block each other inside a sprint because every hand-off goes through a frozen format plus a fixture:
@@ -44,7 +46,7 @@ Sync points (the only moments lanes must meet): **end of Sprint 2** — testnet 
 
 | Who | Role this sprint |
 | --- | --- |
-| Jim (backend lead) | A1 OutLayer live (signs the testnet steps); reviews all backend tasks; pairs with Rc on B1 |
+| Jim (backend lead) | Tests and signs off every backend task; A1 OutLayer live (signs the testnet steps); pairs with Rc on B1 |
 | Rc | B1 policy rules, B2 nightly e2e script |
 | paticolcol | C1 results format and fixtures first (unblocks A3 and frontend), then C2 classifier |
 | Jesus | A2 record sink, A3 eval harness skeleton |
