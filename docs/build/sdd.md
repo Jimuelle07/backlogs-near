@@ -247,6 +247,10 @@ All configuration comes from environment variables; `.env.example` is the canoni
 | `CHECKER_RECORD_DIR` | Record output dir, default `data/decisions` | checker (native), agent config |
 | `DECISION_BACKEND` | `jev` (default) or `llm`; see §4 | checker (`client_from_env`) |
 | `CHECKER_LLM_MODEL` | NEAR AI Cloud model for the checker's LLM decision fallback; required by the `llm` backend, and the fallback is disabled without it | checker (`LlmDecisionClient`) |
+| `POLICY_ENABLED` | Policy check switch, default on; `0`/`false`/`off`/`no` → `signals.policy` is `null`; any other non-boolean value fails the run (exit 2) | checker (`PolicyConfig`) |
+| `POLICY_ALLOWLIST` | Comma-separated receiver account ids; empty or unset → no allowlist rule | checker |
+| `POLICY_MAX_AMOUNT` | Per-payment cap in token base units (positive integer); unset → no cap rule | checker |
+| `POLICY_MAX_MEMO_CHARS` | Memo length cap in characters, default 128 | checker |
 
 Added later:
 
@@ -271,8 +275,17 @@ Run from the repo root unless noted (full command list: [AGENTS.md §6](../../AG
 
 One line each, with the sprint task that adds it ([sprints.md](sprints.md)).
 
-- `checker/src/decide.rs` — scaffold stub returning `allow` / `stub_allow`; later calls the checks below and fusion (C3).
-- Policy rules (deterministic: allowlists, per-payee limits, memo/amount sanity) — B1.
+- `checker/src/decide.rs` — scaffold stub returning `allow` / `stub_allow`; later calls the checks below and fusion (C3). Today it fills `signals.policy` from `policy::check` and leaves the other signals `null`; outcome and reasons are unchanged. `decide(bytes)` reads `PolicyConfig::from_env()` (a bad value is `CheckerError::Config`, exit 2, fail closed); `decide_with(bytes, &cfg)` takes the config explicitly (tests).
+- `checker/src/policy.rs` — policy rules (B1). Deterministic, no I/O, no AI; output is the frozen `{ok, violations[]}`, `ok` = no violations, violations listed in rule order. Config is env vars only (no files, so it works on wasm32-wasip2 where OutLayer secrets arrive as env vars; thresholds never live in prompts): `POLICY_ENABLED`, `POLICY_ALLOWLIST`, `POLICY_MAX_AMOUNT`, `POLICY_MAX_MEMO_CHARS` (§8). Rules and violation ids:
+  - `receiver_not_allowlisted`: an allowlist is configured and `receiver_id` is not on it.
+  - `memo_too_long`: more than `POLICY_MAX_MEMO_CHARS` characters (chars, not bytes).
+  - `memo_bad_chars`: control, zero-width (U+200B–200F, 2060–2064, FEFF) or bidi (U+202A–202E, 2066–2069, 061C) characters in the memo.
+  - `amount_invalid`: `amount` is not a canonical positive base-unit integer (digits only, no leading zeros, fits u128). The amount rules below are skipped.
+  - `amount_over_cap`: `amount` > `POLICY_MAX_AMOUNT`.
+  - `amount_mismatch_request`: the user request states one or more numbers (with or without a currency word) and the payment equals none of them, after scaling by `token_decimals`. If the request itself states a fraction (`half`, `third`, `quarter`/`fourth`, `N%`, `N percent`), the accepted amounts are only the fraction-derived ones (integer base units, rounded half-up); the bare numbers (the base, the `N` of `N%`) are then not accepted on their own, so "half of 95" flags a payment of 95. The user's words win; invoice text is not consulted then, and never introduces fractions (the amount-inflation attack edits the invoice).
+  - `amount_mismatch_invoice`: the user request states no number, some context item states a currency-tagged amount (`N USDC`/`tUSDC`/`USD`/`dollar(s)` or `$N`), and the payment equals none of them.
+
+  Amounts are decimal with optional thousands commas; numbers inside identifiers (`INV-2026-11`, `v1.2`) are ignored; an amount with more fractional digits than `token_decimals` can never match. No stated amount means no mismatch (nothing to verify against). "Pay half of the 95 USDC invoice" passes (`benign-partial-payment`, 47.50 USDC); the policy signal is one input to fusion (C3), not a verdict. Tests: `checker/src/policy.rs` (each rule's boundary, fraction-derived amounts, `attack-fake-invoice-amount-inflation` flagged, every `benign-*` scenario clean).
 - Injection classifier client (HTTP to `CLASSIFIER_URL`, scores each context item) — C2.
 - MELON masked re-run (NEAR AI Cloud inside the checker; compares the tool call with the user request masked) — not scheduled (first on the cut list).
 - Counterparty signals (account age, contract code hash changes, prior payments, lookalike distance, via OutLayer RPC `view`) — B3.
