@@ -33,6 +33,9 @@ pub const OUTLAYER_BALANCE_MARGIN: NearToken = NearToken::from_millinear(50);
 /// Blocks after which an unanswered OutLayer request may be cleared by the owner. Beyond the
 /// 200-block yield window, so a cleared request can no longer receive a legitimate callback.
 pub const OUTLAYER_STUCK_BLOCKS: u64 = 300;
+/// Memory limit sent with every OutLayer request (the CLI's on-chain default). Without it
+/// `request_execution` emits `max_memory_mb: null`; every completed testnet job we saw sets it.
+pub const OUTLAYER_MAX_MEMORY_MB: u64 = 128;
 
 #[derive(BorshStorageKey)]
 #[near]
@@ -153,14 +156,12 @@ fn placeholder_yield_id() -> YieldId {
     near_sdk::borsh::from_slice::<YieldId>(&[0u8; 32]).unwrap_or_else(|_| env::abort())
 }
 
-/// `outlayer.request_execution(...)` paid from the Guardian's balance, then `on_outlayer_verdict`.
-fn outlayer_promise(request_id: u64, checker_input: &str, mode: &CheckerMode) -> Promise {
+/// `request_execution` args for an OutLayer-mode request.
+fn outlayer_request_args(checker_input: &str, mode: &CheckerMode) -> serde_json::Value {
     let CheckerMode::OutLayer {
-        outlayer_id,
         project_id,
         version_key,
         secrets_ref,
-        deposit_yocto,
         max_instructions,
         max_execution_seconds,
         ..
@@ -168,17 +169,25 @@ fn outlayer_promise(request_id: u64, checker_input: &str, mode: &CheckerMode) ->
     else {
         env::abort()
     };
-    let args = serde_json::to_vec(&json!({
+    json!({
         "source": { "Project": { "project_id": project_id, "version_key": version_key } },
         "resource_limits": {
             "max_instructions": max_instructions.0,
+            "max_memory_mb": OUTLAYER_MAX_MEMORY_MB,
             "max_execution_seconds": max_execution_seconds.0,
         },
         "input_data": checker_input,
         "secrets_ref": secrets_ref,
         "response_format": "Text",
-    }))
-    .unwrap_or_else(|_| env::abort());
+    })
+}
+
+/// `outlayer.request_execution(...)` paid from the Guardian's balance, then `on_outlayer_verdict`.
+fn outlayer_promise(request_id: u64, checker_input: &str, mode: &CheckerMode) -> Promise {
+    let CheckerMode::OutLayer { outlayer_id, deposit_yocto, .. } = mode else {
+        env::abort()
+    };
+    let args = serde_json::to_vec(&outlayer_request_args(checker_input, mode)).unwrap_or_else(|_| env::abort());
     Promise::new(outlayer_id.clone())
         .function_call(
             "request_execution".to_string(),
@@ -1251,6 +1260,25 @@ mod tests {
             max_execution_seconds: U64(30),
             max_requests_per_day: U64(max_requests_per_day),
         }
+    }
+
+    /// Every completed OutLayer testnet job we saw sets all three limits; the one request that
+    /// omitted `max_memory_mb` (emitted as null) got no job.
+    #[test]
+    fn outlayer_request_args_set_every_limit() {
+        let args = outlayer_request_args("{}", &ol_mode());
+        let limits = &args["resource_limits"];
+        for (field, cap) in [
+            ("max_instructions", 500_000_000_000u64),
+            ("max_memory_mb", 4096),
+            ("max_execution_seconds", 180),
+        ] {
+            let v = limits[field].as_u64().unwrap_or_else(|| panic!("{field} missing or not a number"));
+            assert!((1..=cap).contains(&v), "{field} = {v} outside 1..={cap}");
+        }
+        assert_eq!(limits["max_memory_mb"], json!(OUTLAYER_MAX_MEMORY_MB));
+        assert_eq!(args["response_format"], json!("Text"));
+        assert_eq!(args["input_data"], json!("{}"));
     }
 
     /// New Guardian in OutLayer mode with one request (id 1, client_ref "r1") in flight.
