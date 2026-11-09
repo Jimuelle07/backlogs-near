@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/backlogs-near/schemas/verdict.schema.json",
+  "title": "Verdict",
+  "description": "Checker stdout and the argument of Guardian.submit_verdict. Serialized verdict must be <= 900 bytes (OutLayer stdout limit). The Guardian pays only if request_id, receiver_id, token_id and amount equal the pending request.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "request_id", "receiver_id", "token_id", "amount", "outcome", "reasons", "record_sha256", "checker_version"],
+  "properties": {
+    "format": {"const": "firewall.verdict.v1"},
+    "request_id": {"$ref": "checker-input.schema.json#/$defs/U64"},
+    "receiver_id": {"$ref": "payment-request.schema.json#/$defs/AccountId"},
+    "token_id": {"$ref": "payment-request.schema.json#/$defs/AccountId"},
+    "amount": {"$ref": "payment-request.schema.json#/$defs/Amount"},
+    "outcome": {"$ref": "#/$defs/Outcome"},
+    "reasons": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"$ref": "#/$defs/ReasonCode"}},
+    "record_sha256": {"$ref": "#/$defs/Sha256"},
+    "checker_version": {"$ref": "#/$defs/Semver"}
+  },
+  "$defs": {
+    "Outcome": {"enum": ["allow", "hold", "block"]},
+    "ReasonCode": {
+      "description": "Frozen reason codes. Adding a code is a format change.",
+      "enum": ["stub_allow", "policy_violation", "injection_high", "melon_match", "lookalike_receiver", "new_receiver", "young_account", "contract_code_changed", "unusual_for_agent", "jev_injection_driven", "jev_receiver_risk", "amount_mismatch", "check_unavailable"]
+    },
+    "Sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "Semver": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"}
+  }
+}

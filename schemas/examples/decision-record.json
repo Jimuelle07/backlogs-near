@@ -1,0 +1,17 @@
+{
+  "format": "firewall.decision_record.v1",
+  "input_sha256": "f044abe5da6308f77b2ac768be26d9202340b933649c8258abd66c4fcf86a6ef",
+  "request_id": "1",
+  "checker_version": "0.1.0",
+  "outcome": "allow",
+  "reasons": [
+    "stub_allow"
+  ],
+  "signals": {
+    "policy": null,
+    "injection": null,
+    "melon": null,
+    "counterparty": null,
+    "jev": null
+  }
+}

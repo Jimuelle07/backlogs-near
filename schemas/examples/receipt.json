@@ -1,0 +1,16 @@
+{
+  "request_id": "1",
+  "client_ref": "demo-1",
+  "receiver_id": "hostco.demo.testnet",
+  "amount": "18000000",
+  "input_sha256": "f044abe5da6308f77b2ac768be26d9202340b933649c8258abd66c4fcf86a6ef",
+  "outcome": "allow",
+  "reasons": [
+    "stub_allow"
+  ],
+  "record_sha256": "4065a20c2a9ecfa5bf74f9f6f3798eae85afc812f31cd28281412d7e1d262e5c",
+  "checker_version": "0.1.0",
+  "status": "paid",
+  "requested_block": "190000000",
+  "decided_block": "190000004"
+}

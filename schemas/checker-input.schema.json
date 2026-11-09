@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/backlogs-near/schemas/checker-input.schema.json",
+  "title": "CheckerInput",
+  "description": "Exact stdin of the checker, built by the Guardian (or LocalGuardian in dry-run). Field order follows this schema. input_sha256 is the sha256 of these exact bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "request_id", "guardian_id", "agent_id", "token_id", "token_decimals", "receiver_id", "amount", "memo", "user_request", "context", "block_height"],
+  "properties": {
+    "format": {"const": "firewall.checker_input.v1"},
+    "request_id": {"$ref": "#/$defs/U64"},
+    "guardian_id": {"$ref": "payment-request.schema.json#/$defs/AccountId"},
+    "agent_id": {"$ref": "payment-request.schema.json#/$defs/AccountId"},
+    "token_id": {"$ref": "payment-request.schema.json#/$defs/AccountId"},
+    "token_decimals": {"type": "integer", "minimum": 0, "maximum": 24},
+    "receiver_id": {"$ref": "payment-request.schema.json#/$defs/AccountId"},
+    "amount": {"$ref": "payment-request.schema.json#/$defs/Amount"},
+    "memo": {"type": "string", "maxLength": 256},
+    "user_request": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "context": {"$ref": "payment-request.schema.json#/$defs/Context"},
+    "block_height": {"$ref": "#/$defs/U64"}
+  },
+  "$defs": {
+    "U64": {"type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$", "description": "Unsigned 64-bit integer as a decimal string."}
+  }
+}

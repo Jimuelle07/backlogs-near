@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/backlogs-near/schemas/receipt.schema.json",
+  "title": "Receipt",
+  "description": "Guardian get_receipt view. Public: hashes and verdict only; the full DecisionRecord stays in the owner's off-chain log.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "client_ref", "receiver_id", "amount", "input_sha256", "outcome", "reasons", "record_sha256", "checker_version", "status", "requested_block", "decided_block"],
+  "properties": {
+    "request_id": {"$ref": "checker-input.schema.json#/$defs/U64"},
+    "client_ref": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "receiver_id": {"$ref": "payment-request.schema.json#/$defs/AccountId"},
+    "amount": {"$ref": "payment-request.schema.json#/$defs/Amount"},
+    "input_sha256": {"$ref": "verdict.schema.json#/$defs/Sha256"},
+    "outcome": {"oneOf": [{"type": "null"}, {"$ref": "verdict.schema.json#/$defs/Outcome"}]},
+    "reasons": {"type": "array", "maxItems": 6, "items": {"$ref": "verdict.schema.json#/$defs/ReasonCode"}},
+    "record_sha256": {"oneOf": [{"type": "null"}, {"$ref": "verdict.schema.json#/$defs/Sha256"}]},
+    "checker_version": {"oneOf": [{"type": "null"}, {"$ref": "verdict.schema.json#/$defs/Semver"}]},
+    "status": {"enum": ["paying", "paid", "transfer_failed", "refused", "held", "timed_out"]},
+    "requested_block": {"$ref": "checker-input.schema.json#/$defs/U64"},
+    "decided_block": {"$ref": "checker-input.schema.json#/$defs/U64"}
+  }
+}

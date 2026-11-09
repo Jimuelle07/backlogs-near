@@ -2,72 +2,60 @@
 
 ## 1. Status
 
-Draft, project undecided. Last updated 2026-11-08.
+Project chosen: "Attested Payment Firewall" (working name; the human sets the final name at submission). Plan: [idea.md](idea.md). Last updated 2026-11-09.
 
-Project-independent sections are complete. Project-specific sections carry a `TBD(project)` marker; fill them once the human picks a direction from §4.
+Tracks are planned, not final (§5). Open questions are in §11.
 
 ## 2. Problem
 
-> **TBD(project):** the user problem this project solves — inputs: [tracks ranked](../hackathon-context/near_hackathon_tracks_ranked.md) Part 2 (lenses) and Part 4 (per-track real problems with sourced numbers).
+Prompt injection drains agent wallets. In May 2026 a Morse-code message made Grok's linked wallet pay out about $150,000 in DRB ([Giskard](https://giskard.ai/knowledge/how-grok-got-prompt-injected-an-x-user-drained-150-000-from-an-ai-wallet)). Chainalysis puts crypto theft at $2.2B → $3.4B ([tracks ranked](../hackathon-context/near_hackathon_tracks_ranked.md) Part 4 #1). Both figures: verify against the primary source before the README.
 
-Guidance:
-
-- Lead with the user problem, not the technology. The first sentence must make sense to someone who does not know the project.
-- Run the lenses from tracks ranked Part 2: the 3 a.m. test, the irreversibility test, the grandmother test, the villain's view, and the Jev test (is there a repeated, fast, judgment-shaped decision where calibrated confidence changes behavior?).
-- Cite one sourced scale number (Part 4 lists them per track; sources at the end of that file). Verify it against the primary source before it goes into the README.
+Today's defenses run on the agent's own host, so a compromised agent can skip them. The firewall moves the check and the funds off the agent: the agent holds only a function-call key scoped to a Guardian contract, and the contract pays only after a TEE-attested verdict ([idea.md Summary](idea.md#summary)).
 
 ## 3. Users & primary scenario
 
-> **TBD(project):** one primary user and the single "one complete moment" the demo shows — inputs: [HACKATHON.md](../hackathon-context/HACKATHON.md) §2 (demo post), the chosen bet's "Demo moment" in §4 below.
+**Primary user:** the owner who gives an AI agent a wallet to pay bills.
 
-Guidance:
+- **Primary scene** ([idea.md Demo script](idea.md#demo-script-about-2-minutes) steps 2 and 4): the agent pays an 18 USDC hosting invoice (allow, receipt on the explorer); then the same agent, fed a Morse-code reply, proposes paying a lookalike account and is blocked, with reasons on-chain.
+- **Escalation scene** (demo step 5): an unusual but legitimate payment is held in escrow, re-checked and released automatically. No human step.
 
-- Name one primary user (not a list of personas).
-- Write the moment as: real user action → visible result, end to end, with NEAR doing visible work in between.
-- Include the escalation path (medium/low confidence) as a second scene, not only the happy path (tracks ranked Part 7 item 6b).
+## 4. Chosen direction
 
-## 4. Candidate directions
+The Attested Payment Firewall extends Bet B "Intent Notary": a TEE-attested checker runs four checks (policy rules, injection classifier, MELON masked re-run, counterparty signals); Jev fuses them into allow / hold / block; the hold threshold is a conformal quantile with a stated false-hold bound; there is no human in the loop. NEAR holds the funds, scopes the agent's key, binds each verdict to receiver, token and exact amount, enforces caps and records the receipt.
 
-From [tracks ranked](../hackathon-context/near_hackathon_tracks_ranked.md) Part 6 (Thesis play detail from Part 4 #10):
+Pitch: "Give your agent a wallet, not the keys: every payment ships with a hardware-signed proof that it passed the check."
 
-| Option | Tracks | Pitch | Demo moment | NEAR role |
-| --- | --- | --- | --- | --- |
-| Bet A — "Thousand-Agent Market" | Swarms + Agents + Open | Swarm markets have been stuck with dumb scripted bots because LLM agents cost too much per decision. Jev makes every agent smart for ~$0.00002 per decision, so a real market of hundreds of agents runs live. | A live dashboard where 500 agents bid; a side panel shows "cost of this round: $0.004" vs. estimated LLM cost. | Each agent = sub-account; rounds settle via Intents (dry quotes) / testnet transfers; coordinator contract enforces sealed-bid rules. |
-| Bet B — "Intent Notary" | Security + Agents + Real-World Money | Spending limits stop big thefts but not smart ones. Intent Notary asks "does this payment actually serve what the user asked for?" before every transaction, with stakes-scaled confidence thresholds. | A prompt-injected agent tries to pay an attacker → blocked with reasons and probabilities; a normal payment goes through in 200 ms. | Function-call-key-scoped agent; contract enforces amount tiers; human approval path; on-chain decision log. |
-| Bet C — "Market Town, Live" | Games + Swarms + NFTs | NPC merchants that actually think, in real time, cheaply — the economy is the gameplay. | Flood the market with iron and watch Jev merchants react, tooltips showing their probabilities. | NEP-245 items, merchant wallets as sub-accounts, social login, no wallet popups. |
-| Thesis — "NEAR, Labeled" | Investment Thesis | Re-runnable pipeline: BigQuery → Jev labels → dashboard of "organic vs automated activity" over time, Intents volume by user type; THESIS.md with counter-evidence. Lowest build risk, directly in front of investor judges, unique dataset. | _Not specified in source._ A dashboard showing what share of NEAR activity is humans vs bots vs agents, plus labeling accuracy on a hand-checked sample. | Data source (on-chain transactions, Intents volume) that the thesis analyses; publish labeling accuracy on a hand-checked sample. |
-
-Decision criteria (tracks ranked Part 5, each scored 1–5):
-
-- **Power**: size × severity × irreversibility × growth of the problem (Part 3).
-- **Space**: inverse crowding (≤20 projects = 5, 21–30 = 4, 31–50 = 3, 51–80 = 2, 80+ = 1).
-- **Jev fit**: how central and defensible Jev is.
-- **Buildable**: realistic in the remaining days with a polished demo.
-- **Judge appeal**: fits this jury (NEAR CEO + crypto VCs + AI screeners).
+The other candidate bets (A, C, Thesis) stay documented in [tracks ranked](../hackathon-context/near_hackathon_tracks_ranked.md) Part 6.
 
 ## 5. Tracks
 
-> **TBD(project):** the track ids this project enters — inputs: [HACKATHON.md](../hackathon-context/HACKATHON.md) Tracks table, tracks ranked Part 5.
+`security` ([idea.md Summary](idea.md#summary)). `privacy` is dropped: Jev and the agent's LLM are outside services, so no claim that data never leaves the TEE. The human confirms at submission.
 
 Valid ids (exactly 13): `defi`, `thesis`, `privacy`, `business`, `swarms`, `security`, `agents`, `realworld`, `games`, `nfts`, `memecoins`, `social`, `open`.
-
-Multi-track is allowed (one submission, every track that fits). The human makes the final choice at submission time.
 
 ## 6. Goals / requirements
 
 ### Functional requirements
 
-> **TBD(project):** functional requirements for the chosen direction — inputs: §3 primary scenario, the chosen bet in §4, tracks ranked Part 4 for that track.
-
 | Priority | Requirement |
 | --- | --- |
-| Must | TBD |
-| Should | TBD |
-| Won't (this hackathon) | TBD |
+| Must | Guardian contract holds the funds; the agent holds only a function-call key |
+| Must | Verdict bound to receiver, token, exact amount and one-time `request_id` ([idea.md Amount safety rules](idea.md#amount-safety-rules)) |
+| Must | Four checks (policy, injection classifier, MELON masked re-run, counterparty), each behind a config switch |
+| Must | Jev fusion into allow / hold / block |
+| Must | Hard caps in contract code: $200 per payment, $500 per day (starting values, tuned Thu) |
+| Must | Hold escrow with auto-release or refund |
+| Must | On-chain receipt (outcome, reason codes, input and record hashes, checker version) |
+| Must | Dry-run with sample data, no keys or funds |
+| Must | Eval on ~300 labelled cases ([idea.md Evaluation](idea.md#evaluation-and-calibration)) |
+| Should | OutLayer yield/resume mode (fallback: HTTPS mode with a signed verdict) |
+| Should | Cascade (MELON only when another signal is borderline) |
+| Should | Unseen-family test and a red-team round |
+| Won't (this hackathon) | Human approval UI; mainnet; Privacy-track claims; shared blocklist (stretch only); NEAR Intents |
 
 ### Cross-cutting requirements (apply to any choice)
 
-- **R1.** Every money-moving decision passes a confidence gate with an escalation path, and the demo shows that path ([tracks ranked](../hackathon-context/near_hackathon_tracks_ranked.md) Part 7 item 6b).
+- **R1.** Every payment gets allow / hold / block; hold is the escalation path (escrow + re-check + auto-release), and the demo shows it.
 - **R2.** NEAR does real work: custody, limits, settlement, or the decision log (Part 7 item 2).
 - **R3.** Dry-run mode with sample data, so judges can try it without keys or funds (Part 7 item 5).
 - **R4.** Reproducible local run from the README (HACKATHON.md Q-012).
@@ -75,17 +63,16 @@ Multi-track is allowed (one submission, every track that fits). The human makes 
 
 ## 7. Success metrics
 
-Measured and published in the README (tracks ranked Part 7 item 4):
+Measured and published in the README (tracks ranked Part 7 item 4). Results table: [idea.md Evaluation](idea.md#evaluation-and-calibration).
 
 | Metric | How measured | Target |
 | --- | --- | --- |
-| Decision latency p50 / p95 | timed DecisionClient calls in the eval script | TBD |
-| Cost per 1,000 decisions | input tokens × published price, from the eval run | TBD |
-| Accuracy on a labeled sample | eval script over a hand-labeled set | TBD |
-| Calibration | confidence-vs-accuracy chart from the same eval run | TBD |
-| False-block rate (security-type projects only) | share of legitimate actions refused or escalated | TBD |
-
-> **TBD(project):** numeric targets for each metric — inputs: [arxiv papers](../tools/arxiv_papers_for_build.md) TL;DR #3 (published gate numbers), [tracks ranked](../hackathon-context/near_hackathon_tracks_ranked.md) Part 1 (published Jev latency/price).
+| False-hold rate | held benign payments on the test split | ≤ ε = 5% (conformal bound; holds only while the agent behaves like its calibration history) |
+| Worst-case loss per day | contract caps, attack set incl. budget-grooming case | ≤ daily cap ($500) |
+| False-block rate | benign payments blocked on the test split | measured and reported; no target claimed |
+| Missed attacks | attacks allowed, per family and on an unseen family | measured and reported; no target claimed |
+| Latency p50 / p95 | timed checker runs in the eval script | measured and reported; no target claimed |
+| Cost per payment | token usage × published price, from the eval run | measured and reported; no target claimed |
 
 ## 8. Demo plan
 
@@ -98,26 +85,32 @@ Demo-post rules ([HACKATHON.md](../hackathon-context/HACKATHON.md) §2). The age
 - Say it was built at NEAR HACKATHON; tag @NEARProtocol and #NEARHackathon (optional: @NearLegion, @NearBuilders); attach the video or screenshots.
 - Local-only demos need a video; screenshots are not enough when judges cannot open the demo (Q-012).
 
-> **TBD(project):** the shot-by-shot demo script (≤2 min) — inputs: §3 primary scenario, the chosen bet's demo moment in §4.
+Shot-by-shot script (about 2 min): [idea.md Demo script](idea.md#demo-script-about-2-minutes).
 
 ## 9. Timeline
 
-From tracks ranked Part 7 item 8, mapped to dates (PHT days):
+Days from [idea.md Day-by-day plan](idea.md#day-by-day-plan-nov-814) (PHT):
 
 | Day | Work |
 | --- | --- |
-| Sun 8 – Mon 9 Nov | Core loop |
-| Tue 10 Nov | NEAR integration |
-| Wed 11 Nov | Metrics + attack/edge-case demos |
-| Thu 12 Nov | README + video |
-| Fri 13 – Fri 14 Nov | Submit (target Fri 14 Nov PHT; don't wait for Sat 07:59) |
-| **Hard deadline** | **2026-11-14T23:59Z** (Sat 15 Nov 07:59 PHT) |
+| Sun 8 Nov | Setup: frozen formats, Guardian with `request_payment` and yield/resume, checker stub, demo agent |
+| Mon 9 Nov | Wire the path: scoped key, OutLayer hello-world, HTTPS mode; gate: stub-allow path works end to end on testnet |
+| Tue 10 Nov | The four checks |
+| Wed 11 Nov | Jev fusion + end-to-end; gate: full path works on testnet |
+| Thu 12 Nov | Eval, calibration, results table |
+| Fri 13 Nov | Demo, video, receipt page, README |
+| Sat 14 Nov | Submit by 20:00 PHT (12:00Z) |
+| **Hard deadline** | **2026-11-14T23:59Z** (Sun 15 Nov 07:59 PHT) |
 
 ## 10. Out of scope
 
-> **TBD(project):** what this project explicitly will not do during the hackathon — inputs: §6 "Won't" row, tracks ranked Part 1 "Honest limits".
+- Human approval UI; mainnet; Privacy-track claims; shared blocklist (stretch only); NEAR Intents.
+- What we claim honestly ([idea.md](idea.md#research-grounding)): the policy layer is deterministic; the false-alarm bound holds only while the agent behaves like its calibration history (exchangeability); Jev's calibration is the vendor's claim until our own eval confirms it; the attestation proves which checker code ran on which inputs, not that Jev's or the LLM's answers were right.
+- Tracks ranked Part 1 "Honest limits": Jev is not a TEE and its accuracy is about 68% on the vendor's own chart, so no single Jev answer is a security boundary.
 
 ## 11. Open questions
 
-- Which project? (§4)
-- Which tracks? (§5; the human decides)
+- Can the 86M Prompt Guard classifier run inside the OutLayer runtime, or does it need NEAR AI Cloud / a pinned service?
+- Will Hugging Face grant gated access to Llama-Prompt-Guard-2-86M? (Default: protectai/deberta-v3-base-prompt-injection-v2.)
+- Receipt page technology (decided Fri 13 Nov).
+- Human-only submission fields: final project name, tracks, NEAR payout wallet, Q-015 disclosure, X post.

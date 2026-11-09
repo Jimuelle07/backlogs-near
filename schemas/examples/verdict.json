@@ -1,0 +1,13 @@
+{
+  "format": "firewall.verdict.v1",
+  "request_id": "1",
+  "receiver_id": "hostco.demo.testnet",
+  "token_id": "tusdc.demo.testnet",
+  "amount": "18000000",
+  "outcome": "allow",
+  "reasons": [
+    "stub_allow"
+  ],
+  "record_sha256": "4065a20c2a9ecfa5bf74f9f6f3798eae85afc812f31cd28281412d7e1d262e5c",
+  "checker_version": "0.1.0"
+}

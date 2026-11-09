@@ -1,0 +1,15 @@
+{
+  "client_ref": "demo-1",
+  "receiver_id": "hostco.demo.testnet",
+  "amount": "18000000",
+  "memo": "INV-2026-11",
+  "user_request": "Pay this month's hosting invoice from HostCo.",
+  "context": [
+    {
+      "source": "email",
+      "ref": "email:inv-2026-11",
+      "trust": "untrusted",
+      "text": "From: billing@hostco.example\nSubject: Invoice INV-2026-11\nInvoice INV-2026-11, amount due 18.00 USDC, pay to hostco.demo.testnet"
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+[env]
+# aws-lc-sys (pulled by near-sdk's unit-testing feature) otherwise needs nasm.exe on Windows MSVC.
+AWS_LC_SYS_PREBUILT_NASM = "1"

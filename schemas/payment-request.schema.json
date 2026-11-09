@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/backlogs-near/schemas/payment-request.schema.json",
+  "title": "PaymentRequest",
+  "description": "Arguments of Guardian.request_payment. Serialized `context` (compact JSON) must be <= 8192 bytes, enforced by the contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["client_ref", "receiver_id", "amount", "memo", "user_request", "context"],
+  "properties": {
+    "client_ref": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$", "description": "Agent-chosen idempotency reference, unique per Guardian."},
+    "receiver_id": {"$ref": "#/$defs/AccountId"},
+    "amount": {"$ref": "#/$defs/Amount"},
+    "memo": {"type": "string", "maxLength": 256},
+    "user_request": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "context": {"$ref": "#/$defs/Context"}
+  },
+  "$defs": {
+    "AccountId": {"type": "string", "minLength": 2, "maxLength": 64, "description": "NEAR account id."},
+    "Amount": {"type": "string", "pattern": "^[1-9][0-9]{0,38}$", "description": "Positive integer amount in the token's smallest unit, as a decimal string."},
+    "ContextItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "ref", "trust", "text"],
+      "properties": {
+        "source": {"enum": ["email", "x_reply", "web", "memory", "tool"]},
+        "ref": {"type": "string", "minLength": 1, "maxLength": 128},
+        "trust": {"enum": ["trusted", "untrusted"]},
+        "text": {"type": "string"}
+      }
+    },
+    "Context": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/ContextItem"}}
+  }
+}
