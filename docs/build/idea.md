@@ -107,62 +107,6 @@ Each check maps to a published method, so judges can trace every design choice t
 
 What we claim honestly: the policy layer is deterministic; the false-alarm bound holds only while the agent behaves like its calibration history (exchangeability), and Jev's calibration is the vendor's claim until our own eval confirms it. The attestation proves which checker code ran on which inputs; it does not prove Jev's or the LLM's answers were right, since those come from outside services.
 
-## Day-by-day plan (Nov 8–14)
-
-The end-to-end path (agent → contract → checker → verdict → transfer) must work on testnet by Wednesday night; Thursday onward is only quality, eval and demo. Three workstreams: **C** = contract + keys, **K** = checker (OutLayer, HF, Jev), **D** = agent, attacks, eval, demo. Assign one person per stream.
-
-With four or more people, add **E** = eval and data: the labelled dataset, the pooled calibration set and the red-team round, so calibration never waits on the build.
-
-**Sun Nov 8 — setup**
-
-- [ ] All: freeze the signal and verdict JSON formats tonight; every stream builds against mocks
-- [ ] C: testnet accounts; Guardian contract with `request_payment` and a dummy yield/resume
-- [ ] K: Jev API key works; confirm request fields; checker stub returns a hard-coded allow
-- [ ] D: repo, README stub, demo agent that pays a bill from an "email" via a tool call
-
-**Mon Nov 9 — wire the path**
-
-- [ ] C: function-call key scoped to Guardian; contract transfers only after resume with allow
-- [ ] K: OutLayer hello-world WASM called from the contract; attestation returned
-- [ ] K: HTTPS + signed-verdict mode behind the same interface, switched by one config value
-- [ ] D: nightly script that runs one benign payment and one attack end to end on testnet
-- [ ] D: write 30 benign and 30 attack scenarios (Morse/encoded, memory poisoning, lookalike receiver, fake invoice); adapt extra cases from AgentDojo
-- [ ] Gate: skeleton path (stub allow) works end to end on testnet
-
-**Tue Nov 10 — the four checks**
-
-- [ ] K: policy rules (caps, allowlist, rate limit) in the WASM
-- [ ] K: HF classifier scoring; decide in-TEE vs. NEAR AI Cloud by measured latency
-- [ ] D: MELON masked re-run with a tool-call cache, run in parallel with the other checks
-- [ ] C: counterparty signals from RPC (age, is-contract, code hash change, prior payments, lookalike) plus the agent's behavior profile (usual payees, amounts, frequency)
-- [ ] All: every check behind a config switch, so any subset runs
-
-**Wed Nov 11 — fusion, end to end**
-
-- [ ] K: Jev fusion call with all signals; verdict mapped to contract action
-- [ ] K: cascade: cheap checks first; a Jev yes/no question escalates ambiguous cases to MELON; trusted repeat payments skip it
-- [ ] C: hold path escrows the payment, auto-releases after the window, cancels if a slow check or the blocklist flags it; receipt (attestation hash + verdict) stored on-chain
-- [ ] Gate: one benign payment goes through and one attack is blocked on testnet, end to end
-
-**Thu Nov 12 — eval and calibration**
-
-- [ ] D: grow to about 150 benign / 150 attack labelled cases; split calibration / test
-- [ ] K: conformal hold threshold at ε = 5% on the pooled normal set (per-agent only at 99+ normal payments); block needs two agreeing attack signals; report false-hold, false-block and miss rates
-- [ ] D: unseen-family test: calibrate on five attack families, test on the sixth, rotate through all six
-- [ ] Red-team hour: a teammate who did not build the checks attacks with full knowledge; log what got through and the fix
-- [ ] D: numbers for each check alone vs. combined, plus cost and latency per payment with and without the cascade
-
-**Fri Nov 13 — demo and polish**
-
-- [ ] D: record the demo (script below); simple web page showing the receipt and verdict log
-- [ ] C: README limits section (key caveats, gas allowance lock-out risk)
-- [ ] All: fresh-clone test — repo runs from README only (Claude Code and Codex screen this first)
-
-**Sat Nov 14 — submit (deadline 23:59 UTC = 07:59 Sun Manila)**
-
-- [ ] Post demo on X tagging @NEARProtocol and #NEARHackathon
-- [ ] Submit form with repo link, X post link, AI Security & Defense track selected; aim to submit by 20:00 Manila
-
 ## Demo script (about 2 minutes)
 
 The demo replays a Grok/Bankr-style attack twice: once against an unprotected agent, once behind the firewall.

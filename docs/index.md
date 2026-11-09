@@ -16,9 +16,10 @@ Map of every document in this repo: what it is, and when to read it.
 | File | What it is | Read when |
 | --- | --- | --- |
 | [../AGENTS.md](../AGENTS.md) | Agent rules: deadlines, human-only actions, stack, integration rules | First, before any change |
-| [build/idea.md](build/idea.md) | Human-authored build plan: architecture, day-by-day tasks, demo script, eval protocol | First, for scope and schedule |
+| [build/idea.md](build/idea.md) | Human-authored build plan: architecture, demo script, eval protocol | First, for scope |
 | [build/prd.md](build/prd.md) | Product requirements: what we build and why, metrics, demo, timeline | Deciding scope or the demo |
 | [build/sdd.md](build/sdd.md) | Software design: modules, interfaces, config, testing | Before writing code |
+| [build/sprints.md](build/sprints.md) | Remaining work cut into sprints for a team of 5 (3 backend, 2 frontend), with an owner column to fill | Assigning or picking up work |
 | [build/system-design.md](build/system-design.md) | Architecture: data flow, trust boundaries, failure modes, deployment | Before wiring components or deploying |
 | [hackathon-context/HACKATHON.md](hackathon-context/HACKATHON.md) | Official agent instructions and rules snapshot; the live https://nearhackathon.com/HACKATHON.md wins | Before any rules question or submission step |
 | [hackathon-context/near_hackathon_web.md](hackathon-context/near_hackathon_web.md) | Full site capture: timeline, prizes, judges, tracks, submission API | Looking up event facts |

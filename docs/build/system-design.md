@@ -61,7 +61,7 @@ Prompt injection that fools every check is not detectable by design; the caps an
 
 - **Local run first:** the README's reproducible dry-run (native checker, `LocalGuardian`) is the baseline judges can always use ([HACKATHON.md](../hackathon-context/HACKATHON.md) Q-012).
 - **Testnet:** token and Guardian deployed to testnet (Q-010) by `firewall-setup-testnet`; human-gated.
-- **Hosted receipt page:** decided Fri 13 Nov ([idea.md Day-by-day plan](idea.md#day-by-day-plan-nov-814)). If hosted, keep it up through 2026-11-18, ideally 2026-11-25 (Q-012).
+- **Hosted landing page** with a read-only receipts panel ([sprints.md](sprints.md) D1, E1, E5): keep it up through 2026-11-18, ideally 2026-11-25 (Q-012).
 
 ## 6. Demo sequence
 

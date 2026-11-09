@@ -45,7 +45,7 @@ Dependency rules:
 
 ## 4. DecisionClient
 
-Every Jev call in the checker goes through this trait in `checker/src/decision.rs`. Shapes follow the TypeSafe System One API: `POST https://api.typesafe.ai/v1/systemone`, body `{model, state, questions}`, response `{model, answers, usage}`. **The clients, fallback and selection are implemented (Mon). `decide()` in `checker/src/decide.rs` still returns the stub allow and does not call them; wiring and fusion are Wed ([idea.md Day-by-day plan](idea.md#day-by-day-plan-nov-814)).**
+Every Jev call in the checker goes through this trait in `checker/src/decision.rs`. Shapes follow the TypeSafe System One API: `POST https://api.typesafe.ai/v1/systemone`, body `{model, state, questions}`, response `{model, answers, usage}`. **The clients, fallback and selection are implemented. `decide()` in `checker/src/decide.rs` still returns the stub allow and does not call them; wiring and fusion are [sprints.md](sprints.md) C3.**
 
 ```rust
 pub enum Question {
@@ -143,14 +143,14 @@ NEP-141 (FungibleToken), NEP-145 (storage management) and NEP-148 (metadata: "Te
 
 ### Planned additions
 
-| Addition | Day ([idea.md](idea.md#day-by-day-plan-nov-814)) |
+| Addition | Sprint task ([sprints.md](sprints.md)) |
 | --- | --- |
-| ~~`CheckerMode::{Relayer, OutLayer}`~~ implemented, see [OutLayer checker mode](#outlayer-checker-mode); the human registration and the first testnet run remain | Mon–Tue |
-| Per-payee budgets (learned, contract state) | Wed |
-| TEE re-check during the hold window, and refund (`cancel_held`) on a flagged re-check. Release without a re-check is implemented | Wed |
-| Receiver auto-registration with the token before `ft_transfer` | Wed |
+| ~~`CheckerMode::{Relayer, OutLayer}`~~ implemented, see [OutLayer checker mode](#outlayer-checker-mode); the human registration and the first testnet run remain | A1 |
+| Per-payee budgets (learned, contract state) | A4 |
+| TEE re-check during the hold window, and refund (`cancel_held`) on a flagged re-check. Release without a re-check is implemented | not scheduled (cut list) |
+| Receiver auto-registration with the token before `ft_transfer` | A4 |
 
-The relayer mode (scaffold) is not attested: `firewall-relayer` polls `get_pending`, runs the native checker, and calls `submit_verdict` as `checker_id`. It is the skeleton and the fallback if OutLayer yield/resume is not working by Tuesday night.
+The relayer mode (scaffold) is not attested: `firewall-relayer` polls `get_pending`, runs the native checker, and calls `submit_verdict` as `checker_id`. It is the skeleton and the fallback if OutLayer is not working at the end of Sprint 1 (sprints.md A0).
 
 ### OutLayer checker mode
 
@@ -252,17 +252,17 @@ Run from the repo root unless noted (full command list: [AGENTS.md §6](../../AG
 
 ## 10. Modules
 
-One line each, with the idea.md day that adds it ([Day-by-day plan](idea.md#day-by-day-plan-nov-814)).
+One line each, with the sprint task that adds it ([sprints.md](sprints.md)).
 
-- `checker/src/decide.rs` — scaffold stub returning `allow` / `stub_allow`; later calls the checks below and fusion (Sun scaffold, replaced Tue/Wed).
-- Policy rules (deterministic: allowlists, per-payee limits, memo/amount sanity) — Tue.
-- Injection classifier client (HTTP to `CLASSIFIER_URL`, scores each context item) — Tue.
-- MELON masked re-run (NEAR AI Cloud inside the checker; compares the tool call with the user request masked) — Tue.
-- Counterparty signals (account age, contract code hash changes, prior payments, lookalike distance, via OutLayer RPC `view`) — Tue.
-- Jev fusion (conformal threshold and the two-signal block rule over the `DecisionClient` answers) — Wed. The `DecisionClient` itself landed Mon (§4); fusion and the thresholds are still Wed.
-- Cascade (cheap checks first; MELON only for ambiguous cases) — Thu, evaluated in the cost table.
+- `checker/src/decide.rs` — scaffold stub returning `allow` / `stub_allow`; later calls the checks below and fusion (C3).
+- Policy rules (deterministic: allowlists, per-payee limits, memo/amount sanity) — B1.
+- Injection classifier client (HTTP to `CLASSIFIER_URL`, scores each context item) — C2.
+- MELON masked re-run (NEAR AI Cloud inside the checker; compares the tool call with the user request masked) — not scheduled (first on the cut list).
+- Counterparty signals (account age, contract code hash changes, prior payments, lookalike distance, via OutLayer RPC `view`) — B3.
+- Jev fusion (conformal threshold and the two-signal block rule over the `DecisionClient` answers) — C3; the `DecisionClient` itself is implemented (§4).
+- Cascade (cheap checks first; expensive checks only for ambiguous cases) — B5, evaluated in the cost table.
 - `agent/firewall_agent/agent.py` and `llm.py` — bill-paying agent with a `pay_invoice` tool; scripted or NEAR AI Cloud LLM (Sun).
 - `agent/firewall_agent/guardian.py` — `LocalGuardian` (dry-run, mirrors the contract) and `TestnetGuardian` (Sun).
-- `agent/firewall_agent/relayer.py` — polls `get_pending`, runs the checker, calls `submit_verdict`; human-gated (Sun; Mon wire path).
-- `agent/firewall_agent/setup_testnet.py` — creates accounts, deploys, funds, scopes the agent key; human-gated (Sun).
-- Eval and conformal calibration (Python, runs the checker binary over labelled cases) — Thu.
+- `agent/firewall_agent/relayer.py` — polls `get_pending`, runs the checker, calls `submit_verdict`; human-gated.
+- `agent/firewall_agent/setup_testnet.py` — creates accounts, deploys, funds, scopes the agent key; human-gated.
+- Eval and conformal calibration (Python, runs the checker binary over labelled cases) — A3, C4, C5.

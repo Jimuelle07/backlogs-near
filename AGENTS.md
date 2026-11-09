@@ -10,7 +10,7 @@
 
 1. [docs/index.md](docs/index.md): map of every doc.
 2. [docs/hackathon-context/HACKATHON.md](docs/hackathon-context/HACKATHON.md): official agent instructions and rules (snapshot).
-3. [docs/build/idea.md](docs/build/idea.md): the human-authored plan (architecture, day-by-day tasks, demo script, eval protocol).
+3. [docs/build/idea.md](docs/build/idea.md): the human-authored plan (architecture, demo script, eval protocol). Work is cut into sprints in [docs/build/sprints.md](docs/build/sprints.md).
 4. [docs/build/prd.md](docs/build/prd.md), then [docs/build/sdd.md](docs/build/sdd.md), then [docs/build/system-design.md](docs/build/system-design.md).
 
 Before any submission step, re-read the live https://nearhackathon.com/HACKATHON.md: rules and dates may change, and the live file wins over the snapshot.
@@ -25,7 +25,6 @@ Before any submission step, re-read the live https://nearhackathon.com/HACKATHON
 | Judging starts | 2026-11-16T00:00Z | HACKATHON.md Facts |
 | Results announced by | 2026-11-18T23:59Z | HACKATHON.md Facts |
 | Hosted demo (if any) stays up | through 2026-11-18, ideally 2026-11-25 | HACKATHON.md Q-012 |
-| Internal target | submit Sat 14 Nov by 20:00 PHT (12:00Z) | [idea.md](docs/build/idea.md) "Day-by-day plan" |
 
 ## 4. Human-only actions
 
@@ -60,7 +59,7 @@ One submission per repository. Mistakes are fixed by the human at https://nearha
 | Agent / relayer / eval | Python 3.12 managed by uv |
 | NEAR Python client | py-near |
 | Injection classifier | protectai/deberta-v3-base-prompt-injection-v2 default; Llama-Prompt-Guard-2-86M when HF access is granted |
-| Receipt page | [idea.md](docs/build/idea.md) "Fri Nov 13" — decided that day |
+| Receipt page | Landing page with a read-only receipts panel ([sprints.md](docs/build/sprints.md) D1, E1, E2) |
 
 Rationale and module boundaries: [docs/build/sdd.md](docs/build/sdd.md).
 

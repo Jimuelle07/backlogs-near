@@ -51,6 +51,7 @@ Valid ids (exactly 13): `defi`, `thesis`, `privacy`, `business`, `swarms`, `secu
 | Should | OutLayer yield/resume mode (fallback: HTTPS mode with a signed verdict) |
 | Should | Cascade (MELON only when another signal is borderline) |
 | Should | Unseen-family test and a red-team round |
+| Should | Public landing page explaining the product (problem, how it works, NEAR's role, Jev's role, results) with a read-only live receipts panel; hosted through 2026-11-18, ideally 2026-11-25 ([sprints.md](sprints.md)) |
 | Won't (this hackathon) | Human approval UI; mainnet; Privacy-track claims; shared blocklist (stretch only); NEAR Intents |
 
 ### Cross-cutting requirements (apply to any choice)
@@ -89,17 +90,10 @@ Shot-by-shot script (about 2 min): [idea.md Demo script](idea.md#demo-script-abo
 
 ## 9. Timeline
 
-Days from [idea.md Day-by-day plan](idea.md#day-by-day-plan-nov-814) (PHT):
+Remaining work is cut into sprints: [sprints.md](sprints.md).
 
-| Day | Work |
+| Milestone | When |
 | --- | --- |
-| Sun 8 Nov | Setup: frozen formats, Guardian with `request_payment` and yield/resume, checker stub, demo agent |
-| Mon 9 Nov | Wire the path: scoped key, OutLayer hello-world, HTTPS mode; gate: stub-allow path works end to end on testnet |
-| Tue 10 Nov | The four checks |
-| Wed 11 Nov | Jev fusion + end-to-end; gate: full path works on testnet |
-| Thu 12 Nov | Eval, calibration, results table |
-| Fri 13 Nov | Demo, video, receipt page, README |
-| Sat 14 Nov | Submit by 20:00 PHT (12:00Z) |
 | **Hard deadline** | **2026-11-14T23:59Z** (Sun 15 Nov 07:59 PHT) |
 
 ## 10. Out of scope
