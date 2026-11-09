@@ -33,6 +33,18 @@ pub fn is_lower_hex_64(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// Hold window by amount: <20 tokens 10 min, <=100 tokens 1 h, otherwise 6 h.
+pub fn hold_window_ns(amount: u128, decimals: u8) -> u64 {
+    let unit = 10u128.pow(decimals as u32);
+    if amount < 20 * unit {
+        600_000_000_000
+    } else if amount <= 100 * unit {
+        3_600_000_000_000
+    } else {
+        21_600_000_000_000
+    }
+}
+
 /// Checks that `verdict` binds exactly the pending request. Err carries the offending field.
 pub fn binds(
     pending: &Pending,

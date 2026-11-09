@@ -1,5 +1,4 @@
-mod decide;
-mod formats;
+use checker::decide;
 
 use std::io::{Read, Write};
 use std::process::exit;

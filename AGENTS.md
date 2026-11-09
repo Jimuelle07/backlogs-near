@@ -55,7 +55,7 @@ One submission per repository. Mistakes are fixed by the human at https://nearha
 | Guardian contract | Rust, near-sdk 5.29.1 (5.30.1 needs rustc 1.95; local toolchain is 1.94), cargo-near 0.21.1 |
 | Mock token | NEP-141 tUSDC |
 | Checker | Rust bin, wasm32-wasip2 on OutLayer, native for local/eval |
-| Decision model | Jev via raw HTTPS from the checker |
+| Decision model | Jev via TypeSafe API (jev-latest), the main path; optional NEAR AI Cloud /v1/systemone via JEV_PROVIDER=nearai |
 | LLM | NEAR AI Cloud, OpenAI-compatible: agent tool calls, MELON, decision fallback |
 | Agent / relayer / eval | Python 3.12 managed by uv |
 | NEAR Python client | py-near |
@@ -70,7 +70,7 @@ Rationale and module boundaries: [docs/build/sdd.md](docs/build/sdd.md).
 Cargo.toml         Rust workspace (guardian, tusdc, checker)
 contract/guardian/ Guardian contract (crate guardian)
 contract/token/    mock NEP-141 tUSDC (crate tusdc)
-checker/           checker binary (crate checker); native and wasm32-wasip2
+checker/           checker lib + binary (crate checker); native and wasm32-wasip2
 schemas/           frozen JSON Schemas; schemas/examples/ holds one valid example each
 agent/             uv project firewall-agent, package firewall_agent
                    scripts: firewall-demo, firewall-relayer, firewall-setup-testnet, firewall-jev-ping

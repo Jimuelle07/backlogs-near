@@ -135,6 +135,8 @@ pub struct Pending {
     pub checker_input: String,
     pub input_sha256: String,
     pub requested_block: u64,
+    /// UTC day index the daily-cap reservation was charged to.
+    pub charged_day: u64,
 }
 
 #[near(serializers = [json])]
@@ -155,4 +157,24 @@ pub struct Config {
     pub token_id: AccountId,
     pub token_decimals: u8,
     pub checker_id: AccountId,
+    pub per_payment_cap: U128,
+    pub daily_cap: U128,
+}
+
+/// Escrowed payment awaiting its release window (borsh only).
+#[near(serializers = [borsh])]
+pub struct Held {
+    pub receiver_id: AccountId,
+    pub amount: U128,
+    pub release_at_ns: u64,
+    pub charged_day: u64,
+}
+
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HeldView {
+    pub request_id: U64,
+    pub receiver_id: AccountId,
+    pub amount: U128,
+    pub release_at_ns: U64,
 }

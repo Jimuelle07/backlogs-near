@@ -4,7 +4,7 @@
 
 Project chosen: "Attested Payment Firewall" (working name; the human sets the final name at submission). Plan: [idea.md](idea.md). Last updated 2026-11-09.
 
-Implemented as of the Sunday scaffold: frozen formats (`schemas/`), mock token, Guardian with `request_payment` and yield/resume, a checker that returns a hard-coded allow, and a Python agent with a key-free dry-run. Everything else is marked below with the idea.md day that adds it.
+Implemented as of the Sunday scaffold: frozen formats (`schemas/`), mock token, Guardian with `request_payment` and yield/resume, a checker that returns a hard-coded allow, and a Python agent with a key-free dry-run. Added Mon: hard caps and hold escrow in the Guardian; the `DecisionClient` (Jev primary, NEAR AI LLM fallback) in the checker, not yet called by `decide()`; 60 dry-run scenarios (30 benign, 30 attack, 5 per family) in `agent/scenarios/`. Everything else is marked below with the idea.md day that adds it.
 
 ## 2. Stack
 
@@ -15,7 +15,7 @@ Same decision as [AGENTS.md §5](../../AGENTS.md#5-stack-decided).
 | Guardian contract | Rust, `near-sdk` 5.29.1, `cargo-near` 0.21.1 | Yield/resume per docs.near.org yield-resume. 5.30.1 needs rustc 1.95; the toolchain here is 1.94 |
 | Mock token | NEP-141 tUSDC (`near-contract-standards` 5.29.1) | 6 decimals, deployed by us on testnet |
 | Checker | Rust bin | `wasm32-wasip2` on OutLayer, native for local/eval |
-| Decision model | TypeSafe Jev, raw HTTPS from the checker | `model: "jev-latest"`; fields checked against docs.typesafe.ai/api/system-one |
+| Decision model | Jev via the TypeSafe API (`jev-latest`), the main path; optional NEAR-hosted Jev (`typesafe/jev-1.13`, NEAR AI Cloud `/v1/systemone`) via `JEV_PROVIDER=nearai` | Raw HTTPS from the checker; fields checked against docs.typesafe.ai/api/system-one |
 | LLM | NEAR AI Cloud (OpenAI-compatible) | Agent tool calls, MELON re-run, decision fallback |
 | Agent / relayer / eval | Python 3.12, managed by uv | |
 | NEAR Python client | py-near | Optional `testnet` extra; dry-run and tests never import it |
@@ -28,7 +28,7 @@ Same decision as [AGENTS.md §5](../../AGENTS.md#5-stack-decided).
 Cargo.toml          Cargo workspace (guardian, token, checker)
 contract/guardian/  crate `guardian`: Guardian contract
 contract/token/     crate `tusdc`: mock NEP-141 token
-checker/            crate `checker`: bin; reads CheckerInput on stdin, prints Verdict on stdout
+checker/            crate `checker`: lib + bin (`checker::{decide, decision, formats, http}`); the bin reads CheckerInput on stdin, prints Verdict on stdout
 schemas/            JSON Schema 2020-12 for every wire format; schemas/examples/ one valid example each
 agent/              uv project `firewall-agent`, package `firewall_agent`: agent, relayer, setup, dry-run
 data/decisions/     checker records from native runs (gitignored)
@@ -45,7 +45,7 @@ Dependency rules:
 
 ## 4. DecisionClient
 
-Every Jev call in the checker goes through this trait in `checker/src/decision.rs`. **Implemented Tue/Wed ([idea.md Day-by-day plan](idea.md#day-by-day-plan-nov-814)).** Shapes follow the TypeSafe System One API: `POST https://api.typesafe.ai/v1/systemone`, body `{model, state, questions}`, response `{model, answers, usage}`.
+Every Jev call in the checker goes through this trait in `checker/src/decision.rs`. Shapes follow the TypeSafe System One API: `POST https://api.typesafe.ai/v1/systemone`, body `{model, state, questions}`, response `{model, answers, usage}`. **The clients, fallback and selection are implemented (Mon). `decide()` in `checker/src/decide.rs` still returns the stub allow and does not call them; wiring and fusion are Wed ([idea.md Day-by-day plan](idea.md#day-by-day-plan-nov-814)).**
 
 ```rust
 pub enum Question {
@@ -58,19 +58,26 @@ pub enum Answer {
     Score { score: f64, probabilities: BTreeMap<String, f64>, confidence: f64 },
     Noul { noul: f64 },
 }
+pub struct Decision { pub backend: JevBackend, pub model: String, pub answers: BTreeMap<String, Answer> }
+pub enum DecisionError {
+    Config(String), Http(HttpError), Status { status: u16, body: String }, OffSchema(String),
+}
 pub trait DecisionClient {
     fn decide(
         &self,
         state: &serde_json::Value,
         questions: &BTreeMap<String, Question>,
-    ) -> Result<BTreeMap<String, Answer>, DecisionError>;
+    ) -> Result<Decision, DecisionError>;
 }
 ```
 
-- **Primary: `JevDecisionClient`.** `Authorization: Bearer $TYPESAFE_API_KEY`, `model: "jev-latest"`. The four questions (`verdict`, `unusual`, `injection_driven`, `receiver_risk`) are in [idea.md Tech stack](idea.md#tech-stack-and-models). Questions stay atomic; combination happens in code, not in prompts.
-- **Fallback: `LlmDecisionClient`.** Calls NEAR AI Cloud and coerces the reply into the same `Answer` shape; off-schema output is retried once, then it is an error (the check becomes `check_unavailable`).
-- **HTTP** sits behind a `checker::http` module: `ureq` natively, `wasi-http-client` under `cfg(target_os = "wasi")`. No other module opens sockets.
-- **Selection:** `DECISION_BACKEND=jev|llm`, default `jev`. On error or timeout from Jev, fall back to `llm` automatically; the record logs `backend: "llm"`.
+- **Questions.** `firewall_questions()` returns the four questions (`verdict`, `unusual`, `injection_driven`, `receiver_risk`), the same text as `jev_ping.py` ([idea.md Tech stack](idea.md#tech-stack-and-models)). Questions stay atomic; combination happens in code, not in prompts.
+- **Validation.** Both clients run `check_answers`: every asked question is answered in its own shape, a choice is a criteria key, probabilities are finite, in [0, 1] and keyed exactly by the criteria keys (choice) or `"0".."n-1"` (score), `noul` is in [0, 1]. Anything else is `OffSchema`. Unknown response fields (Jev's `legend`) are ignored.
+- **Primary: `JevDecisionClient`.** Provider chosen by `JEV_PROVIDER`. `typesafe` (default, the main path): POST `https://api.typesafe.ai/v1/systemone` with `$TYPESAFE_API_KEY` and `model: "jev-latest"`. `nearai` (explicit option): POST `{NEAR_AI_BASE_URL}/systemone` (default base `https://cloud-api.near.ai/v1`, trailing `/` trimmed) with `Authorization: Bearer $NEAR_AI_API_KEY` and `model: "typesafe/jev-1.13"`; same request and response shapes, billed to NEAR AI credits. The NEAR AI Cloud LLM (`CHECKER_LLM_MODEL`) is the fallback if Jev fails. `JEV_MODEL` overrides the model on either; an unknown provider → `Config("JEV_PROVIDER must be nearai or typesafe")`; a missing or empty key → `Config("<KEY NAME> not set")`. 20 s timeout, no retry. `Decision.model` is the model string Jev returns; `backend: jev`. Request and response handling are the pure functions `build_jev_body` and `parse_jev_response`; configuration is testable through `JevDecisionClient::from_vars`.
+- **Fallback: `LlmDecisionClient`.** Posts to `{NEAR_AI_BASE_URL}/chat/completions` (default `https://cloud-api.near.ai/v1`) with `model: $CHECKER_LLM_MODEL`, `temperature: 0`, 25 s timeout. The system prompt marks `state` as untrusted data and demands one JSON object of probabilities. `parse_llm_reply` strips fences (first `{` to last `}`), renormalises each probability map whose sum is in [0.98, 1.02] (otherwise `OffSchema`), and derives `choice` (argmax), `score` (Σ level·p) and `confidence` (max p). An off-schema reply is retried once with the same request, then it is an error (the check becomes `check_unavailable`). `backend: llm`, `model` is `CHECKER_LLM_MODEL`.
+- **`FallbackDecisionClient`** wraps a primary and an optional fallback: on any primary error it returns the fallback's result, or the primary's error if there is no fallback. The decision record logs `backend: "llm"` when the fallback answered.
+- **Selection:** `client_from_env()` reads `DECISION_BACKEND`. Unset or `jev` → Jev with the LLM as fallback (the fallback is dropped if `NEAR_AI_API_KEY` or `CHECKER_LLM_MODEL` is missing); `llm` → LLM only; anything else → `Config("DECISION_BACKEND must be jev or llm")`.
+- **HTTP** sits behind `checker::http::post_json(url, bearer, body, timeout)` (sends `Authorization: Bearer` and `Content-Type: application/json`; non-2xx statuses come back as `Ok`, and `DecisionError::Status` carries the first 300 chars of the body): `ureq` 3 natively, `wasi-http-client` under `cfg(target_os = "wasi")` (wasm32-wasip2). Natively `timeout` bounds the whole request; on WASI only a connect timeout exists and OutLayer's 60 s cap bounds the rest. The budgets do not fit under that cap: the LLM client retries once, so the worst case is 20 s (Jev) + 2 × 25 s (LLM) = 70 s, and on WASI a Jev call that stalls after connecting uses the whole 60 s. Both fail closed: no verdict arrives, the yield times out and the Guardian unreserves. The budgets get retuned when the checker is wired to OutLayer (Wed). No other module opens sockets.
 - `firewall-jev-ping` (agent package) sends the same four questions once, to verify the API shape and key.
 
 ## 5. Verdict rules
@@ -98,20 +105,26 @@ Project-independent:
 - **RPC:** a free public provider from https://docs.near.org/api/rpc/providers (Q-009), configured via `NEAR_RPC_URL`.
 - **NEAR Intents:** not used.
 
-### Guardian (`contract/guardian`, crate `guardian`) — scaffold
+### Guardian (`contract/guardian`, crate `guardian`)
 
-State: `owner_id`, `agent_id`, `token_id`, `token_decimals`, `checker_id`, `next_request_id` (starts at 1), `pending: IterableMap<u64, Pending>`, `receipts: IterableMap<u64, Receipt>`, `refs: LookupMap<String, u64>` (client_ref → request_id). Limits: context ≤ 8192 serialized bytes, ≤ 8 context items, ≤ 16 pending requests.
+State: `owner_id`, `agent_id`, `token_id`, `token_decimals`, `checker_id`, `next_request_id` (starts at 1), `pending: IterableMap<u64, Pending>`, `receipts: IterableMap<u64, Receipt>`, `refs: LookupMap<String, u64>` (client_ref → request_id), `held: IterableMap<u64, Held>` (hold escrow: `receiver_id`, `amount`, `release_at_ns`, `charged_day`), `spend_day` (UTC day index, `block_timestamp / 86_400_000_000_000`), `spent_today`. Limits: context ≤ 8192 serialized bytes, ≤ 8 context items, ≤ 16 pending requests.
+
+Hard caps (constants in contract code, tuned by redeploying): 200 tUSDC per payment, 500 tUSDC per UTC day. `request_payment` reserves the amount against `spent_today` at request time (`spend_day` rolls the counter), so pending, held and paying amounts together can never exceed the cap. The reservation is released on block, yield timeout, transfer failure and `cancel_held`; paid and paying amounts stay counted. A hold charged on day D and released on D+1 still counts against D (each request records `charged_day`). So the cap bounds amounts committed per request day, and payouts in one wall-clock day can reach about 2× the daily cap (D's holds released on D+1, plus D+1's own requests). The window for a hold depends on its amount: 10 min below 20 tUSDC, 1 h up to 100, 6 h above.
 
 | Method | Kind | Behavior |
 | --- | --- | --- |
 | `new(owner_id, agent_id, token_id, token_decimals, checker_id)` | init | Sets config |
 | `ft_on_transfer(sender_id, amount, msg)` | change | Panics `Unsupported token` unless the caller is `token_id`; refunds unless `sender_id == owner_id` (owner deposits fund custody) |
-| `request_payment(client_ref, receiver_id, amount, memo, user_request, context)` | change (agent only) | Validates, assigns `request_id`, builds CheckerInput, stores `input_sha256`, yields to `on_verdict`, emits `payment_requested` |
+| `request_payment(client_ref, receiver_id, amount, memo, user_request, context)` | change (agent only) | Validates; panics `Amount exceeds per-payment cap` or `Daily cap reached`; reserves the amount; assigns `request_id`, builds CheckerInput, stores `input_sha256` and `charged_day`, yields to `on_verdict`, emits `payment_requested` |
 | `submit_verdict(request_id, verdict)` | change (checker only) | Rejects any verdict whose format, request_id, receiver, token or amount differs, or with bad reasons/hash; resumes the yield |
-| `on_verdict(request_id, verdict)` | private callback | Never panics. `allow` → `ft_transfer`; `hold` → `held`; `block` → `refused`; yield timeout → `timed_out`; emits `payment_decided` |
-| `on_transfer_done(request_id)` | private callback | `paid` or `transfer_failed` |
-| `get_config()` | view | Config |
+| `on_verdict(request_id, verdict)` | private callback | Never panics. `allow` → `ft_transfer`; `hold` → `held` receipt plus a `held` escrow entry with `release_at_ns`; `block` → `refused` (unreserves); yield timeout → `timed_out` (unreserves); emits `payment_decided` with `release_at_ns` (set for holds, otherwise `null`) |
+| `on_transfer_done(request_id, charged_day, amount)` | private callback | `paid`, or `transfer_failed` (unreserves) |
+| `release_held(request_id)` | change (anyone) | Panics `Unknown hold` or `Hold window not over`; after `release_at_ns` removes the hold, sets the receipt to `paying`, transfers like `allow`, emits `hold_released` |
+| `cancel_held(request_id)` | change (owner or checker) | Panics `Only the owner or checker can cancel holds` or `Unknown hold`; removes the hold, receipt becomes `refused` (outcome stays `hold`), unreserves, emits `hold_cancelled` |
+| `get_config()` | view | Config, including `per_payment_cap` and `daily_cap` |
+| `get_daily_spent()` | view | Amount reserved or spent today; 0 once the UTC day has rolled |
 | `get_pending(from_index, limit)` | view | Pending requests with `checker_input` and `input_sha256`, for the relayer |
+| `get_held(from_index, limit)` | view | Holds: `request_id`, `receiver_id`, `amount`, `release_at_ns`; limit clamped to 50 |
 | `get_receipt(request_id)` / `get_receipt_by_ref(client_ref)` | view | One receipt |
 | `list_receipts(from_index, limit)` | view | Receipts, limit clamped to 50 |
 
@@ -126,9 +139,8 @@ NEP-141 (FungibleToken), NEP-145 (storage management) and NEP-148 (metadata: "Te
 | Addition | Day ([idea.md](idea.md#day-by-day-plan-nov-814)) |
 | --- | --- |
 | `CheckerMode::{Relayer, OutLayer{project_id, version_key}}`: in OutLayer mode `request_payment` calls `outlayer.testnet` `request_execution` with a deposit, `on_verdict` reads stdout via `env::promise_result`; `version_key` pins the checker wasm sha256 | Mon–Tue |
-| Hard caps: $200 per payment, $500 per day (starting values, tuned Thu) | Mon–Wed |
 | Per-payee budgets (learned, contract state) | Wed |
-| Hold escrow with `release_held` / `cancel_held`: hold windows exceed the 200-block yield timeout, so a hold is contract state released by a later call (auto-release if the TEE re-check is clean, otherwise refund), not a yield | Wed |
+| TEE re-check during the hold window, and refund (`cancel_held`) on a flagged re-check. Release without a re-check is implemented | Wed |
 | Receiver auto-registration with the token before `ft_transfer` | Wed |
 
 The relayer mode (scaffold) is not attested: `firewall-relayer` polls `get_pending`, runs the native checker, and calls `submit_verdict` as `checker_id`. It is the skeleton and the fallback if OutLayer yield/resume is not working by Tuesday night.
@@ -157,9 +169,11 @@ All configuration comes from environment variables; `.env.example` is the canoni
 
 | Variable | Purpose | Read by |
 | --- | --- | --- |
-| `TYPESAFE_API_KEY` | Jev API key, from console.typesafe.ai/keys | `firewall-jev-ping` (jev_ping); checker (from Tue) |
-| `NEAR_AI_API_KEY` | NEAR AI Cloud key, from https://cloud.near.ai | agent config (`--llm near-ai`); checker (MELON, fallback; from Tue) |
-| `NEAR_AI_BASE_URL` | `https://cloud-api.near.ai/v1` | agent config |
+| `TYPESAFE_API_KEY` | Jev API key, from console.typesafe.ai/keys; required for the checker's main Jev path (default `JEV_PROVIDER=typesafe`) and `firewall-jev-ping` | `firewall-jev-ping` (jev_ping); checker (`JevDecisionClient`, typesafe provider) |
+| `NEAR_AI_API_KEY` | NEAR AI Cloud key, from https://cloud.near.ai | agent config (`--llm near-ai`); checker (`LlmDecisionClient` fallback, and `JevDecisionClient` only with `JEV_PROVIDER=nearai`; MELON from Tue) |
+| `JEV_PROVIDER` | `typesafe` (default; api.typesafe.ai) or `nearai` (NEAR AI Cloud `/v1/systemone`) | checker (`JevDecisionClient`) |
+| `JEV_MODEL` | Optional Jev model override; default `jev-latest` on typesafe, `typesafe/jev-1.13` on nearai | checker (`JevDecisionClient`) |
+| `NEAR_AI_BASE_URL` | `https://cloud-api.near.ai/v1` | agent config; checker (`JevDecisionClient` nearai provider, `LlmDecisionClient`) |
 | `AGENT_MODEL` | NEAR AI Cloud model id with tool calling (list via `GET $NEAR_AI_BASE_URL/models`) | agent config |
 | `NEAR_NETWORK` | `testnet` (default); mainnet only with human confirmation | agent config, setup_testnet, relayer |
 | `NEAR_RPC_URL` | RPC endpoint from https://docs.near.org/api/rpc/providers | agent config, setup_testnet, relayer |
@@ -173,12 +187,13 @@ All configuration comes from environment variables; `.env.example` is the canoni
 | `CHECKER_PRIVATE_KEY` | Key for `CHECKER_ACCOUNT_ID` | relayer |
 | `CHECKER_BIN` | Checker binary; default `target/release/checker(.exe)` | agent config (LocalGuardian, relayer) |
 | `CHECKER_RECORD_DIR` | Record output dir, default `data/decisions` | checker (native), agent config |
+| `DECISION_BACKEND` | `jev` (default) or `llm`; see §4 | checker (`client_from_env`) |
+| `CHECKER_LLM_MODEL` | NEAR AI Cloud model for the checker's LLM decision fallback; required by the `llm` backend, and the fallback is disabled without it | checker (`LlmDecisionClient`) |
 
 Added later:
 
 | Variable | Purpose | Added by |
 | --- | --- | --- |
-| `DECISION_BACKEND` | `jev` (default) or `llm`; see §4 | Tue |
 | `CLASSIFIER_URL` | Hosted injection classifier endpoint | Tue |
 | `HF_TOKEN` | Hugging Face token for the gated Prompt Guard 2 | Tue |
 | `DECISION_LOG_URL` | Off-chain record sink for OutLayer runs (OutLayer secret) | Mon/Wed |
@@ -188,9 +203,9 @@ Added later:
 
 Run from the repo root unless noted (full command list: [AGENTS.md §6](../../AGENTS.md)).
 
-- **Rust:** `cargo test --workspace`. Guardian: every `request_payment` panic including the 8192/8193-byte context boundary, CheckerInput equals the request fields, `schemas/examples/` parse into the guardian types, `binds` rejects each mismatched field, `on_verdict` mapping of allow/hold/block/error, `ft_on_transfer` handling. Token: owner-only mint, auto-registration, decimals. Checker: verdict binds input, `record_sha256` matches, ≤ 900 bytes with maximum-length ids and 6 reasons, wrong format or unknown field rejected.
+- **Rust:** `cargo test --workspace`. Guardian: every `request_payment` panic including the 8192/8193-byte context boundary, CheckerInput equals the request fields, `schemas/examples/` parse into the guardian types, `binds` rejects each mismatched field, `on_verdict` mapping of allow/hold/block/error, `ft_on_transfer` handling, per-payment and daily caps (boundary, rollover), unreserve on block and timeout, hold window boundaries, `release_held` after the window (and rejection before it), `cancel_held` by the owner (stranger rejected). Token: owner-only mint, auto-registration, decimals. Checker: verdict binds input, `record_sha256` matches, ≤ 900 bytes with maximum-length ids and 6 reasons, wrong format or unknown field rejected; `DecisionClient` request/response parsing, `JevDecisionClient::from_vars` provider selection (default TypeSafe, explicit `nearai`, trailing-slash base URL, `JEV_MODEL` override, unknown provider, missing key), LLM reply normalisation, fallback on primary error, and two `#[ignore]` live calls: `jev_live` (`cargo test -p checker -- --ignored jev_live`; uses the configured provider, so `TYPESAFE_API_KEY` by default, `NEAR_AI_API_KEY` with `JEV_PROVIDER=nearai`) and `llm_live` (`cargo test -p checker -- --ignored llm_live`; needs `NEAR_AI_API_KEY` and `CHECKER_LLM_MODEL`; spends credits).
 - **Contract builds:** `cargo near build non-reproducible-wasm --no-abi` inside `contract/guardian` and `contract/token` → `target/near/guardian/guardian.wasm`, `target/near/tusdc/tusdc.wasm` (`--no-abi`: the ABI step fails to link on Windows MSVC). Checker builds: `cargo build -p checker --release` and `cargo build -p checker --target wasm32-wasip2 --release`.
-- **Python:** `cd agent && uv sync && uv run pytest`. `test_formats` (amount conversion, context limits), `test_schemas` (every example and every built request validates against its schema), `test_local_guardian` (needs the built checker; verdict and record validate, record sha256 matches, a tampered verdict is rejected).
+- **Python:** `cd agent && uv sync && uv run pytest`. `test_formats` (amount conversion, context limits), `test_schemas` (every example and every built request validates against its schema; the scenario set is balanced: 30 benign / 30 attack, 5 per attack family), `test_local_guardian` (needs the built checker; verdict and record validate, record sha256 matches, a tampered verdict is rejected).
 - **No sandbox tests:** `near-workspaces` is not used (Windows host). The yield/resume path against a real chain is covered by the human-run testnet smoke (`firewall-demo --mode testnet`), listed in the README.
 - **Eval (Thu):** about 300 labelled cases (150 benign / 150 attack, six families), calibration/test split, per-check and combined ablation, unseen-family rotation, cost and latency with and without the cascade. Protocol and results table: [idea.md Evaluation and calibration](idea.md#evaluation-and-calibration). Attack fixture candidates: [huggingface models](../tools/huggingface_models_for_build.md) and [arxiv papers](../tools/arxiv_papers_for_build.md) (CrAIBench 2503.16248, Agentic Commerce Bench 2609.35886); verify each license before use.
 
@@ -203,7 +218,7 @@ One line each, with the idea.md day that adds it ([Day-by-day plan](idea.md#day-
 - Injection classifier client (HTTP to `CLASSIFIER_URL`, scores each context item) — Tue.
 - MELON masked re-run (NEAR AI Cloud inside the checker; compares the tool call with the user request masked) — Tue.
 - Counterparty signals (account age, contract code hash changes, prior payments, lookalike distance, via OutLayer RPC `view`) — Tue.
-- Jev fusion (`DecisionClient` plus the conformal threshold and the two-signal block rule) — Wed.
+- Jev fusion (conformal threshold and the two-signal block rule over the `DecisionClient` answers) — Wed. The `DecisionClient` itself landed Mon (§4); fusion and the thresholds are still Wed.
 - Cascade (cheap checks first; MELON only for ambiguous cases) — Thu, evaluated in the cost table.
 - `agent/firewall_agent/agent.py` and `llm.py` — bill-paying agent with a `pay_invoice` tool; scripted or NEAR AI Cloud LLM (Sun).
 - `agent/firewall_agent/guardian.py` — `LocalGuardian` (dry-run, mirrors the contract) and `TestnetGuardian` (Sun).

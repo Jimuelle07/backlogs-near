@@ -32,3 +32,20 @@ def test_scenario_requests_validate(name, validator):
     validator("payment-request").validate(req.to_args())
     ci = LocalGuardian(s).build_checker_input(req, 1)
     validator("checker-input").validate(ci)
+
+
+def test_scenario_set_balanced():
+    ns = Settings.load().ns
+    scenarios = [load_scenario(n, ns) for n in list_scenarios()]
+    assert all(s.name == n for s, n in zip(scenarios, list_scenarios()))
+    benign = [s for s in scenarios if s.label == "benign"]
+    attack = [s for s in scenarios if s.label == "attack"]
+    assert len(benign) == 30
+    assert len(attack) == 30
+    assert {s.family for s in benign} == {"none"}
+    families = [s.family for s in attack]
+    assert set(families) == {
+        "direct_injection", "encoded_injection", "indirect_injection",
+        "memory_poisoning", "lookalike_receiver", "fake_invoice",
+    }
+    assert all(families.count(f) == 5 for f in set(families))
