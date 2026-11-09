@@ -1,4 +1,5 @@
 use crate::formats::*;
+use crate::policy::{self, PolicyConfig};
 use sha2::{Digest, Sha256};
 use std::fmt;
 
@@ -7,6 +8,7 @@ pub enum CheckerError {
     Parse(String),
     Format(String),
     Serialize(String),
+    Config(String),
 }
 
 impl fmt::Display for CheckerError {
@@ -15,6 +17,7 @@ impl fmt::Display for CheckerError {
             CheckerError::Parse(m) => write!(f, "invalid input: {m}"),
             CheckerError::Format(m) => write!(f, "unsupported format: {m}"),
             CheckerError::Serialize(m) => write!(f, "serialization failed: {m}"),
+            CheckerError::Config(m) => write!(f, "invalid checker config: {m}"),
         }
     }
 }
@@ -30,8 +33,17 @@ pub fn record_bytes(record: &DecisionRecord) -> Result<Vec<u8>, CheckerError> {
     serde_json::to_vec(record).map_err(|e| CheckerError::Serialize(e.to_string()))
 }
 
-/// Stub: hard-coded allow. Tue/Wed checks replace the body.
+/// Verdict is still the stub allow (fusion is C3); `signals.policy` is the real policy check.
+/// Policy config comes from the environment (`POLICY_*`).
 pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerError> {
+    let cfg = PolicyConfig::from_env().map_err(CheckerError::Config)?;
+    decide_with(input_bytes, &cfg)
+}
+
+pub fn decide_with(
+    input_bytes: &[u8],
+    policy_cfg: &PolicyConfig,
+) -> Result<(Verdict, DecisionRecord), CheckerError> {
     let input: CheckerInput =
         serde_json::from_slice(input_bytes).map_err(|e| CheckerError::Parse(e.to_string()))?;
     if input.format != INPUT_FORMAT {
@@ -46,7 +58,10 @@ pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerEr
         checker_version: version.clone(),
         outcome: Outcome::Allow,
         reasons: reasons.clone(),
-        signals: Signals::default(),
+        signals: Signals {
+            policy: policy_cfg.enabled.then(|| policy::check(&input, policy_cfg)),
+            ..Signals::default()
+        },
     };
     let record_sha256 = sha256_hex(&record_bytes(&record)?);
     let verdict = Verdict {
@@ -73,7 +88,7 @@ mod tests {
 
     #[test]
     fn verdict_binds_input() {
-        let (v, _) = decide(INPUT.as_bytes()).unwrap();
+        let (v, _) = decide_with(INPUT.as_bytes(), &PolicyConfig::default()).unwrap();
         let i: CheckerInput = serde_json::from_str(INPUT).unwrap();
         assert_eq!(v.request_id, i.request_id);
         assert_eq!(v.receiver_id, i.receiver_id);
@@ -86,14 +101,38 @@ mod tests {
 
     #[test]
     fn record_hash_matches() {
-        let (v, r) = decide(INPUT.as_bytes()).unwrap();
+        let (v, r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default()).unwrap();
         let bytes = serde_json::to_vec(&r).unwrap();
         assert_eq!(v.record_sha256, sha256_hex(&bytes));
         assert_eq!(r.input_sha256, sha256_hex(INPUT.as_bytes()));
         let s = String::from_utf8(bytes).unwrap();
         assert!(s.contains(
-            r#""signals":{"policy":null,"injection":null,"melon":null,"counterparty":null,"jev":null}"#
+            r#""signals":{"policy":{"ok":true,"violations":[]},"injection":null,"melon":null,"counterparty":null,"jev":null}"#
         ));
+    }
+
+    #[test]
+    fn disabled_policy_switch_yields_null_signal() {
+        let cfg = PolicyConfig { enabled: false, ..PolicyConfig::default() };
+        let (v, r) = decide_with(INPUT.as_bytes(), &cfg).unwrap();
+        assert_eq!(r.signals, Signals::default());
+        assert_eq!(v.record_sha256, sha256_hex(&serde_json::to_vec(&r).unwrap()));
+        assert_eq!(v.outcome, Outcome::Allow);
+    }
+
+    #[test]
+    fn flagged_policy_does_not_change_verdict() {
+        let mut j: serde_json::Value = serde_json::from_str(INPUT).unwrap();
+        j["amount"] = "180000000".into();
+        j["user_request"] = "Pay the 18 USDC hosting bill.".into();
+        let bytes = serde_json::to_vec(&j).unwrap();
+        let (v, r) = decide_with(&bytes, &PolicyConfig::default()).unwrap();
+        let p = r.signals.policy.unwrap();
+        assert!(!p.ok);
+        assert_eq!(p.violations, vec![crate::policy::V_AMOUNT_MISMATCH_REQUEST]);
+        assert_eq!(v.outcome, Outcome::Allow);
+        assert_eq!(v.reasons, vec![ReasonCode::StubAllow]);
+        assert!(serde_json::to_vec(&v).unwrap().len() <= 900);
     }
 
     #[test]
@@ -132,6 +171,10 @@ mod tests {
         let v: Verdict = serde_json::from_str(VERDICT).unwrap();
         assert_eq!(v.outcome, Outcome::Allow);
         let r: DecisionRecord = serde_json::from_str(RECORD).unwrap();
-        assert_eq!(r.signals, Signals::default());
+        assert_eq!(
+            r.signals.policy,
+            Some(PolicySignal { ok: true, violations: vec![] })
+        );
+        assert_eq!(r.signals.injection, None);
     }
 }
