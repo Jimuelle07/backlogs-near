@@ -58,7 +58,7 @@ Sync points (the only moments lanes must meet): **end of Sprint 2** — testnet 
 | A1 | A | Backend | M | OutLayer live: build the checker wasm, upload and deploy, redeploy the Guardian, `set_checker_mode`, run one benign and one attack payment ([sdd.md §6](sdd.md) runbook; human signs). **Done, signed off by Jim 2026-11-10: benign receipt `paid` through OutLayer on `guardian-v2.jimuelle-firewall.testnet`, attack run (`paid`, `stub_allow`), open questions answered in [sdd.md §6 First testnet run](sdd.md#first-testnet-run-2026-11-09)** | Receipt `paid` through OutLayer; sdd §6 open questions answered (Text result shape, deposit, timeout delivery) | — | Jim |
 | A2 | A | Backend | S | Record sink: checker POSTs each DecisionRecord to `DECISION_LOG_URL`; POST failure turns `allow` into `hold` ([sdd.md §7](sdd.md)) | Unit tests; records arrive from an OutLayer run once A1 is live | — | Jesus |
 | A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format) | Runs on the stub checker today | C1 format (fixture until then) | Jesus |
-| B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | Rc (pairs with Jim) |
+| B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch. **2026-11-10: merged in PR #3 (checker/src/policy.rs): signals.policy filled; violation ids receiver_not_allowlisted, memo_too_long, memo_bad_chars, amount_invalid, amount_over_cap, amount_mismatch_request, amount_mismatch_invoice; config POLICY_ENABLED, POLICY_ALLOWLIST, POLICY_MAX_AMOUNT, POLICY_MAX_MEMO_CHARS; attack-fake-invoice-amount-inflation flagged; awaiting Rc's review and Jim's sign-off** | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | Rc (pairs with Jim) |
 | B2 | B | Backend | S | Nightly end-to-end script: one benign and one attack payment on testnet (human runs it) | Script plus expected output | — | Rc |
 | C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests | Schema and example committed; E3 and A3 can use them | — | paticolcol |
 | C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency | Score per item in the record; latency recorded | frozen `signals.injection` | paticolcol |
@@ -102,9 +102,8 @@ Verified with `cargo test --workspace` (112 passed) and `uv run pytest` (134 pas
 
 Follow-ups, not scheduled:
 
-- Make the full setup path save `GUARDIAN_PRIVATE_KEY` and list it in `.env.example`.
+- Done in PR #2 (2026-11-10): full setup saves `GUARDIAN_PRIVATE_KEY` and `.env.example` lists it; both setup paths write every key (and the agent's function-call key) to `.env.testnet.pending` before using it, and a leftover pending file stops the next run.
 - `TYPESAFE_API_KEY` is already set. guardian-v2's mode still has `secrets_ref: null`, so once `decide()` calls Jev (C3), call `set_checker_mode` with `secrets_ref` `{profile, account_id}` so the checker receives the key.
-- `--redeploy` writes the guardian key only at the end, so a failed run loses the new accounts' keys.
 
 ## Sprint 2
 
