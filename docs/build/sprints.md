@@ -28,7 +28,7 @@ Lanes never block each other inside a sprint because every hand-off goes through
 | Contract → website | Guardian views (`list_receipts`, `get_held`, `get_daily_spent`, `get_config`) and [receipt.schema.json](../../schemas/receipt.schema.json) | E1/E2 build on the live testnet Guardian today |
 | Checker → eval | the checker binary (stdin CheckerInput → stdout Verdict) | A3 runs on the stub checker; numbers fill in as checks land |
 
-Rule for every lane: code against the frozen format and a fixture; swap in the real producer when it lands. A format change needs the owners of both sides.
+Rule for every lane: code against the frozen format and a fixture; swap in the real producer when it lands. A format change needs the owners of both sides and Jim's approval, and edits the schema and its example before any code ([AGENTS.md §0](../../AGENTS.md#0-authority-docs-first)).
 
 ## Lane overview
 
