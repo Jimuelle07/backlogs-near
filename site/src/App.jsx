@@ -29,7 +29,7 @@ const NAV = [
   ["#safety", "Safety"],
   ["#demo", "Demo"],
   ["#results", "Results"],
-] as const;
+];
 
 const CHECKS = [
   { Icon: ListChecks, name: "Policy rules", text: "Allowlist, memo and amount sanity; the amount must match the user's request or invoice.", paper: ["Progent", "2504.11703"], planned: false },
