@@ -1,0 +1,52 @@
+{
+  "format": "firewall.decision_record.v1",
+  "input_sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0",
+  "request_id": "101",
+  "checker_version": "0.1.0",
+  "outcome": "allow",
+  "reasons": [
+    "stub_allow"
+  ],
+  "signals": {
+    "policy": {
+      "ok": true,
+      "violations": []
+    },
+    "injection": {
+      "max_score": 0.012,
+      "per_item": [
+        {
+          "ref": "ctx-invoice-0",
+          "score": 0.012
+        }
+      ],
+      "model": "protectai/deberta-v3-base-prompt-injection-v2",
+      "model_sha256": "4a3b2c1d0e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b"
+    },
+    "melon": {
+      "masked_call_matches": false,
+      "llm_model": "meta-llama/Llama-3.3-70B-Instruct"
+    },
+    "counterparty": {
+      "account_age_days": 182.5,
+      "is_contract": false,
+      "code_changed_recently": false,
+      "prior_payments": 6,
+      "lookalike_of": null,
+      "lookalike_distance": null
+    },
+    "jev": {
+      "backend": "jev",
+      "model": "jev-latest",
+      "unusual": 0.04,
+      "injection_driven": 0.01,
+      "receiver_risk": 0.02,
+      "label": "A",
+      "label_probabilities": {
+        "A": 0.96,
+        "B": 0.03,
+        "C": 0.01
+      }
+    }
+  }
+}
