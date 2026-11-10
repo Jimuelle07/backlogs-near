@@ -56,7 +56,7 @@ Status: **Done** (merged and signed off by Jim), **In progress** (work merged or
 | B2 | Nightly e2e script | Rc | **Not started** | No branch or PR yet |
 | C1 | results.json format + fixtures | paticolcol | **Not started** | No branch or PR yet |
 | C2 | Injection classifier | paticolcol | **Not started** | No branch or PR yet |
-| D1 | Landing page skeleton | Helena | **Not started** | No branch or PR yet |
+| D1 | Landing page skeleton | Helena | **In progress** | `site/` built on branch `helenaherrero515/branding` (Vite + React, all sections with draft copy, E1 slot); not yet deployed (Cloudflare Pages, human) |
 | E1 | Live receipts panel | Ace | **Not started** | No branch or PR yet |
 
 Sprints 2–5: not started.
