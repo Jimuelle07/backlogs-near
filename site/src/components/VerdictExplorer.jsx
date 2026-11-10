@@ -38,7 +38,7 @@ const VERDICTS = {
     title: "Nothing moves",
     text: "The injection classifier flags the reply the agent read, and the payee is a two-day-old lookalike of a known one. Two detectors agree, so the Guardian refuses.",
     fired: [1, 2],
-    example: "180 tUSDC to h0stco after a Morse-code reply",
+    example: "180 tUSDC to hostc0 after a Morse-code reply",
     facts: [["Wait", "none"], ["Moves", "0 tUSDC"], ["Receipt", "refused, with reason codes"]],
   },
 };
