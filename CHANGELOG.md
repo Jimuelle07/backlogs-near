@@ -5,6 +5,10 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 ## 2026-11-11
 
 - **Stack:** landing page decided (D1): Vite 5 + React 18 (JSX) static site in `site/`, hosted on Cloudflare Pages; shared by lanes D and E ([AGENTS.md §5](AGENTS.md#5-stack-decided), [site/README.md](site/README.md)).
+- **Plan:** Sprint 2 (due Wed 11 Nov) and Sprint 3 (due Thu 12 Nov) planned in [sprints.md](docs/build/sprints.md#sprint-2--due-wed-11-nov-2359-pht-1559z): owners, roles, due dates; D1/E1 carried over into Sprint 2; B4 moved to Jesus.
+- **Sign-off:** Jim signed off Sprint 1 backend tasks A2, A3 (PR #6), B1 (PR #3), B2 (PR #9), C1 and C2 (PR #7); [sprints.md](docs/build/sprints.md#progress-updated-2026-11-11) marks them Done.
+- **Format:** results.json frozen as [schemas/results.schema.json](schemas/results.schema.json) with [schemas/examples/results.json](schemas/examples/results.json); five DecisionRecord fixtures in [schemas/fixtures/](schemas/fixtures/) (C1, PR #7).
+- **Component:** nightly end-to-end testnet script firewall-nightly-e2e (agent/src/firewall_agent/nightly_e2e.py, scripts/nightly-e2e.*), runbook [nightly-e2e.md](docs/build/nightly-e2e.md) (B2, PR #9).
 - **Rules:** agents should not co-author commits, push or merge ([AGENTS.md §4](AGENTS.md#4-human-only-actions)).
 - **Docs:** added this CHANGELOG.md; MAJOR updates are logged here ([AGENTS.md §10](AGENTS.md#10-docs-upkeep)).
 
