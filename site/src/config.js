@@ -9,7 +9,7 @@ export const STATUS_NOTE =
   "Hackathon build on NEAR testnet. The checks are landing this week; until Jev fusion is wired in, the checker allows every payment.";
 
 // Live receipts (lane E). guardian-v2 is the current testnet Guardian (sprints.md A1 log).
-export const NEAR_RPC_URL = "https://rpc.testnet.near.org";
+export const NEAR_RPC_URL = "https://test.rpc.fastnear.com";
 export const GUARDIAN_ID = "guardian-v2.jimuelle-firewall.testnet";
 export const EXPLORER_URL = "https://testnet.nearblocks.io";
 
