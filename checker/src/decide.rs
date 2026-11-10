@@ -1,4 +1,5 @@
 use crate::formats::*;
+use crate::injection::{self, InjectionConfig};
 use crate::policy::{self, PolicyConfig};
 use crate::sink::{self, SinkConfig};
 use sha2::{Digest, Sha256};
@@ -10,6 +11,7 @@ pub enum CheckerError {
     Format(String),
     Serialize(String),
     Config(String),
+    Check(String),
 }
 
 impl fmt::Display for CheckerError {
@@ -19,6 +21,7 @@ impl fmt::Display for CheckerError {
             CheckerError::Format(m) => write!(f, "unsupported format: {m}"),
             CheckerError::Serialize(m) => write!(f, "serialization failed: {m}"),
             CheckerError::Config(m) => write!(f, "invalid checker config: {m}"),
+            CheckerError::Check(m) => write!(f, "check execution failed: {m}"),
         }
     }
 }
@@ -34,13 +37,15 @@ pub fn record_bytes(record: &DecisionRecord) -> Result<Vec<u8>, CheckerError> {
     serde_json::to_vec(record).map_err(|e| CheckerError::Serialize(e.to_string()))
 }
 
-/// Verdict is still the stub allow (fusion is C3); `signals.policy` is the real policy check.
-/// Policy config comes from the environment (`POLICY_*`), and when `DECISION_LOG_URL` is set
-/// the record is POSTed to the sink (POST failure downgrades `allow` to `hold`).
+/// Verdict is still the stub allow (fusion is C3); `signals.policy` and `signals.injection` are real checks.
+/// Policy config comes from the environment (`POLICY_*`), injection config from (`INJECTION_*`, `CLASSIFIER_URL`),
+/// and when `DECISION_LOG_URL` is set the record is POSTed to the sink (POST failure downgrades `allow` to `hold`).
 pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerError> {
-    let cfg = PolicyConfig::from_env().map_err(CheckerError::Config)?;
+    let policy_cfg = PolicyConfig::from_env().map_err(CheckerError::Config)?;
+    let injection_cfg = InjectionConfig::from_env().map_err(CheckerError::Config)?;
     let sink_cfg = SinkConfig::from_env();
-    let (mut verdict, mut record) = decide_with(input_bytes, &cfg)?;
+    let (mut verdict, mut record) =
+        decide_with_configs(input_bytes, &policy_cfg, &injection_cfg)?;
     sink::deliver_with_config(&mut verdict, &mut record, &sink_cfg)?;
     Ok((verdict, record))
 }
@@ -49,6 +54,14 @@ pub fn decide_with(
     input_bytes: &[u8],
     policy_cfg: &PolicyConfig,
 ) -> Result<(Verdict, DecisionRecord), CheckerError> {
+    decide_with_configs(input_bytes, policy_cfg, &InjectionConfig::default())
+}
+
+pub fn decide_with_configs(
+    input_bytes: &[u8],
+    policy_cfg: &PolicyConfig,
+    injection_cfg: &InjectionConfig,
+) -> Result<(Verdict, DecisionRecord), CheckerError> {
     let input: CheckerInput =
         serde_json::from_slice(input_bytes).map_err(|e| CheckerError::Parse(e.to_string()))?;
     if input.format != INPUT_FORMAT {
@@ -56,6 +69,8 @@ pub fn decide_with(
     }
     let version = env!("CARGO_PKG_VERSION").to_string();
     let reasons = vec![ReasonCode::StubAllow];
+    let (injection_signal, _latency_ms) =
+        injection::check(&input, injection_cfg).map_err(CheckerError::Check)?;
     let record = DecisionRecord {
         format: RECORD_FORMAT.to_string(),
         input_sha256: sha256_hex(input_bytes),
@@ -65,6 +80,7 @@ pub fn decide_with(
         reasons: reasons.clone(),
         signals: Signals {
             policy: policy_cfg.enabled.then(|| policy::check(&input, policy_cfg)),
+            injection: injection_signal,
             ..Signals::default()
         },
     };
@@ -90,6 +106,12 @@ mod tests {
     const INPUT: &str = include_str!("../../schemas/examples/checker-input.json");
     const VERDICT: &str = include_str!("../../schemas/examples/verdict.json");
     const RECORD: &str = include_str!("../../schemas/examples/decision-record.json");
+
+    const FIXTURE_BENIGN: &str = include_str!("../../schemas/fixtures/decision-record-benign.json");
+    const FIXTURE_INJECTION: &str = include_str!("../../schemas/fixtures/decision-record-attack-injection.json");
+    const FIXTURE_LOOKALIKE: &str = include_str!("../../schemas/fixtures/decision-record-attack-lookalike.json");
+    const FIXTURE_POLICY: &str = include_str!("../../schemas/fixtures/decision-record-attack-policy-violation.json");
+    const FIXTURE_HOLD: &str = include_str!("../../schemas/fixtures/decision-record-hold-unusual.json");
 
     #[test]
     fn verdict_binds_input() {
@@ -181,5 +203,32 @@ mod tests {
             Some(PolicySignal { ok: true, violations: vec![] })
         );
         assert_eq!(r.signals.injection, None);
+    }
+
+    #[test]
+    fn fixtures_parse() {
+        let b: DecisionRecord = serde_json::from_str(FIXTURE_BENIGN).unwrap();
+        assert_eq!(b.outcome, Outcome::Allow);
+        assert!(b.signals.policy.as_ref().unwrap().ok);
+        assert!(b.signals.injection.as_ref().unwrap().max_score < 0.1);
+        assert_eq!(b.signals.jev.as_ref().unwrap().backend, JevBackend::Jev);
+
+        let inj: DecisionRecord = serde_json::from_str(FIXTURE_INJECTION).unwrap();
+        assert_eq!(inj.outcome, Outcome::Block);
+        assert!(inj.signals.injection.as_ref().unwrap().max_score > 0.9);
+        assert!(inj.signals.melon.as_ref().unwrap().masked_call_matches);
+        assert_eq!(inj.reasons, vec![ReasonCode::InjectionHigh, ReasonCode::JevInjectionDriven]);
+
+        let look: DecisionRecord = serde_json::from_str(FIXTURE_LOOKALIKE).unwrap();
+        assert_eq!(look.outcome, Outcome::Block);
+        assert_eq!(look.signals.counterparty.as_ref().unwrap().lookalike_of.as_deref(), Some("hostco.testnet"));
+
+        let pol: DecisionRecord = serde_json::from_str(FIXTURE_POLICY).unwrap();
+        assert_eq!(pol.outcome, Outcome::Block);
+        assert!(!pol.signals.policy.as_ref().unwrap().ok);
+
+        let h: DecisionRecord = serde_json::from_str(FIXTURE_HOLD).unwrap();
+        assert_eq!(h.outcome, Outcome::Hold);
+        assert_eq!(h.reasons, vec![ReasonCode::UnusualForAgent]);
     }
 }
