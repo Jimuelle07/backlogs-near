@@ -54,8 +54,8 @@ Status: **Done** (merged and signed off by Jim), **In progress** (work merged or
 | A3 | Eval harness skeleton | Jesus | **Not started** | No branch or PR yet |
 | B1 | Policy rules check | Rc (pairs with Jim) | **In progress** | Merged in PR #3; awaiting Rc's review and Jim's sign-off; 4 reviewer follow-ups listed in PR #3 |
 | B2 | Nightly e2e script | Rc | **Not started** | No branch or PR yet |
-| C1 | results.json format + fixtures | paticolcol | **Not started** | No branch or PR yet |
-| C2 | Injection classifier | paticolcol | **Not started** | No branch or PR yet |
+| C1 | results.json format + fixtures | paticolcol | **In progress** | Implemented on branch `sprint1-paticolcol`: `schemas/results.schema.json`, example, and 5 signal fixtures; awaiting Jim's sign-off |
+| C2 | Injection classifier | paticolcol | **In progress** | Implemented on branch `sprint1-paticolcol`: `checker/src/injection.rs`, `classifier.py`, and `decide.rs` wiring; awaiting Jim's sign-off |
 | D1 | Landing page skeleton | Helena | **Not started** | No branch or PR yet |
 | E1 | Live receipts panel | Ace | **Not started** | No branch or PR yet |
 
@@ -79,8 +79,8 @@ Sprints 2–5: not started.
 | A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format) | Runs on the stub checker today | C1 format (fixture until then) | Jesus | Not started |
 | B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch. **2026-11-10: merged in PR #3 (checker/src/policy.rs): signals.policy filled; violation ids receiver_not_allowlisted, memo_too_long, memo_bad_chars, amount_invalid, amount_over_cap, amount_mismatch_request, amount_mismatch_invoice; config POLICY_ENABLED, POLICY_ALLOWLIST, POLICY_MAX_AMOUNT, POLICY_MAX_MEMO_CHARS; attack-fake-invoice-amount-inflation flagged; awaiting Rc's review and Jim's sign-off** | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | Rc (pairs with Jim) | In progress |
 | B2 | B | Backend | S | Nightly end-to-end script: one benign and one attack payment on testnet (human runs it) | Script plus expected output | — | Rc | Not started |
-| C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests | Schema and example committed; E3 and A3 can use them | — | paticolcol | Not started |
-| C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency | Score per item in the record; latency recorded | frozen `signals.injection` | paticolcol | Not started |
+| C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests | Schema and example committed; E3 and A3 can use them | — | paticolcol | In progress |
+| C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency | Score per item in the record; latency recorded | frozen `signals.injection` | paticolcol | In progress |
 | D1 | D | Frontend | M | Landing page skeleton: choose a static stack and host (must stay up through 2026-11-18, ideally 2026-11-25); sections: problem, how it works, NEAR's role, Jev's role, safety layers, demo, results, links | Deployed URL with draft copy | — | Helena | Not started |
 | E1 | E | Frontend | M | Live receipts panel: read-only calls to Guardian views over a public testnet RPC, explorer links, no wallet | Shows the existing testnet receipts | live testnet Guardian | Ace | Not started |
 

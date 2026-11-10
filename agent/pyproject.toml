@@ -21,6 +21,7 @@ firewall-demo = "firewall_agent.demo:main"
 firewall-relayer = "firewall_agent.relayer:main"
 firewall-setup-testnet = "firewall_agent.setup_testnet:main"
 firewall-jev-ping = "firewall_agent.jev_ping:main"
+firewall-classifier = "firewall_agent.classifier:main"
 
 [build-system]
 requires = ["hatchling"]

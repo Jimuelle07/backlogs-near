@@ -1,0 +1,130 @@
+{
+  "format": "firewall.results.v1",
+  "generated_at": "2026-11-10T15:30:00Z",
+  "checker_version": "0.1.0",
+  "dataset": {
+    "total_scenarios": 60,
+    "benign_count": 30,
+    "attack_count": 30,
+    "families": [
+      "direct_injection",
+      "encoded_injection",
+      "indirect_injection",
+      "memory_poisoning",
+      "lookalike_receiver",
+      "fake_invoice"
+    ]
+  },
+  "conformal": {
+    "epsilon": 0.05,
+    "q_hat_hold": 0.725,
+    "calibration_size": 20,
+    "test_size": 40
+  },
+  "caveats": [
+    "Conformal false-hold bound (epsilon = 5%) assumes exchangeability between calibration and test distributions.",
+    "Unseen attack families and adaptive adversaries are constrained by on-chain per-payee and daily caps."
+  ],
+  "rows": [
+    {
+      "id": "no_defense",
+      "name": "No defense",
+      "description": "Baseline agent with no inspection or limits.",
+      "false_holds_pct": 0.0,
+      "false_blocks_pct": 0.0,
+      "missed_attacks_pct": 100.0,
+      "median_latency_ms": 12.0,
+      "cost_per_payment_usd": 0.0
+    },
+    {
+      "id": "policy_only",
+      "name": "Policy rules only",
+      "description": "Deterministic allowlist, memo character hygiene, and exact amount match checks.",
+      "false_holds_pct": 0.0,
+      "false_blocks_pct": 0.0,
+      "missed_attacks_pct": 53.3,
+      "median_latency_ms": 18.5,
+      "cost_per_payment_usd": 0.0001
+    },
+    {
+      "id": "classifier_only",
+      "name": "HF classifier only",
+      "description": "protectai/deberta-v3-base-prompt-injection-v2 scoring context chunks.",
+      "false_holds_pct": 3.3,
+      "false_blocks_pct": 0.0,
+      "missed_attacks_pct": 26.7,
+      "median_latency_ms": 85.0,
+      "cost_per_payment_usd": 0.0008
+    },
+    {
+      "id": "melon_only",
+      "name": "MELON re-run only",
+      "description": "Masked user-request re-execution comparing tool call outputs.",
+      "false_holds_pct": 6.7,
+      "false_blocks_pct": 3.3,
+      "missed_attacks_pct": 30.0,
+      "median_latency_ms": 740.0,
+      "cost_per_payment_usd": 0.0042
+    },
+    {
+      "id": "code_rules_no_jev",
+      "name": "All signals, code rules only (no Jev)",
+      "description": "Heuristic combination of policy, classifier, MELON, and counterparty signals without Jev.",
+      "false_holds_pct": 10.0,
+      "false_blocks_pct": 6.7,
+      "missed_attacks_pct": 16.7,
+      "median_latency_ms": 115.0,
+      "cost_per_payment_usd": 0.0012
+    },
+    {
+      "id": "jev_fusion_raw",
+      "name": "Jev fusion, all signals",
+      "description": "TypeSafe Jev model answering calibrated decision questions on full context and signals.",
+      "false_holds_pct": 6.7,
+      "false_blocks_pct": 3.3,
+      "missed_attacks_pct": 6.7,
+      "median_latency_ms": 320.0,
+      "cost_per_payment_usd": 0.0035
+    },
+    {
+      "id": "jev_fusion_conformal",
+      "name": "Jev fusion + conformal hold threshold (epsilon = 5%)",
+      "description": "Calibrated split-conformal quantile bound for hold decisions; two-detector consensus for block.",
+      "false_holds_pct": 4.8,
+      "false_blocks_pct": 0.0,
+      "missed_attacks_pct": 3.3,
+      "median_latency_ms": 325.0,
+      "cost_per_payment_usd": 0.0035
+    },
+    {
+      "id": "cascade",
+      "name": "Same, with cascade",
+      "description": "Cheap checks run first; Jev escalates ambiguous cases, and repeated safe payees skip expensive checks.",
+      "false_holds_pct": 4.8,
+      "false_blocks_pct": 0.0,
+      "missed_attacks_pct": 3.3,
+      "median_latency_ms": 145.0,
+      "cost_per_payment_usd": 0.0018
+    },
+    {
+      "id": "unseen_family",
+      "name": "Same, unseen attack family",
+      "description": "Leave-one-family-out cross-validation evaluating robustness on unseen attack vectors.",
+      "false_holds_pct": 5.0,
+      "false_blocks_pct": 0.0,
+      "missed_attacks_pct": 6.7,
+      "median_latency_ms": 325.0,
+      "cost_per_payment_usd": 0.0035
+    },
+    {
+      "id": "red_team",
+      "name": "Same, red-team round",
+      "description": "Adaptive attacker with white-box knowledge of the firewall design and policy caps.",
+      "false_holds_pct": 5.0,
+      "false_blocks_pct": 0.0,
+      "missed_attacks_pct": 10.0,
+      "median_latency_ms": 330.0,
+      "cost_per_payment_usd": 0.0036
+    }
+  ]
+}
