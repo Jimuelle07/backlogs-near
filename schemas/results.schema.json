@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/backlogs-near/schemas/results.schema.json",
+  "title": "EvalResults",
+  "description": "Benchmark evaluation results across firewall defense configurations. Produced by the eval harness (A3, C4) and rendered on the landing page (E3, D4).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "format",
+    "checker_version",
+    "total",
+    "benign_total",
+    "attack_total",
+    "summary",
+    "latency_ms",
+    "configurations",
+    "by_family",
+    "caveats"
+  ],
+  "properties": {
+    "format": {
+      "const": "firewall.results.v1"
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO 8601 UTC timestamp of the evaluation run."
+    },
+    "checker_version": {
+      "$ref": "verdict.schema.json#/$defs/Semver"
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "benign_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "attack_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "benign_allow",
+        "false_holds",
+        "false_holds_pct",
+        "false_blocks",
+        "false_blocks_pct",
+        "missed_attacks",
+        "missed_attacks_pct"
+      ],
+      "properties": {
+        "benign_allow": { "type": "integer", "minimum": 0 },
+        "false_holds": { "type": "integer", "minimum": 0 },
+        "false_hold_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "false_holds_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "false_blocks": { "type": "integer", "minimum": 0 },
+        "false_block_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "false_blocks_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "missed_attacks": { "type": "integer", "minimum": 0 },
+        "missed_attack_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "missed_attacks_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "held_attacks": { "type": "integer", "minimum": 0 },
+        "blocked_attacks": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "latency_ms": {
+      "type": "object",
+      "required": ["p50_ms", "p95_ms", "mean_ms"],
+      "properties": {
+        "p50_ms": { "type": "number", "minimum": 0 },
+        "p95_ms": { "type": "number", "minimum": 0 },
+        "mean_ms": { "type": "number", "minimum": 0 },
+        "min_ms": { "type": "number", "minimum": 0 },
+        "max_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "cost_per_payment_usd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "configurations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "configuration",
+          "false_holds_pct",
+          "false_blocks_pct",
+          "missed_attacks_pct",
+          "median_latency_ms"
+        ],
+        "properties": {
+          "configuration": { "type": "string" },
+          "description": { "type": "string" },
+          "false_holds": { "type": "integer", "minimum": 0 },
+          "false_holds_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+          "false_blocks": { "type": "integer", "minimum": 0 },
+          "false_blocks_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+          "missed_attacks": { "type": "integer", "minimum": 0 },
+          "missed_attacks_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+          "median_latency_ms": { "type": "number", "minimum": 0 },
+          "p95_latency_ms": { "type": "number", "minimum": 0 },
+          "cost_per_payment_usd": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "by_family": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["total", "allow", "hold", "block"],
+        "properties": {
+          "total": { "type": "integer", "minimum": 0 },
+          "allow": { "type": "integer", "minimum": 0 },
+          "hold": { "type": "integer", "minimum": 0 },
+          "block": { "type": "integer", "minimum": 0 },
+          "missed_attacks": { "type": "integer", "minimum": 0 },
+          "missed_attacks_pct": { "type": "number", "minimum": 0, "maximum": 100 }
+        }
+      }
+    },
+    "caveats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cases": {
+      "type": "array"
+    }
+  }
+}
