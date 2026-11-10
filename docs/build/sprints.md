@@ -42,7 +42,7 @@ Rule for every lane: code against the frozen format and a fixture; swap in the r
 
 Sync points (the only moments lanes must meet): **end of Sprint 2** — testnet gate G2; **end of Sprint 3** — numbers frozen for the demo and site.
 
-## Progress (updated 2026-11-10)
+## Progress (updated 2026-11-11)
 
 Status: **Done** (merged and signed off by Jim), **In progress** (work merged or started, sign-off pending), **Not started** (no branch or PR on GitHub as of 2026-11-10); a backend task counts as done only after Jim signs it off.
 
@@ -50,14 +50,16 @@ Status: **Done** (merged and signed off by Jim), **In progress** (work merged or
 | --- | --- | --- | --- | --- |
 | A1 | OutLayer live | Jim | **Done** | merged to main (`5d47f5b`, `928b0aa`), signed off `4100de8`; [A1 log](#a1-log-done-2026-11-10) |
 | A1-FU | A1 follow-ups: full setup saves `GUARDIAN_PRIVATE_KEY`; keys saved before account creation | Jim | **Done** | PR #2 |
-| A2 | Record sink | Jesus | **In progress** | Implemented in `checker/src/sink.rs`; awaiting Jim's sign-off |
-| A3 | Eval harness skeleton | Jesus | **In progress** | Implemented in `agent/src/firewall_agent/eval.py` (`firewall-eval`); awaiting Jim's sign-off |
-| B1 | Policy rules check | Rc (pairs with Jim) | **In progress** | Merged in PR #3; Rc review completed ([b1-policy-review.md](b1-policy-review.md)); awaiting Jim's sign-off |
-| B2 | Nightly e2e script | Rc | **In progress** | Implemented in `agent/src/firewall_agent/nightly_e2e.py` (`firewall-nightly-e2e`), `scripts/nightly-e2e.*`; unit tests in `agent/tests/test_nightly_e2e.py`; expected output in [nightly-e2e.md](nightly-e2e.md); awaiting Jim's sign-off |
-| C1 | results.json format + fixtures | paticolcol | **In progress** | Implemented on branch `sprint1-paticolcol`: `schemas/results.schema.json`, example, and 5 signal fixtures; awaiting Jim's sign-off |
-| C2 | Injection classifier | paticolcol | **In progress** | Implemented on branch `sprint1-paticolcol`: `checker/src/injection.rs`, `classifier.py`, and `decide.rs` wiring; awaiting Jim's sign-off |
+| A2 | Record sink | Jesus | **Done** | Merged in PR #6: `checker/src/sink.rs`; signed off by Jim 2026-11-11 |
+| A3 | Eval harness skeleton | Jesus | **Done** | Merged in PR #6: `agent/src/firewall_agent/eval.py` (`firewall-eval`); signed off by Jim 2026-11-11 |
+| B1 | Policy rules check | Rc (pairs with Jim) | **Done** | Merged in PR #3; Rc review completed in PR #9 ([b1-policy-review.md](b1-policy-review.md)); signed off by Jim 2026-11-11 |
+| B2 | Nightly e2e script | Rc | **Done** | Merged in PR #9: `agent/src/firewall_agent/nightly_e2e.py` (`firewall-nightly-e2e`), `scripts/nightly-e2e.*`; unit tests in `agent/tests/test_nightly_e2e.py`; expected output in [nightly-e2e.md](nightly-e2e.md); signed off by Jim 2026-11-11 |
+| C1 | results.json format + fixtures | paticolcol | **Done** | Merged in PR #7: `schemas/results.schema.json`, `schemas/examples/results.json`, 5 fixtures in `schemas/fixtures/`; signed off by Jim 2026-11-11 |
+| C2 | Injection classifier | paticolcol | **Done** | Merged in PR #7: `checker/src/injection.rs` (wired in `decide.rs`), `agent/src/firewall_agent/classifier.py` (`firewall-classifier`); signed off by Jim 2026-11-11 |
 | D1 | Landing page skeleton | Helena | **Not started** | No branch or PR yet |
 | E1 | Live receipts panel | Ace | **Not started** | No branch or PR yet |
+
+Sign-off checks 2026-11-11 (A2, A3, B1, B2, C1, C2): `cargo test --workspace --no-fail-fast` passed (checker 49, guardian 91, tusdc 3; 2 ignored) after fixing the A2 test server in `checker/src/sink.rs` to read the full request body; `cd agent && uv run pytest` passed (158).
 
 Sprints 2–5: not started.
 
@@ -75,12 +77,12 @@ Sprints 2–5: not started.
 | ID | Lane | Track | Size | Task | Done when | Starts from | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | A1 | A | Backend | M | OutLayer live: build the checker wasm, upload and deploy, redeploy the Guardian, `set_checker_mode`, run one benign and one attack payment ([sdd.md §6](sdd.md) runbook; human signs). **Done, signed off by Jim 2026-11-10: benign receipt `paid` through OutLayer on `guardian-v2.jimuelle-firewall.testnet`, attack run (`paid`, `stub_allow`), open questions answered in [sdd.md §6 First testnet run](sdd.md#first-testnet-run-2026-11-09)** | Receipt `paid` through OutLayer; sdd §6 open questions answered (Text result shape, deposit, timeout delivery) | — | Jim | Done |
-| A2 | A | Backend | S | Record sink: checker POSTs each DecisionRecord to `DECISION_LOG_URL`; POST failure turns `allow` into `hold` ([sdd.md §7](sdd.md)). **2026-11-10: implemented in `checker/src/sink.rs` + wired in `checker/src/decide.rs`; awaiting Jim's sign-off** | Unit tests; records arrive from an OutLayer run once A1 is live | — | Jesus | In progress |
-| A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format). **2026-11-10: implemented in `agent/src/firewall_agent/eval.py` (`firewall-eval`) + `agent/tests/test_eval.py`; awaiting Jim's sign-off** | Runs on the stub checker today | C1 format (fixture until then) | Jesus | In progress |
-| B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch. **2026-11-10: merged in PR #3 (checker/src/policy.rs): signals.policy filled; violation ids receiver_not_allowlisted, memo_too_long, memo_bad_chars, amount_invalid, amount_over_cap, amount_mismatch_request, amount_mismatch_invoice; config POLICY_ENABLED, POLICY_ALLOWLIST, POLICY_MAX_AMOUNT, POLICY_MAX_MEMO_CHARS; attack-fake-invoice-amount-inflation flagged; awaiting Rc's review and Jim's sign-off** | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | Rc (pairs with Jim) | In progress |
-| B2 | B | Backend | S | Nightly end-to-end script: one benign and one attack payment on testnet (human runs it). **2026-11-10: implemented in `agent/src/firewall_agent/nightly_e2e.py` (`firewall-nightly-e2e`), `scripts/nightly-e2e.*`; unit tests in `agent/tests/test_nightly_e2e.py`; runbook & expected output in [nightly-e2e.md](nightly-e2e.md); awaiting Jim's sign-off** | Script plus expected output | — | Rc | In progress |
-| C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests | Schema and example committed; E3 and A3 can use them | — | paticolcol | In progress |
-| C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency | Score per item in the record; latency recorded | frozen `signals.injection` | paticolcol | In progress |
+| A2 | A | Backend | S | Record sink: checker POSTs each DecisionRecord to `DECISION_LOG_URL`; POST failure turns `allow` into `hold` ([sdd.md §7](sdd.md)). **Done, merged in PR #6 (`checker/src/sink.rs` + wired in `checker/src/decide.rs`); signed off by Jim 2026-11-11** | Unit tests; records arrive from an OutLayer run once A1 is live | — | Jesus | Done |
+| A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format). **Done, merged in PR #6 (`agent/src/firewall_agent/eval.py` (`firewall-eval`) + `agent/tests/test_eval.py`); signed off by Jim 2026-11-11** | Runs on the stub checker today | C1 format (fixture until then) | Jesus | Done |
+| B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch. **Done, merged in PR #3 (checker/src/policy.rs): signals.policy filled; violation ids receiver_not_allowlisted, memo_too_long, memo_bad_chars, amount_invalid, amount_over_cap, amount_mismatch_request, amount_mismatch_invoice; config POLICY_ENABLED, POLICY_ALLOWLIST, POLICY_MAX_AMOUNT, POLICY_MAX_MEMO_CHARS; attack-fake-invoice-amount-inflation flagged; Rc review in PR #9 ([b1-policy-review.md](b1-policy-review.md)); signed off by Jim 2026-11-11** | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | Rc (pairs with Jim) | Done |
+| B2 | B | Backend | S | Nightly end-to-end script: one benign and one attack payment on testnet (human runs it). **Done, merged in PR #9 (`agent/src/firewall_agent/nightly_e2e.py` (`firewall-nightly-e2e`), `scripts/nightly-e2e.*`; unit tests in `agent/tests/test_nightly_e2e.py`; runbook & expected output in [nightly-e2e.md](nightly-e2e.md)); signed off by Jim 2026-11-11** | Script plus expected output | — | Rc | Done |
+| C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests. **Done, merged in PR #7; signed off by Jim 2026-11-11** | Schema and example committed; E3 and A3 can use them | — | paticolcol | Done |
+| C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency. **Done, merged in PR #7; signed off by Jim 2026-11-11** | Score per item in the record; latency recorded | frozen `signals.injection` | paticolcol | Done |
 | D1 | D | Frontend | M | Landing page skeleton: choose a static stack and host (must stay up through 2026-11-18, ideally 2026-11-25); sections: problem, how it works, NEAR's role, Jev's role, safety layers, demo, results, links | Deployed URL with draft copy | — | Helena | Not started |
 | E1 | E | Frontend | M | Live receipts panel: read-only calls to Guardian views over a public testnet RPC, explorer links, no wallet | Shows the existing testnet receipts | live testnet Guardian | Ace | Not started |
 
