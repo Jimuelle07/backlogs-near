@@ -21,6 +21,7 @@ firewall-demo = "firewall_agent.demo:main"
 firewall-eval = "firewall_agent.eval:main"
 firewall-relayer = "firewall_agent.relayer:main"
 firewall-setup-testnet = "firewall_agent.setup_testnet:main"
+firewall-nightly-e2e = "firewall_agent.nightly_e2e:main"
 firewall-jev-ping = "firewall_agent.jev_ping:main"
 
 [build-system]
