@@ -3,7 +3,7 @@ import { DAILY_CAP } from "../config";
 
 // Static sample rows: a preview of the receipts view, not live data (the live panel is in #receipts).
 const ROWS = [
-  ["block", "h0stco.testnet", 180, "injection + lookalike payee"],
+  ["block", "hostc0.testnet", 180, "injection + lookalike payee"],
   ["allow", "hostco.testnet", 18, "known payee · usual amount"],
   ["hold", "supplier.testnet", 90, "above usual range · 1 h escrow"],
   ["allow", "dns-renew.testnet", 12.5, "allowlisted"],
