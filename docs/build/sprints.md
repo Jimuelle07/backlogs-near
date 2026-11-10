@@ -42,7 +42,7 @@ Rule for every lane: code against the frozen format and a fixture; swap in the r
 
 Sync points (the only moments lanes must meet): **end of Sprint 2** — testnet gate G2; **end of Sprint 3** — numbers frozen for the demo and site.
 
-## Progress (updated 2026-11-10)
+## Progress (updated 2026-11-11)
 
 Status: **Done** (merged and signed off by Jim), **In progress** (work merged or started, sign-off pending), **Not started** (no branch or PR on GitHub as of 2026-11-10); a backend task counts as done only after Jim signs it off.
 
@@ -50,16 +50,18 @@ Status: **Done** (merged and signed off by Jim), **In progress** (work merged or
 | --- | --- | --- | --- | --- |
 | A1 | OutLayer live | Jim | **Done** | merged to main (`5d47f5b`, `928b0aa`), signed off `4100de8`; [A1 log](#a1-log-done-2026-11-10) |
 | A1-FU | A1 follow-ups: full setup saves `GUARDIAN_PRIVATE_KEY`; keys saved before account creation | Jim | **Done** | PR #2 |
-| A2 | Record sink | Jesus | **In progress** | Implemented in `checker/src/sink.rs`; awaiting Jim's sign-off |
-| A3 | Eval harness skeleton | Jesus | **In progress** | Implemented in `agent/src/firewall_agent/eval.py` (`firewall-eval`); awaiting Jim's sign-off |
-| B1 | Policy rules check | Rc (pairs with Jim) | **In progress** | Merged in PR #3; Rc review completed ([b1-policy-review.md](b1-policy-review.md)); awaiting Jim's sign-off |
-| B2 | Nightly e2e script | Rc | **In progress** | Implemented in `agent/src/firewall_agent/nightly_e2e.py` (`firewall-nightly-e2e`), `scripts/nightly-e2e.*`; unit tests in `agent/tests/test_nightly_e2e.py`; expected output in [nightly-e2e.md](nightly-e2e.md); awaiting Jim's sign-off |
-| C1 | results.json format + fixtures | paticolcol | **In progress** | Implemented on branch `sprint1-paticolcol`: `schemas/results.schema.json`, example, and 5 signal fixtures; awaiting Jim's sign-off |
-| C2 | Injection classifier | paticolcol | **In progress** | Implemented on branch `sprint1-paticolcol`: `checker/src/injection.rs`, `classifier.py`, and `decide.rs` wiring; awaiting Jim's sign-off |
-| D1 | Landing page skeleton | Helena | **In progress** | `site/` built in PR #10 (branch `feat/d1-landing-page`) (Vite 5 + React 18 JSX, all sections with draft copy, E1 slot); not yet deployed (Cloudflare Pages, human) |
+| A2 | Record sink | Jesus | **Done** | Merged in PR #6: `checker/src/sink.rs`; signed off by Jim 2026-11-11 |
+| A3 | Eval harness skeleton | Jesus | **Done** | Merged in PR #6: `agent/src/firewall_agent/eval.py` (`firewall-eval`); signed off by Jim 2026-11-11 |
+| B1 | Policy rules check | Rc (pairs with Jim) | **Done** | Merged in PR #3; Rc review completed in PR #9 ([b1-policy-review.md](b1-policy-review.md)); signed off by Jim 2026-11-11 |
+| B2 | Nightly e2e script | Rc | **Done** | Merged in PR #9: `agent/src/firewall_agent/nightly_e2e.py` (`firewall-nightly-e2e`), `scripts/nightly-e2e.*`; unit tests in `agent/tests/test_nightly_e2e.py`; expected output in [nightly-e2e.md](nightly-e2e.md); signed off by Jim 2026-11-11 |
+| C1 | results.json format + fixtures | paticolcol | **Done** | Merged in PR #7: `schemas/results.schema.json`, `schemas/examples/results.json`, 5 fixtures in `schemas/fixtures/`; signed off by Jim 2026-11-11 |
+| C2 | Injection classifier | paticolcol | **Done** | Merged in PR #7: `checker/src/injection.rs` (wired in `decide.rs`), `agent/src/firewall_agent/classifier.py` (`firewall-classifier`); signed off by Jim 2026-11-11 |
+| D1 | Landing page skeleton | Helena | **In progress** | `site/` built in PR #14 (branch `feat/d1-landing-page`) (Vite 5 + React 18 JSX, all sections with draft copy, E1 slot); not yet deployed (Cloudflare Pages, human) |
 | E1 | Live receipts panel | Ace | **Not started** | No branch or PR yet |
 
-Sprints 2–5: not started.
+Sign-off checks 2026-11-11 (A2, A3, B1, B2, C1, C2): `cargo test --workspace --no-fail-fast` passed (checker 49, guardian 91, tusdc 3; 2 ignored) after fixing the A2 test server in `checker/src/sink.rs` to read the full request body; `cd agent && uv run pytest` passed (158).
+
+Sprints 2–3: planned (owners and due dates below), not started. Sprints 4–5: not started.
 
 ## Sprint 1 — due Tue 10 Nov, 23:59 PHT (15:59Z)
 
@@ -75,12 +77,12 @@ Sprints 2–5: not started.
 | ID | Lane | Track | Size | Task | Done when | Starts from | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | A1 | A | Backend | M | OutLayer live: build the checker wasm, upload and deploy, redeploy the Guardian, `set_checker_mode`, run one benign and one attack payment ([sdd.md §6](sdd.md) runbook; human signs). **Done, signed off by Jim 2026-11-10: benign receipt `paid` through OutLayer on `guardian-v2.jimuelle-firewall.testnet`, attack run (`paid`, `stub_allow`), open questions answered in [sdd.md §6 First testnet run](sdd.md#first-testnet-run-2026-11-09)** | Receipt `paid` through OutLayer; sdd §6 open questions answered (Text result shape, deposit, timeout delivery) | — | Jim | Done |
-| A2 | A | Backend | S | Record sink: checker POSTs each DecisionRecord to `DECISION_LOG_URL`; POST failure turns `allow` into `hold` ([sdd.md §7](sdd.md)). **2026-11-10: implemented in `checker/src/sink.rs` + wired in `checker/src/decide.rs`; awaiting Jim's sign-off** | Unit tests; records arrive from an OutLayer run once A1 is live | — | Jesus | In progress |
-| A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format). **2026-11-10: implemented in `agent/src/firewall_agent/eval.py` (`firewall-eval`) + `agent/tests/test_eval.py`; awaiting Jim's sign-off** | Runs on the stub checker today | C1 format (fixture until then) | Jesus | In progress |
-| B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch. **2026-11-10: merged in PR #3 (checker/src/policy.rs): signals.policy filled; violation ids receiver_not_allowlisted, memo_too_long, memo_bad_chars, amount_invalid, amount_over_cap, amount_mismatch_request, amount_mismatch_invoice; config POLICY_ENABLED, POLICY_ALLOWLIST, POLICY_MAX_AMOUNT, POLICY_MAX_MEMO_CHARS; attack-fake-invoice-amount-inflation flagged; awaiting Rc's review and Jim's sign-off** | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | Rc (pairs with Jim) | In progress |
-| B2 | B | Backend | S | Nightly end-to-end script: one benign and one attack payment on testnet (human runs it). **2026-11-10: implemented in `agent/src/firewall_agent/nightly_e2e.py` (`firewall-nightly-e2e`), `scripts/nightly-e2e.*`; unit tests in `agent/tests/test_nightly_e2e.py`; runbook & expected output in [nightly-e2e.md](nightly-e2e.md); awaiting Jim's sign-off** | Script plus expected output | — | Rc | In progress |
-| C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests | Schema and example committed; E3 and A3 can use them | — | paticolcol | In progress |
-| C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency | Score per item in the record; latency recorded | frozen `signals.injection` | paticolcol | In progress |
+| A2 | A | Backend | S | Record sink: checker POSTs each DecisionRecord to `DECISION_LOG_URL`; POST failure turns `allow` into `hold` ([sdd.md §7](sdd.md)). **Done, merged in PR #6 (`checker/src/sink.rs` + wired in `checker/src/decide.rs`); signed off by Jim 2026-11-11** | Unit tests; records arrive from an OutLayer run once A1 is live | — | Jesus | Done |
+| A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format). **Done, merged in PR #6 (`agent/src/firewall_agent/eval.py` (`firewall-eval`) + `agent/tests/test_eval.py`); signed off by Jim 2026-11-11** | Runs on the stub checker today | C1 format (fixture until then) | Jesus | Done |
+| B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch. **Done, merged in PR #3 (checker/src/policy.rs): signals.policy filled; violation ids receiver_not_allowlisted, memo_too_long, memo_bad_chars, amount_invalid, amount_over_cap, amount_mismatch_request, amount_mismatch_invoice; config POLICY_ENABLED, POLICY_ALLOWLIST, POLICY_MAX_AMOUNT, POLICY_MAX_MEMO_CHARS; attack-fake-invoice-amount-inflation flagged; Rc review in PR #9 ([b1-policy-review.md](b1-policy-review.md)); signed off by Jim 2026-11-11** | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | Rc (pairs with Jim) | Done |
+| B2 | B | Backend | S | Nightly end-to-end script: one benign and one attack payment on testnet (human runs it). **Done, merged in PR #9 (`agent/src/firewall_agent/nightly_e2e.py` (`firewall-nightly-e2e`), `scripts/nightly-e2e.*`; unit tests in `agent/tests/test_nightly_e2e.py`; runbook & expected output in [nightly-e2e.md](nightly-e2e.md)); signed off by Jim 2026-11-11** | Script plus expected output | — | Rc | Done |
+| C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests. **Done, merged in PR #7; signed off by Jim 2026-11-11** | Schema and example committed; E3 and A3 can use them | — | paticolcol | Done |
+| C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency. **Done, merged in PR #7; signed off by Jim 2026-11-11** | Score per item in the record; latency recorded | frozen `signals.injection` | paticolcol | Done |
 | D1 | D | Frontend | M | Landing page skeleton: choose a static stack and host (must stay up through 2026-11-18, ideally 2026-11-25); sections: problem, how it works, NEAR's role, Jev's role, safety layers, demo, results, links | Deployed URL with draft copy | — | Helena | Not started |
 | E1 | E | Frontend | M | Live receipts panel: read-only calls to Guardian views over a public testnet RPC, explorer links, no wallet | Shows the existing testnet receipts | live testnet Guardian | Ace | Not started |
 
@@ -124,34 +126,56 @@ Follow-ups, not scheduled:
 - Done in PR #2 (2026-11-10): full setup saves `GUARDIAN_PRIVATE_KEY` and `.env.example` lists it; both setup paths write every key (and the agent's function-call key) to `.env.testnet.pending` before using it, and a leftover pending file stops the next run.
 - `TYPESAFE_API_KEY` is already set. guardian-v2's mode still has `secrets_ref: null`, so once `decide()` calls Jev (C3), call `set_checker_mode` with `secrets_ref` `{profile, account_id}` so the checker receives the key.
 
-## Sprint 2
+## Sprint 2 — due Wed 11 Nov, 23:59 PHT (15:59Z)
 
-| ID | Lane | Track | Size | Task | Done when | Starts from | Owner |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| A4 | A | Backend | M | Contract: per-payee budgets; register the receiver with the token before `ft_transfer` (sdd §6 planned additions) | Unit tests; human redeploys | — | |
-| A5 | A | Backend | S | Unprotected-agent mode for demo step 3: plain agent with a full-access key pays the attack | Attack pays without the Guardian on testnet | — | |
-| B3 | B | Backend | M | Counterparty signals over RPC: account age, is-contract, code-hash change, prior payments, lookalike distance; agent behaviour profile; output `signals.counterparty` | `hostc0` flagged as lookalike of `hostco` | frozen `signals.counterparty` | |
-| B4 | B | Backend | S | Checker hardening: range-check Jev `confidence`/`score` and choice vs argmax, HTTPS-only base URL, no HTTP redirects, timeout budget fitted to OutLayer's limit | Tests; review findings closed | — | |
-| C3 | C | Backend | M | Jev fusion in `decide()`: build Jev `state` from signals and profile, ask the four questions, apply hold/block thresholds from checker config; block only when two detectors agree, at most one of them Jev | Stub allow removed; tests on C1 fixtures; real reason codes | C1 fixtures (real B1/C2/B3 outputs swap in as they land) | |
-| D2 | D | Frontend | M | "How it works" section: architecture diagram (agent → Guardian → checker → verdict → transfer), allow/hold/block, amount-safety table | Section live; copy approved by a backend owner | D1 | |
-| D3 | D | Frontend | S | Demo storyboard: shot list for the ~2-minute script ([idea.md Demo script](idea.md#demo-script-about-2-minutes)), numbers slide, 20-second GIF plan | Storyboard approved | — | |
-| E2 | E | Frontend | M | Receipt detail view: verdict, reason codes, input and record hashes, explorer link, hold countdown | Works for paid, held, refused and timed-out receipts | E1 | |
-| E3 | E | Frontend | S | Results section rendering `results.json` (table plus a simple chart) with the stated caveats (exchangeability, known attack families) | Renders the C1 example | C1 example | |
-| G2 | All | — | — | **Gate:** on testnet through the real checker, one benign payment pays and one attack is blocked | Receipts show both | C3, A1 or A0 | |
+Goal: gate G2. Frontend first finishes the Sprint 1 carry-over (D1 In progress in PR #14, E1 Not started), since D2 and E2 build on them.
 
-## Sprint 3
+| Who | Role this sprint |
+| --- | --- |
+| Jim (backend lead) | Tests and signs off every backend task; A4 contract change (signs the redeploy); pairs with paticolcol on C3; after C3, calls `set_checker_mode` with `secrets_ref` and runs G2 (signs) |
+| Rc | B3 counterparty signals |
+| paticolcol | C3 Jev fusion (pairs with Jim) |
+| Jesus | A5 unprotected-agent mode, then B4 checker hardening (lane B overflow; B3 alone fills Rc's sprint) |
+| Helena (frontend lead) | Finish D1 first; then D2 "How it works" and D3 demo storyboard; reviews E2, E3 |
+| Ace | Finish E1 first; then E2 receipt detail view and E3 results section on the C1 example |
 
-| ID | Lane | Track | Size | Task | Done when | Starts from | Owner |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| A6 | A | Backend | M | Grow the dataset to about 150 benign / 150 attack (templated variants plus AgentDojo-derived cases, licences checked); include amount-inflation, replay and budget-grooming cases | Balance test passes; families balanced across splits | — | |
-| A7 | A | Backend | S | Red-team round (lane A did not build the checks): attack with full knowledge of the design; log what got through and the fixes | Red-team row filled; fixes filed to lane B | G2 | |
-| B5 | B | Backend | M | Cascade: cheap checks first, Jev escalates ambiguous cases, trusted repeat payments skip expensive checks | Cost and latency logged per path | C3 | |
-| B6 | B | Backend | S | README draft for the AI screeners ([AGENTS.md §9](../../AGENTS.md#9-readme-rules-for-judges)): what, problem, NEAR's role in the first paragraph, numbered "do X → see Y" steps, dry-run, every third-party tool (Jev included), disclosures, function-call key caveat | Checklist in AGENTS.md §9 met except results | — | |
-| C4 | C | Backend | M | Full eval run: every check on/off, fill the results table ([idea.md](idea.md#evaluation-and-calibration)), cost and latency, write `results.json` | Every row filled; JSON committed | A3, A6, C3 | |
-| C5 | C | Backend | M | Conformal hold threshold at ε = 5% on the pooled calibration set; unseen-family rotation through all six families | False-hold rate reported against the target | C4 | |
-| D4 | D | Frontend | S | Results section switched to the real `results.json` | Shows the committed numbers | C4 (E3 already built) | |
-| D5 | D | Frontend | S | Copy pass with a backend owner: every claim on the site matches the README and the numbers | No unsupported claims left | B6 | |
-| E4 | E | Frontend | M | Demo assets: 20-second GIF of the blocked attack, numbers slide from `results.json` | Assets in the repo | D3 | |
+| ID | Lane | Track | Size | Task | Done when | Starts from | Owner | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A4 | A | Backend | M | Contract: per-payee budgets; register the receiver with the token before `ft_transfer` (sdd §6 planned additions) | Unit tests; human redeploys | — | Jim | Not started |
+| A5 | A | Backend | S | Unprotected-agent mode for demo step 3: plain agent with a full-access key pays the attack | Attack pays without the Guardian on testnet | — | Jesus | Not started |
+| B3 | B | Backend | M | Counterparty signals over RPC: account age, is-contract, code-hash change, prior payments, lookalike distance; agent behaviour profile; output `signals.counterparty` | `hostc0` flagged as lookalike of `hostco` | frozen `signals.counterparty` | Rc | Not started |
+| B4 | B | Backend | S | Checker hardening: range-check Jev `confidence`/`score` and choice vs argmax, HTTPS-only base URL, no HTTP redirects, timeout budget fitted to OutLayer's limit | Tests; review findings closed | — | Jesus | Not started |
+| C3 | C | Backend | M | Jev fusion in `decide()`: build Jev `state` from signals and profile, ask the four questions, apply hold/block thresholds from checker config; block only when two detectors agree, at most one of them Jev | Stub allow removed; tests on C1 fixtures; real reason codes | C1 fixtures (real B1/C2/B3 outputs swap in as they land) | paticolcol (pairs with Jim) | Not started |
+| D2 | D | Frontend | M | "How it works" section: architecture diagram (agent → Guardian → checker → verdict → transfer), allow/hold/block, amount-safety table | Section live; copy approved by a backend owner | D1 | Helena | Not started |
+| D3 | D | Frontend | S | Demo storyboard: shot list for the ~2-minute script ([idea.md Demo script](idea.md#demo-script-about-2-minutes)), numbers slide, 20-second GIF plan | Storyboard approved | — | Helena | Not started |
+| E2 | E | Frontend | M | Receipt detail view: verdict, reason codes, input and record hashes, explorer link, hold countdown | Works for paid, held, refused and timed-out receipts | E1 | Ace | Not started |
+| E3 | E | Frontend | S | Results section rendering `results.json` (table plus a simple chart) with the stated caveats (exchangeability, known attack families) | Renders the C1 example | C1 example | Ace | Not started |
+| G2 | All | — | — | **Gate:** on testnet through the real checker, one benign payment pays and one attack is blocked | Receipts show both | C3, A1 or A0 | Jim (signs) | Not started |
+
+## Sprint 3 — due Thu 12 Nov, 23:59 PHT (15:59Z)
+
+Goal: numbers frozen for the demo and site (sync point at the end of this sprint).
+
+| Who | Role this sprint |
+| --- | --- |
+| Jim (backend lead) | Tests and signs off every backend task; pairs with paticolcol on C5 |
+| Rc | B5 cascade, then B6 README draft |
+| paticolcol | C4 full eval run, then C5 conformal calibration (pairs with Jim) |
+| Jesus | A6 dataset to 150/150 first (C4 needs it), then A7 red-team round (Jesus did not build the checks) |
+| Helena (frontend lead) | D4 results section on the real `results.json`, D5 copy pass with Rc (B6 owner); reviews E4 |
+| Ace | E4 demo assets: GIF and numbers slide |
+
+| ID | Lane | Track | Size | Task | Done when | Starts from | Owner | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A6 | A | Backend | M | Grow the dataset to about 150 benign / 150 attack (templated variants plus AgentDojo-derived cases, licences checked); include amount-inflation, replay and budget-grooming cases | Balance test passes; families balanced across splits | — | Jesus | Not started |
+| A7 | A | Backend | S | Red-team round (lane A did not build the checks): attack with full knowledge of the design; log what got through and the fixes | Red-team row filled; fixes filed to lane B | G2 | Jesus | Not started |
+| B5 | B | Backend | M | Cascade: cheap checks first, Jev escalates ambiguous cases, trusted repeat payments skip expensive checks | Cost and latency logged per path | C3 | Rc | Not started |
+| B6 | B | Backend | S | README draft for the AI screeners ([AGENTS.md §9](../../AGENTS.md#9-readme-rules-for-judges)): what, problem, NEAR's role in the first paragraph, numbered "do X → see Y" steps, dry-run, every third-party tool (Jev included), disclosures, function-call key caveat | Checklist in AGENTS.md §9 met except results | — | Rc | Not started |
+| C4 | C | Backend | M | Full eval run: every check on/off, fill the results table ([idea.md](idea.md#evaluation-and-calibration)), cost and latency, write `results.json` | Every row filled; JSON committed | A3, A6, C3 | paticolcol | Not started |
+| C5 | C | Backend | M | Conformal hold threshold at ε = 5% on the pooled calibration set; unseen-family rotation through all six families | False-hold rate reported against the target | C4 | paticolcol (pairs with Jim) | Not started |
+| D4 | D | Frontend | S | Results section switched to the real `results.json` | Shows the committed numbers | C4 (E3 already built) | Helena | Not started |
+| D5 | D | Frontend | S | Copy pass with a backend owner: every claim on the site matches the README and the numbers | No unsupported claims left | B6 | Helena (with Rc) | Not started |
+| E4 | E | Frontend | M | Demo assets: 20-second GIF of the blocked attack, numbers slide from `results.json` | Assets in the repo | D3 | Ace | Not started |
 
 ## Sprint 4
 
