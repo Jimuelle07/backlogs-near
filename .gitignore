@@ -7,6 +7,9 @@ dist/
 out/
 coverage/
 target/
+node_modules/
+test-results/
+playwright-report/
 neardev/
 
 # Secrets

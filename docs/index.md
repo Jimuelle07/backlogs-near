@@ -13,6 +13,8 @@ Map of every document in this repo: what it is, and when to read it.
 
 ## Docs
 
+Frontend E1: [web/README.md](../web/README.md) — React receipts panel setup, public testnet configuration, verification and landing-page integration.
+
 | File | What it is | Read when |
 | --- | --- | --- |
 | [../AGENTS.md](../AGENTS.md) | Agent rules: deadlines, human-only actions, stack, integration rules | First, before any change |

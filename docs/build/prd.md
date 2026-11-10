@@ -106,5 +106,5 @@ Remaining work is cut into sprints: [sprints.md](sprints.md).
 
 - Can the 86M Prompt Guard classifier run inside the OutLayer runtime, or does it need NEAR AI Cloud / a pinned service?
 - Will Hugging Face grant gated access to Llama-Prompt-Guard-2-86M? (Default: protectai/deberta-v3-base-prompt-injection-v2.)
-- Receipt page technology (decided Fri 13 Nov).
+- Receipt panel technology: React + Vite (`web/`), chosen by Ace on 2026-11-11; shared landing-page integration and hosting remain D1/E5 work.
 - Human-only submission fields: final project name, tracks, NEAR payout wallet, Q-015 disclosure, X post.

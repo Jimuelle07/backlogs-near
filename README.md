@@ -39,6 +39,12 @@ Dry-run, no keys or funds. From the repo root:
 
 ## Run locally
 
+### Read-only receipts panel (React)
+
+From `web/`, run `npm ci` then `npm run dev` → open the printed local URL to see live receipts from `guardian-v2.jimuelle-firewall.testnet`, with status filters, exact token amounts and testnet explorer links. No wallet or keys are needed. See [web/README.md](web/README.md) for configuration, checks and production build instructions.
+
+### Agent and contracts
+
 Prerequisites: Rust 1.94+, `rustup target add wasm32-wasip2`, cargo-near 0.21.1 (`cargo install cargo-near --version 0.21.1 --locked --no-default-features`; on Windows use the [release binary](https://github.com/near/cargo-near/releases/tag/cargo-near-v0.21.1), since the source build needs a full Perl for OpenSSL), [uv](https://docs.astral.sh/uv/).
 
 ```
@@ -74,6 +80,9 @@ Expected: the Guardian receipt reaches `paid` and the hostco tUSDC balance rises
 - [Schemas](schemas/): frozen JSON formats with examples.
 
 ## Built with / third-party
+
+- React, React DOM, Vite and `@vitejs/plugin-react`: read-only receipts frontend; Playwright: browser tests
+- Google Fonts (DM Sans, Manrope), NEARBlocks testnet explorer, FastNEAR public testnet RPC: frontend fonts and public data links
 
 - [TypeSafe Jev](https://typesafe.ai): calibrated typed decisions, raw HTTPS
 - [NEAR AI Cloud](https://cloud.near.ai): LLM for agent tool calls, masked re-run and decision fallback

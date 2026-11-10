@@ -42,7 +42,7 @@ Rule for every lane: code against the frozen format and a fixture; swap in the r
 
 Sync points (the only moments lanes must meet): **end of Sprint 2** — testnet gate G2; **end of Sprint 3** — numbers frozen for the demo and site.
 
-## Progress (updated 2026-11-10)
+## Progress (E1 updated 2026-11-11; other statuses 2026-11-10)
 
 Status: **Done** (merged and signed off by Jim), **In progress** (work merged or started, sign-off pending), **Not started** (no branch or PR on GitHub as of 2026-11-10); a backend task counts as done only after Jim signs it off.
 
@@ -57,7 +57,7 @@ Status: **Done** (merged and signed off by Jim), **In progress** (work merged or
 | C1 | results.json format + fixtures | paticolcol | **Not started** | No branch or PR yet |
 | C2 | Injection classifier | paticolcol | **Not started** | No branch or PR yet |
 | D1 | Landing page skeleton | Helena | **Not started** | No branch or PR yet |
-| E1 | Live receipts panel | Ace | **Not started** | No branch or PR yet |
+| E1 | Live receipts panel | Ace | **In progress** | React + Vite implementation in `web/` on `sprint1-ace` (2026-11-11); 8 unit tests, 5 Edge browser checks (including live RPC/CORS and mobile), production build pass; current Guardian's 3 receipts verified; Helena's review pending; see [web/README.md](../../web/README.md) |
 
 Sprints 2–5: not started.
 
@@ -70,7 +70,7 @@ Sprints 2–5: not started.
 | paticolcol | C1 results format and fixtures first (unblocks A3 and frontend), then C2 classifier |
 | Jesus | A2 record sink, A3 eval harness skeleton |
 | Helena (frontend lead) | D1 landing page skeleton; picks the stack and host for both frontend lanes; reviews E1 |
-| Ace | E1 live receipts panel (uses Helena's stack choice) |
+| Ace | E1 live receipts panel (React + Vite, explicitly chosen by Ace on 2026-11-11; coordinate landing-page integration with Helena) |
 
 | ID | Lane | Track | Size | Task | Done when | Starts from | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -82,7 +82,7 @@ Sprints 2–5: not started.
 | C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests | Schema and example committed; E3 and A3 can use them | — | paticolcol | Not started |
 | C2 | C | Backend | M | Injection classifier: host `protectai/deberta-v3-base-prompt-injection-v2`, checker client scores each context item into `signals.injection`, measure latency | Score per item in the record; latency recorded | frozen `signals.injection` | paticolcol | Not started |
 | D1 | D | Frontend | M | Landing page skeleton: choose a static stack and host (must stay up through 2026-11-18, ideally 2026-11-25); sections: problem, how it works, NEAR's role, Jev's role, safety layers, demo, results, links | Deployed URL with draft copy | — | Helena | Not started |
-| E1 | E | Frontend | M | Live receipts panel: read-only calls to Guardian views over a public testnet RPC, explorer links, no wallet | Shows the existing testnet receipts | live testnet Guardian | Ace | Not started |
+| E1 | E | Frontend | M | Live receipts panel: read-only calls to Guardian views over a public testnet RPC, explorer links, no wallet. **2026-11-11: React + Vite implementation in `web/`, with filtering, pagination, refresh and exact token amounts; Helena's review pending.** | Shows the existing testnet receipts | live testnet Guardian | Ace | In progress |
 
 **Decision at the end of Sprint 1:** if A1 is not working, lane A replaces A4 with **A0: HTTPS + signed-verdict fallback mode** ([idea.md Risks](idea.md#risks-and-fallbacks)) in Sprint 2 and A4 moves to Sprint 3.
 
