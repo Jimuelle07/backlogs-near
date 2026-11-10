@@ -50,8 +50,8 @@ Status: **Done** (merged and signed off by Jim), **In progress** (work merged or
 | --- | --- | --- | --- | --- |
 | A1 | OutLayer live | Jim | **Done** | merged to main (`5d47f5b`, `928b0aa`), signed off `4100de8`; [A1 log](#a1-log-done-2026-11-10) |
 | A1-FU | A1 follow-ups: full setup saves `GUARDIAN_PRIVATE_KEY`; keys saved before account creation | Jim | **Done** | PR #2 |
-| A2 | Record sink | Jesus | **Not started** | No branch or PR yet |
-| A3 | Eval harness skeleton | Jesus | **Not started** | No branch or PR yet |
+| A2 | Record sink | Jesus | **In progress** | Implemented in `checker/src/sink.rs`; awaiting Jim's sign-off |
+| A3 | Eval harness skeleton | Jesus | **In progress** | Implemented in `agent/src/firewall_agent/eval.py` (`firewall-eval`); awaiting Jim's sign-off |
 | B1 | Policy rules check | Rc (pairs with Jim) | **In progress** | Merged in PR #3; awaiting Rc's review and Jim's sign-off; 4 reviewer follow-ups listed in PR #3 |
 | B2 | Nightly e2e script | Rc | **Not started** | No branch or PR yet |
 | C1 | results.json format + fixtures | paticolcol | **Not started** | No branch or PR yet |
@@ -75,8 +75,8 @@ Sprints 2–5: not started.
 | ID | Lane | Track | Size | Task | Done when | Starts from | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | A1 | A | Backend | M | OutLayer live: build the checker wasm, upload and deploy, redeploy the Guardian, `set_checker_mode`, run one benign and one attack payment ([sdd.md §6](sdd.md) runbook; human signs). **Done, signed off by Jim 2026-11-10: benign receipt `paid` through OutLayer on `guardian-v2.jimuelle-firewall.testnet`, attack run (`paid`, `stub_allow`), open questions answered in [sdd.md §6 First testnet run](sdd.md#first-testnet-run-2026-11-09)** | Receipt `paid` through OutLayer; sdd §6 open questions answered (Text result shape, deposit, timeout delivery) | — | Jim | Done |
-| A2 | A | Backend | S | Record sink: checker POSTs each DecisionRecord to `DECISION_LOG_URL`; POST failure turns `allow` into `hold` ([sdd.md §7](sdd.md)) | Unit tests; records arrive from an OutLayer run once A1 is live | — | Jesus | Not started |
-| A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format) | Runs on the stub checker today | C1 format (fixture until then) | Jesus | Not started |
+| A2 | A | Backend | S | Record sink: checker POSTs each DecisionRecord to `DECISION_LOG_URL`; POST failure turns `allow` into `hold` ([sdd.md §7](sdd.md)). **2026-11-10: implemented in `checker/src/sink.rs` + wired in `checker/src/decide.rs`; awaiting Jim's sign-off** | Unit tests; records arrive from an OutLayer run once A1 is live | — | Jesus | In progress |
+| A3 | A | Backend | S | Eval harness skeleton: run the checker binary over every scenario, label vs. verdict, write `results.json` (C1 format). **2026-11-10: implemented in `agent/src/firewall_agent/eval.py` (`firewall-eval`) + `agent/tests/test_eval.py`; awaiting Jim's sign-off** | Runs on the stub checker today | C1 format (fixture until then) | Jesus | In progress |
 | B1 | B | Backend | M | Policy rules check: allowlist, memo and amount sanity, amount must match the user request or invoice; output the frozen `signals.policy` shape; config switch. **2026-11-10: merged in PR #3 (checker/src/policy.rs): signals.policy filled; violation ids receiver_not_allowlisted, memo_too_long, memo_bad_chars, amount_invalid, amount_over_cap, amount_mismatch_request, amount_mismatch_invoice; config POLICY_ENABLED, POLICY_ALLOWLIST, POLICY_MAX_AMOUNT, POLICY_MAX_MEMO_CHARS; attack-fake-invoice-amount-inflation flagged; awaiting Rc's review and Jim's sign-off** | Unit tests; `attack-fake-invoice-amount-inflation` flagged | frozen `signals.policy` | Rc (pairs with Jim) | In progress |
 | B2 | B | Backend | S | Nightly end-to-end script: one benign and one attack payment on testnet (human runs it) | Script plus expected output | — | Rc | Not started |
 | C1 | C | Backend | S | Freeze `results.json` (schema + example under `schemas/`) and add fixture DecisionRecords with filled signals for fusion tests | Schema and example committed; E3 and A3 can use them | — | paticolcol | Not started |
