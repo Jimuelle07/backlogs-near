@@ -141,13 +141,13 @@ export default function App() {
                   <p className="incident"><b>May 2026</b>About $150,000 drained<span>A Morse-code reply on X made Grok's linked wallet pay out DRB</span></p>
                   <p className="incident"><b>Keys</b>Full-access key on the agent host<span>The agent can move every token it holds</span></p>
                   <p className="incident"><b>Checks</b>Skipped<span>The guardrail ran on the compromised host</span></p>
-                  <p className="incident"><b>Payee</b>Lookalike account<span>h0stco instead of hostco, two days old</span></p>
+                  <p className="incident"><b>Payee</b>Lookalike account<span>hostc0 instead of hostco, two days old</span></p>
                 </div>
               </div>
               <div className="calm">
                 <span className="side-tag">With</span>
                 <h3>Paying through the Guardian</h3>
-                <span className="okchip"><Check size={18} aria-hidden="true" />Blocked 180.00 tUSDC to h0stco</span>
+                <span className="okchip"><Check size={18} aria-hidden="true" />Blocked 180.00 tUSDC to hostc0</span>
                 <p>
                   The agent can only ask. The contract holds the funds, waits for the checker's verdict, and pays only
                   on allow, inside hard caps.
