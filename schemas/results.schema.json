@@ -4,15 +4,18 @@
   "title": "EvalResults",
   "description": "Benchmark evaluation results across firewall defense configurations. Produced by the eval harness (A3, C4) and rendered on the landing page (E3, D4).",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": [
     "format",
-    "generated_at",
     "checker_version",
-    "dataset",
-    "conformal",
-    "caveats",
-    "rows"
+    "total",
+    "benign_total",
+    "attack_total",
+    "summary",
+    "latency_ms",
+    "configurations",
+    "by_family",
+    "caveats"
   ],
   "properties": {
     "format": {
@@ -25,63 +28,98 @@
     "checker_version": {
       "$ref": "verdict.schema.json#/$defs/Semver"
     },
-    "dataset": {
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "benign_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "attack_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "summary": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
-        "total_scenarios",
-        "benign_count",
-        "attack_count",
-        "families"
+        "benign_allow",
+        "false_holds",
+        "false_holds_pct",
+        "false_blocks",
+        "false_blocks_pct",
+        "missed_attacks",
+        "missed_attacks_pct"
       ],
       "properties": {
-        "total_scenarios": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "benign_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "attack_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "families": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "benign_allow": { "type": "integer", "minimum": 0 },
+        "false_holds": { "type": "integer", "minimum": 0 },
+        "false_hold_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "false_holds_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "false_blocks": { "type": "integer", "minimum": 0 },
+        "false_block_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "false_blocks_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "missed_attacks": { "type": "integer", "minimum": 0 },
+        "missed_attack_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "missed_attacks_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "held_attacks": { "type": "integer", "minimum": 0 },
+        "blocked_attacks": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "latency_ms": {
+      "type": "object",
+      "required": ["p50_ms", "p95_ms", "mean_ms"],
+      "properties": {
+        "p50_ms": { "type": "number", "minimum": 0 },
+        "p95_ms": { "type": "number", "minimum": 0 },
+        "mean_ms": { "type": "number", "minimum": 0 },
+        "min_ms": { "type": "number", "minimum": 0 },
+        "max_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "cost_per_payment_usd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "configurations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "configuration",
+          "false_holds_pct",
+          "false_blocks_pct",
+          "missed_attacks_pct",
+          "median_latency_ms"
+        ],
+        "properties": {
+          "configuration": { "type": "string" },
+          "description": { "type": "string" },
+          "false_holds": { "type": "integer", "minimum": 0 },
+          "false_holds_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+          "false_blocks": { "type": "integer", "minimum": 0 },
+          "false_blocks_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+          "missed_attacks": { "type": "integer", "minimum": 0 },
+          "missed_attacks_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+          "median_latency_ms": { "type": "number", "minimum": 0 },
+          "p95_latency_ms": { "type": "number", "minimum": 0 },
+          "cost_per_payment_usd": { "type": "number", "minimum": 0 }
         }
       }
     },
-    "conformal": {
+    "by_family": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "epsilon",
-        "q_hat_hold",
-        "calibration_size",
-        "test_size"
-      ],
-      "properties": {
-        "epsilon": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "q_hat_hold": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "calibration_size": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "test_size": {
-          "type": "integer",
-          "minimum": 1
+      "additionalProperties": {
+        "type": "object",
+        "required": ["total", "allow", "hold", "block"],
+        "properties": {
+          "total": { "type": "integer", "minimum": 0 },
+          "allow": { "type": "integer", "minimum": 0 },
+          "hold": { "type": "integer", "minimum": 0 },
+          "block": { "type": "integer", "minimum": 0 },
+          "missed_attacks": { "type": "integer", "minimum": 0 },
+          "missed_attacks_pct": { "type": "number", "minimum": 0, "maximum": 100 }
         }
       }
     },
@@ -91,61 +129,8 @@
         "type": "string"
       }
     },
-    "rows": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "$ref": "#/$defs/ResultRow"
-      }
-    }
-  },
-  "$defs": {
-    "ResultRow": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "name",
-        "false_holds_pct",
-        "false_blocks_pct",
-        "missed_attacks_pct",
-        "median_latency_ms",
-        "cost_per_payment_usd"
-      ],
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
-        "false_holds_pct": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 100
-        },
-        "false_blocks_pct": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 100
-        },
-        "missed_attacks_pct": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 100
-        },
-        "median_latency_ms": {
-          "type": "number",
-          "minimum": 0
-        },
-        "cost_per_payment_usd": {
-          "type": "number",
-          "minimum": 0
-        }
-      }
+    "cases": {
+      "type": "array"
     }
   }
 }

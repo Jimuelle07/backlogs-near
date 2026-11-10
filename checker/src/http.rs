@@ -1,4 +1,4 @@
-//! The only module that opens sockets: a blocking JSON POST with a bearer token.
+//! The only module that opens sockets: a blocking JSON POST with an optional bearer token.
 //! Native builds use `ureq`; `wasm32-wasip2` uses `wasi-http-client`.
 use std::fmt;
 use std::time::Duration;
@@ -26,8 +26,8 @@ impl fmt::Display for HttpError {
 
 impl std::error::Error for HttpError {}
 
-/// POST `body` as JSON with `Authorization: Bearer {bearer}`. Non-2xx statuses are
-/// returned as `Ok`; only transport failures and timeouts are errors.
+/// POST `body` as JSON with `Authorization: Bearer {bearer}` (omitted when `bearer` is empty).
+/// Non-2xx statuses are returned as `Ok`; only transport failures and timeouts are errors.
 ///
 /// Native: `timeout` bounds the whole request. WASI: only a connect timeout exists;
 /// OutLayer's 60 s execution cap bounds the rest.
@@ -42,12 +42,13 @@ pub fn post_json(url: &str, bearer: &str, body: &str, timeout: Duration) -> Resu
         ureq::Error::Timeout(_) => HttpError::Timeout,
         other => HttpError::Transport(other.to_string()),
     };
-    let mut resp = agent
-        .post(url)
-        .header("Authorization", format!("Bearer {bearer}"))
-        .header("Content-Type", "application/json")
-        .send(body)
-        .map_err(map_err)?;
+    let req = agent.post(url).header("Content-Type", "application/json");
+    let req = if bearer.is_empty() {
+        req
+    } else {
+        req.header("Authorization", format!("Bearer {bearer}"))
+    };
+    let mut resp = req.send(body).map_err(map_err)?;
     let status = resp.status().as_u16();
     let body = resp.body_mut().read_to_string().map_err(map_err)?;
     Ok(HttpResponse { status, body })
@@ -57,11 +58,16 @@ pub fn post_json(url: &str, bearer: &str, body: &str, timeout: Duration) -> Resu
 /// execution cap bounds the rest of the request.
 #[cfg(target_os = "wasi")]
 pub fn post_json(url: &str, bearer: &str, body: &str, timeout: Duration) -> Result<HttpResponse, HttpError> {
-    let resp = wasi_http_client::Client::new()
+    let req = wasi_http_client::Client::new()
         .post(url)
-        .header("Authorization", format!("Bearer {bearer}"))
         .header("Content-Type", "application/json")
-        .connect_timeout(timeout)
+        .connect_timeout(timeout);
+    let req = if bearer.is_empty() {
+        req
+    } else {
+        req.header("Authorization", format!("Bearer {bearer}"))
+    };
+    let resp = req
         .body(body.as_bytes())
         .send()
         .map_err(|e| HttpError::Transport(e.to_string()))?;

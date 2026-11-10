@@ -1,6 +1,7 @@
 use crate::formats::*;
 use crate::injection::{self, InjectionConfig};
 use crate::policy::{self, PolicyConfig};
+use crate::sink::{self, SinkConfig};
 use sha2::{Digest, Sha256};
 use std::fmt;
 
@@ -27,7 +28,7 @@ impl fmt::Display for CheckerError {
 
 impl std::error::Error for CheckerError {}
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
@@ -37,11 +38,16 @@ pub fn record_bytes(record: &DecisionRecord) -> Result<Vec<u8>, CheckerError> {
 }
 
 /// Verdict is still the stub allow (fusion is C3); `signals.policy` and `signals.injection` are real checks.
-/// Config comes from the environment (`POLICY_*`, `INJECTION_*`, `CLASSIFIER_URL`).
+/// Policy config comes from the environment (`POLICY_*`), injection config from (`INJECTION_*`, `CLASSIFIER_URL`),
+/// and when `DECISION_LOG_URL` is set the record is POSTed to the sink (POST failure downgrades `allow` to `hold`).
 pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerError> {
     let policy_cfg = PolicyConfig::from_env().map_err(CheckerError::Config)?;
     let injection_cfg = InjectionConfig::from_env().map_err(CheckerError::Config)?;
-    decide_with_configs(input_bytes, &policy_cfg, &injection_cfg)
+    let sink_cfg = SinkConfig::from_env();
+    let (mut verdict, mut record) =
+        decide_with_configs(input_bytes, &policy_cfg, &injection_cfg)?;
+    sink::deliver_with_config(&mut verdict, &mut record, &sink_cfg)?;
+    Ok((verdict, record))
 }
 
 pub fn decide_with(
