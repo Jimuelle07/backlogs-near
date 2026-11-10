@@ -59,7 +59,7 @@ One submission per repository. Mistakes are fixed by the human at https://nearha
 | Agent / relayer / eval | Python 3.12 managed by uv |
 | NEAR Python client | py-near |
 | Injection classifier | protectai/deberta-v3-base-prompt-injection-v2 default; Llama-Prompt-Guard-2-86M when HF access is granted |
-| Landing page | Vite + React 18 + TypeScript static site in `site/`, hosted on Cloudflare Pages; read-only receipts panel over public testnet RPC, no wallet ([site/README.md](site/README.md); [sprints.md](docs/build/sprints.md) D1, E1, E2) |
+| Landing page | Vite 5 + React 18 (JSX) static site in `site/` (three.js / r3f / drei, GSAP + ScrollTrigger, Lenis, lucide-react, plain CSS), hosted on Cloudflare Pages; read-only receipts panel over public testnet RPC, no wallet ([site/README.md](site/README.md); [sprints.md](docs/build/sprints.md) D1, E1, E2) |
 
 Rationale and module boundaries: [docs/build/sdd.md](docs/build/sdd.md).
 

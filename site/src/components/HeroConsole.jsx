@@ -2,8 +2,7 @@ import { Ban, Check, Hourglass, ShieldCheck } from "lucide-react";
 import { DAILY_CAP } from "../config";
 
 // Static sample rows: a preview of the receipts view, not live data (the live panel is in #receipts).
-type Verdict = "allow" | "hold" | "block";
-const ROWS: [Verdict, string, number, string][] = [
+const ROWS = [
   ["block", "h0stco.testnet", 180, "injection + lookalike payee"],
   ["allow", "hostco.testnet", 18, "known payee · usual amount"],
   ["hold", "supplier.testnet", 90, "above usual range · 1 h escrow"],
