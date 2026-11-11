@@ -23,3 +23,6 @@ neardev/
 
 # Submission payload contains personal data — HACKATHON.md §3
 submission*.json
+
+# Node (site/)
+site/node_modules/

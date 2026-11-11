@@ -41,7 +41,7 @@ Dry-run, no keys or funds. From the repo root:
 
 ### Read-only receipts panel (React)
 
-From `web/`, run `npm ci` then `npm run dev` → open the printed local URL to see live receipts from `guardian-v2.jimuelle-firewall.testnet`, with status filters, exact token amounts and testnet explorer links. No wallet or keys are needed. See [web/README.md](web/README.md) for configuration, checks and production build instructions.
+From `site/`, run `npm ci` then `npm run dev` → open the printed local URL at `#receipts` to see live receipts from `guardian-v2.jimuelle-firewall.testnet`, with status filters, exact token amounts and testnet explorer links. No wallet or keys are needed. See [site/README.md](site/README.md) for configuration, checks and production build instructions.
 
 ### Agent and contracts
 
@@ -81,8 +81,9 @@ Expected: the Guardian receipt reaches `paid` and the hostco tUSDC balance rises
 
 ## Built with / third-party
 
-- React, React DOM, Vite and `@vitejs/plugin-react`: read-only receipts frontend; Playwright: browser tests
-- Google Fonts (DM Sans, Manrope), NEARBlocks testnet explorer, FastNEAR public testnet RPC: frontend fonts and public data links
+- React, React DOM, Vite, `@vitejs/plugin-react` and vite-plugin-singlefile: shared landing page and read-only receipts frontend
+- three, three-stdlib, `@react-three/fiber`, `@react-three/drei`, GSAP, Lenis and lucide-react: shared frontend stack ([site/README.md](site/README.md))
+- Google Fonts (Geist, Geist Mono), NEARBlocks testnet explorer, FastNEAR public testnet RPC: frontend fonts and public data links
 
 - [TypeSafe Jev](https://typesafe.ai): calibrated typed decisions, raw HTTPS
 - [NEAR AI Cloud](https://cloud.near.ai): LLM for agent tool calls, masked re-run and decision fallback

@@ -305,7 +305,7 @@ Run from the repo root unless noted (full command list: [AGENTS.md §6](../../AG
 
 ## 10. Modules
 
-- `web/` — E1 read-only React + Vite receipts panel (Ace, 2026-11-11). Uses browser `fetch` for public `get_config` / `list_receipts` calls on `guardian-v2.jimuelle-firewall.testnet`; receipt pages are pinned to one finalized block per refresh. Config: `VITE_GUARDIAN_ID`, `VITE_NEAR_RPC_URL` in `web/.env.local` (public values only, separate from backend keys). Includes filters, exact integer amount formatting using Guardian token decimals, account explorer links, pagination, and optional 30-second refresh. [Run and verification instructions](../../web/README.md). Hosting and E2 detail views remain later work.
+- `site/` — shared React 18.3.1 + Vite 5.4.21 (plain JSX) landing page and E1 read-only receipts panel. Uses browser `fetch` for public `get_config` / `list_receipts` calls on `guardian-v2.jimuelle-firewall.testnet`; receipt pages are pinned to one finalized block per refresh. `src/App.jsx` creates one reader from `GUARDIAN_ID` and `NEAR_RPC_URL` in `src/config.js` (public values only). Includes filters, exact integer amount formatting using Guardian token decimals, account explorer links, pagination, and optional 30-second refresh. Uses the shared Geist / lilac CSS tokens. [Run and verification instructions](../../site/README.md). Hosting and E2 detail views remain later work.
 
 One line each, with the sprint task that adds it ([sprints.md](sprints.md)).
 

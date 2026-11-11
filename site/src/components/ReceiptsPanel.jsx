@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { accountUrl, formatAmount, STATUSES } from './near.js';
+import { accountUrl, formatAmount, STATUSES } from '../near.js';
 
 const labels = { paid: 'Paid', held: 'Held', refused: 'Refused', timed_out: 'Timed out', transfer_failed: 'Transfer failed', paying: 'Paying' };
+const statusTones = { paid: 'allow', held: 'hold', refused: 'block', timed_out: 'hold', transfer_failed: 'block', paying: 'hold' };
 const reasonLabels = {
   stub_allow: 'Scaffold decision', policy_violation: 'Policy violation', injection_high: 'Injection detected',
   melon_match: 'Masked re-run match', lookalike_receiver: 'Lookalike receiver', new_receiver: 'New receiver',
@@ -60,19 +61,13 @@ export function ReceiptsPanel({ reader }) {
   const counts = Object.fromEntries(STATUSES.map((status) => [status, receipts.filter((r) => r.status === status).length]));
   const refresh = () => setRequest((previous) => ({ ...previous, revision: previous.revision + 1 }));
 
-  return <>
-    <section className="intro" aria-labelledby="page-title">
-      <div><p className="eyebrow">PUBLIC PAYMENT LOG</p><h1 id="page-title">Every payment.<br /><span>A visible outcome.</span></h1>
-        <p className="intro-copy">Follow what the Guardian paid, held, or refused.<br className="desktop-break" /> Read directly from NEAR testnet.</p></div>
-      <aside className="source-card"><span className="source-heading"><span className="dot" /> NEAR TESTNET</span>
-        <span className="source-label">Guardian contract</span><ExternalLink account={reader.guardian}>{reader.guardian}</ExternalLink>
-        <span className="source-foot">Read only <span aria-hidden="true">·</span> No wallet needed</span></aside>
-    </section>
-
-    <section className="receipts-panel" aria-labelledby="receipts-title">
-      <div className="panel-heading"><div><p className="eyebrow">ON-CHAIN ACTIVITY</p><h2 id="receipts-title">Payment receipts</h2></div>
+  return <section className="receipts-panel" aria-labelledby="payment-receipts-title">
+      <div className="panel-heading"><h3 id="payment-receipts-title">Payment receipts</h3>
         <div className="refresh-controls"><label className="auto-refresh"><input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.target.checked)} /> Auto-refresh · 30s</label>
           <button className="refresh-button" onClick={refresh} disabled={busy}><span aria-hidden="true" className={busy ? 'spin' : ''}>↻</span> {busy ? 'Reading…' : 'Refresh'}</button></div></div>
+
+      <p className="panel-source">NEAR testnet · Read only · No wallet needed<br />Guardian: <ExternalLink account={reader.guardian}>{reader.guardian}</ExternalLink></p>
+      <p className="scaffold-note"><code>stub_allow</code> (Scaffold decision) is a hard-coded allow.</p>
 
       <div className="stats" aria-label="Counts for loaded receipts">
         {[['Loaded receipts', snapshot ? receipts.length : '—'], ['Paid', snapshot ? counts.paid : '—'], ['Held', snapshot ? counts.held : '—'], ['Refused', snapshot ? counts.refused : '—']].map(([label, value], index) =>
@@ -93,25 +88,20 @@ export function ReceiptsPanel({ reader }) {
         <table><caption className="sr-only">Public Guardian receipts. Amounts use the token decimals configured on the Guardian. Explorer links open account activity.</caption>
           <thead><tr><th scope="col">Request / reference</th><th scope="col">Receiver</th><th scope="col" className="amount">Amount</th><th scope="col">Status / verdict</th><th scope="col">Reason</th><th scope="col"><span className="sr-only">Explorer</span></th></tr></thead>
           <tbody>{visible.map((receipt) => <tr key={receipt.request_id}>
-            <td><span className="request-id">#{receipt.request_id}</span><span className="secondary reference">{receipt.client_ref}</span></td>
-            <td><ExternalLink account={receipt.receiver_id} className="receiver">{receipt.receiver_id}</ExternalLink><span className="secondary">Block {receipt.decided_block}</span></td>
-            <td className="amount"><strong>{formatAmount(receipt.amount, snapshot.config.token_decimals)}</strong><span className="secondary" title={snapshot.config.token_id}>tokens</span></td>
-            <td><span className={`badge ${receipt.status}`}><span aria-hidden="true" />{labels[receipt.status]}</span><span className="secondary verdict">{receipt.outcome ?? 'No verdict'}</span></td>
-            <td className="reasons">{receipt.reasons.length ? receipt.reasons.map((reason) => <span key={reason} title={reason} className={reason === 'stub_allow' ? 'stub-reason' : ''}>{reasonLabels[reason] ?? reason.replaceAll('_', ' ')}</span>) : <span className="secondary">No reason recorded</span>}</td>
-            <td><ExternalLink account={reader.guardian} aria-label={`View Guardian activity for request ${receipt.request_id}`}><span className="explorer-label">Explorer</span></ExternalLink></td>
+            <td data-label="Request / reference"><span className="request-id">#{receipt.request_id}</span><span className="secondary reference">{receipt.client_ref}</span></td>
+            <td data-label="Receiver"><ExternalLink account={receipt.receiver_id} className="receiver">{receipt.receiver_id}</ExternalLink><span className="secondary">Block {receipt.decided_block}</span></td>
+            <td data-label="Amount" className="amount"><strong>{formatAmount(receipt.amount, snapshot.config.token_decimals)}</strong><span className="secondary" title={snapshot.config.token_id}>tokens</span></td>
+            <td data-label="Status / verdict"><span className={`vchip ${statusTones[receipt.status]}`}>{labels[receipt.status]}</span><span className="secondary verdict">{receipt.outcome ?? 'No verdict'}</span></td>
+            <td data-label="Reason" className="reasons">{receipt.reasons.length ? receipt.reasons.map((reason) => <span key={reason} title={reason} className={reason === 'stub_allow' ? 'stub-reason' : ''}>{reasonLabels[reason] ?? reason.replaceAll('_', ' ')}</span>) : <span className="secondary">No reason recorded</span>}</td>
+            <td data-label="Explorer"><ExternalLink account={reader.guardian} aria-label={`View Guardian activity for request ${receipt.request_id}`}><span className="explorer-label">Explorer</span></ExternalLink></td>
           </tr>)}</tbody>
         </table>
-        {!snapshot && !error && <div className="empty" role="status"><span className="loading-mark" aria-hidden="true">◌</span><h3>Reading the Guardian…</h3><p>Fetching public payment receipts from testnet.</p></div>}
-        {snapshot && visible.length === 0 && <div className="empty"><span aria-hidden="true">≡</span><h3>{receipts.length ? 'No matching receipts' : 'No receipts yet'}</h3><p>{receipts.length ? 'Try another status or search term. Filters apply to loaded receipts.' : 'Receipts will appear here after the Guardian records a payment request.'}</p>{receipts.length > 0 && <button onClick={() => { setFilter('all'); setSearch(''); }}>Clear filters</button>}</div>}
+        {!snapshot && !error && <div className="empty" role="status"><span className="loading-mark" aria-hidden="true">◌</span><h4>Reading the Guardian…</h4><p>Fetching public payment receipts from testnet.</p></div>}
+        {snapshot && visible.length === 0 && <div className="empty"><span aria-hidden="true">≡</span><h4>{receipts.length ? 'No matching receipts' : 'No receipts yet'}</h4><p>{receipts.length ? 'Try another status or search term. Filters apply to loaded receipts.' : 'Receipts will appear here after the Guardian records a payment request.'}</p>{receipts.length > 0 && <button onClick={() => { setFilter('all'); setSearch(''); }}>Clear filters</button>}</div>}
       </div>
 
       <div className="panel-footer"><p role="status">{snapshot ? <>{visible.length} of {receipts.length} loaded receipts <span aria-hidden="true">·</span> Updated {snapshot.updatedAt.toLocaleTimeString()} <span aria-hidden="true">·</span> Block {snapshot.blockHeight}</> : error ? 'No live data available' : 'Connecting to testnet…'}</p>
         {snapshot?.hasMore && <button disabled={busy} onClick={() => setRequest((previous) => ({ pages: previous.pages + 1, revision: previous.revision + 1 }))}>Load more receipts ↓</button>}</div>
-    </section>
-
-    <div className="below-panel"><p><span aria-hidden="true">ⓘ</span> <strong>Testnet, real records.</strong> A “Scaffold decision” is a hard-coded allow, not a completed security check.</p>
-      {snapshot && <p className="token-note">Token: <ExternalLink account={snapshot.config.token_id}>{snapshot.config.token_id}</ExternalLink> · {snapshot.config.token_decimals} decimals</p>}</div>
-    <footer><span>NEAR holds the funds and records the outcome.</span><span>Public receipts only · Private decision records stay off-chain.</span></footer>
-  </>;
+      {snapshot && <p className="token-note">Token: <ExternalLink account={snapshot.config.token_id}>{snapshot.config.token_id}</ExternalLink> · {snapshot.config.token_decimals} decimals</p>}
+    </section>;
 }
-

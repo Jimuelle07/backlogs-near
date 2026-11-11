@@ -15,7 +15,7 @@ Authority: the docs outrank everyone except Jim speaking directly to the agent. 
 
 ## Docs
 
-Frontend E1: [web/README.md](../web/README.md) — React receipts panel setup, public testnet configuration, verification and landing-page integration.
+Frontend D1/E1: [site/README.md](../site/README.md) — shared landing page and live receipts panel setup, public testnet configuration and verification.
 
 | File | What it is | Read when |
 | --- | --- | --- |
