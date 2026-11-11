@@ -1,5 +1,8 @@
 pub mod decide;
 pub mod decision;
 pub mod formats;
+pub mod fusion;
 pub mod http;
+pub mod injection;
 pub mod policy;
+pub mod sink;

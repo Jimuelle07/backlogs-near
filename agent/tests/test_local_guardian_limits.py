@@ -132,7 +132,8 @@ def test_hold_keeps_reservation_and_sets_release(settings, monkeypatch, amount, 
     assert json.loads(g.state_path.read_text())["spent_today"] == amount
 
 
-def test_allow_keeps_reservation(settings):
+def test_allow_keeps_reservation(settings, monkeypatch):
+    _fake_checker(monkeypatch, "allow")
     g = _guardian(settings, [T0])
     g.request_payment(_req(settings, 7 * UNIT))
     assert json.loads(g.state_path.read_text())["spent_today"] == 7 * UNIT
@@ -171,6 +172,7 @@ HINT = "rerun with --reset-spend"
 
 def test_demo_daily_cap_hint_and_reset(tmp_path, monkeypatch, capsys):
     _seed_full_day(tmp_path, monkeypatch)
+    _fake_checker(monkeypatch, "allow")
     assert demo.main(["--scenario", "benign-hosting"]) == 1
     out = capsys.readouterr().out
     assert "refused by contract: Daily cap reached" in out

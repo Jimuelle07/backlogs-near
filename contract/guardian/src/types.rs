@@ -79,6 +79,7 @@ pub enum ReasonCode {
     JevReceiverRisk,
     AmountMismatch,
     CheckUnavailable,
+    ChecksPassed,
 }
 
 #[near(serializers = [json, borsh])]
