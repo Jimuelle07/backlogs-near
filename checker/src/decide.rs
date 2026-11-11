@@ -1,3 +1,4 @@
+use crate::counterparty::{self, CounterpartyConfig};
 use crate::formats::*;
 use crate::injection::{self, InjectionConfig};
 use crate::policy::{self, PolicyConfig};
@@ -37,15 +38,17 @@ pub fn record_bytes(record: &DecisionRecord) -> Result<Vec<u8>, CheckerError> {
     serde_json::to_vec(record).map_err(|e| CheckerError::Serialize(e.to_string()))
 }
 
-/// Verdict is still the stub allow (fusion is C3); `signals.policy` and `signals.injection` are real checks.
+/// Verdict is still the stub allow (fusion is C3); `signals.policy`, `signals.injection` and `signals.counterparty` are real checks.
 /// Policy config comes from the environment (`POLICY_*`), injection config from (`INJECTION_*`, `CLASSIFIER_URL`),
+/// counterparty config from (`COUNTERPARTY_*`, `AGENT_PROFILE_*`),
 /// and when `DECISION_LOG_URL` is set the record is POSTed to the sink (POST failure downgrades `allow` to `hold`).
 pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerError> {
     let policy_cfg = PolicyConfig::from_env().map_err(CheckerError::Config)?;
     let injection_cfg = InjectionConfig::from_env().map_err(CheckerError::Config)?;
+    let counterparty_cfg = CounterpartyConfig::from_env().map_err(CheckerError::Config)?;
     let sink_cfg = SinkConfig::from_env();
     let (mut verdict, mut record) =
-        decide_with_configs(input_bytes, &policy_cfg, &injection_cfg)?;
+        decide_with_configs(input_bytes, &policy_cfg, &injection_cfg, &counterparty_cfg)?;
     sink::deliver_with_config(&mut verdict, &mut record, &sink_cfg)?;
     Ok((verdict, record))
 }
@@ -54,13 +57,19 @@ pub fn decide_with(
     input_bytes: &[u8],
     policy_cfg: &PolicyConfig,
 ) -> Result<(Verdict, DecisionRecord), CheckerError> {
-    decide_with_configs(input_bytes, policy_cfg, &InjectionConfig::default())
+    decide_with_configs(
+        input_bytes,
+        policy_cfg,
+        &InjectionConfig::default(),
+        &CounterpartyConfig::default(),
+    )
 }
 
 pub fn decide_with_configs(
     input_bytes: &[u8],
     policy_cfg: &PolicyConfig,
     injection_cfg: &InjectionConfig,
+    counterparty_cfg: &CounterpartyConfig,
 ) -> Result<(Verdict, DecisionRecord), CheckerError> {
     let input: CheckerInput =
         serde_json::from_slice(input_bytes).map_err(|e| CheckerError::Parse(e.to_string()))?;
@@ -71,6 +80,8 @@ pub fn decide_with_configs(
     let reasons = vec![ReasonCode::StubAllow];
     let (injection_signal, _latency_ms) =
         injection::check(&input, injection_cfg).map_err(CheckerError::Check)?;
+    let (counterparty_signal, _cp_latency_ms) =
+        counterparty::check(&input, counterparty_cfg).map_err(CheckerError::Check)?;
     let record = DecisionRecord {
         format: RECORD_FORMAT.to_string(),
         input_sha256: sha256_hex(input_bytes),
@@ -81,6 +92,7 @@ pub fn decide_with_configs(
         signals: Signals {
             policy: policy_cfg.enabled.then(|| policy::check(&input, policy_cfg)),
             injection: injection_signal,
+            counterparty: counterparty_signal,
             ..Signals::default()
         },
     };
@@ -230,5 +242,45 @@ mod tests {
         let h: DecisionRecord = serde_json::from_str(FIXTURE_HOLD).unwrap();
         assert_eq!(h.outcome, Outcome::Hold);
         assert_eq!(h.reasons, vec![ReasonCode::UnusualForAgent]);
+    }
+
+    #[test]
+    fn decide_populates_counterparty_signal() {
+        let (v, r) = decide(INPUT.as_bytes()).unwrap();
+        assert_eq!(v.outcome, Outcome::Allow);
+        let cp = r.signals.counterparty.expect("counterparty signal populated");
+        assert_eq!(cp.lookalike_of, None);
+        assert_eq!(cp.lookalike_distance, None);
+        assert!(cp.prior_payments > 0);
+        assert_eq!(cp.is_contract, false);
+    }
+
+    #[test]
+    fn decide_detects_lookalike_receiver() {
+        let mut input_val: serde_json::Value = serde_json::from_str(INPUT).unwrap();
+        input_val["receiver_id"] = "hostc0.demo.testnet".into();
+        let bytes = serde_json::to_vec(&input_val).unwrap();
+
+        let (_v, r) = decide(&bytes).unwrap();
+        let cp = r.signals.counterparty.expect("counterparty signal populated");
+        assert!(cp.lookalike_of.as_deref().unwrap_or("").contains("hostco"));
+        assert_eq!(cp.lookalike_distance, Some(1));
+        assert_eq!(cp.prior_payments, 0);
+    }
+
+    #[test]
+    fn decide_with_counterparty_disabled_yields_null() {
+        let cp_cfg = CounterpartyConfig {
+            enabled: false,
+            ..CounterpartyConfig::default()
+        };
+        let (_v, r) = decide_with_configs(
+            INPUT.as_bytes(),
+            &PolicyConfig::default(),
+            &InjectionConfig::default(),
+            &cp_cfg,
+        )
+        .unwrap();
+        assert_eq!(r.signals.counterparty, None);
     }
 }

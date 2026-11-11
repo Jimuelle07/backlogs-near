@@ -1,3 +1,4 @@
+pub mod counterparty;
 pub mod decide;
 pub mod decision;
 pub mod formats;
