@@ -2,9 +2,9 @@
 
 ## 1. Status
 
-Project chosen: "Attested Payment Firewall" (working name; the human sets the final name at submission). Plan: [idea.md](idea.md). Last updated 2026-11-09.
+Project chosen: "Attested Payment Firewall" (working name; the human sets the final name at submission). Plan: [idea.md](idea.md). Last updated 2026-11-10.
 
-Implemented as of the Sunday scaffold: frozen formats (`schemas/`), mock token, Guardian with `request_payment` and yield/resume, a checker that returns a hard-coded allow, and a Python agent with a key-free dry-run. Added Mon: hard caps and hold escrow in the Guardian; the `DecisionClient` (Jev primary, NEAR AI LLM fallback) in the checker, not yet called by `decide()`; 60 dry-run scenarios (30 benign, 30 attack, 5 per family) in `agent/scenarios/`. Everything else is marked below with the idea.md day that adds it.
+Implemented as of the Sunday scaffold: frozen formats (`schemas/`), mock token, Guardian with `request_payment` and yield/resume, a checker that returns a hard-coded allow, and a Python agent with a key-free dry-run. Added Mon: hard caps and hold escrow in the Guardian; the `DecisionClient` (Jev primary, NEAR AI LLM fallback) in the checker, not yet called by `decide()`; 60 dry-run scenarios (30 benign, 30 attack, 5 per family) in `agent/scenarios/`. Added Tue: OutLayer checker mode live on testnet (A1), deterministic policy rules in the checker (B1), `DECISION_LOG_URL` record sink in the checker (A2), and the eval harness skeleton (`firewall-eval`, A3). Everything else is marked below with the sprint task that adds it.
 
 ## 2. Stack
 
@@ -28,10 +28,11 @@ Same decision as [AGENTS.md §5](../../AGENTS.md#5-stack-decided).
 Cargo.toml          Cargo workspace (guardian, token, checker)
 contract/guardian/  crate `guardian`: Guardian contract
 contract/token/     crate `tusdc`: mock NEP-141 token
-checker/            crate `checker`: lib + bin (`checker::{decide, decision, formats, http}`); the bin reads CheckerInput on stdin, prints Verdict on stdout
+checker/            crate `checker`: lib + bin (`checker::{decide, decision, formats, http, policy, sink}`); the bin reads CheckerInput on stdin, prints Verdict on stdout
 schemas/            JSON Schema 2020-12 for every wire format; schemas/examples/ one valid example each
-agent/              uv project `firewall-agent`, package `firewall_agent`: agent, relayer, setup, dry-run
+agent/              uv project `firewall-agent`, package `firewall_agent`: agent, eval, relayer, setup, dry-run
 data/decisions/     checker records from native runs (gitignored)
+data/eval/          results.json output from `firewall-eval` (gitignored until C4 commits it)
 docs/               see docs/index.md
 ```
 
@@ -41,7 +42,7 @@ Dependency rules:
 - The checker reads only stdin and environment variables. It never reads repo files or calls the agent.
 - The agent talks to the checker only through the `CHECKER_BIN` subprocess (native/dry-run) or through the Guardian (testnet). It never links Rust code.
 - `schemas/` is the source of truth for formats. Rust types (`guardian/src/types.rs`, `checker/src/formats.rs`) and Python builders (`firewall_agent/formats.py`) mirror it; a format change edits the schema and its example first.
-- The eval harness (Thu) runs the same checker binary the demo uses, so eval numbers describe the shipped behavior.
+- The eval harness (A3, C4) runs the same checker binary the demo uses, so eval numbers describe the shipped behavior.
 
 ## 4. DecisionClient
 
@@ -77,7 +78,7 @@ pub trait DecisionClient {
 - **Fallback: `LlmDecisionClient`.** Posts to `{NEAR_AI_BASE_URL}/chat/completions` (default `https://cloud-api.near.ai/v1`) with `model: $CHECKER_LLM_MODEL`, `temperature: 0`, 25 s timeout. The system prompt marks `state` as untrusted data and demands one JSON object of probabilities. `parse_llm_reply` strips fences (first `{` to last `}`), renormalises each probability map whose sum is in [0.98, 1.02] (otherwise `OffSchema`), and derives `choice` (argmax), `score` (Σ level·p) and `confidence` (max p). An off-schema reply is retried once with the same request, then it is an error (the check becomes `check_unavailable`). `backend: llm`, `model` is `CHECKER_LLM_MODEL`.
 - **`FallbackDecisionClient`** wraps a primary and an optional fallback: on any primary error it returns the fallback's result, or the primary's error if there is no fallback. The decision record logs `backend: "llm"` when the fallback answered.
 - **Selection:** `client_from_env()` reads `DECISION_BACKEND`. Unset or `jev` → Jev with the LLM as fallback (the fallback is dropped if `NEAR_AI_API_KEY` or `CHECKER_LLM_MODEL` is missing); `llm` → LLM only; anything else → `Config("DECISION_BACKEND must be jev or llm")`.
-- **HTTP** sits behind `checker::http::post_json(url, bearer, body, timeout)` (sends `Authorization: Bearer` and `Content-Type: application/json`; non-2xx statuses come back as `Ok`, and `DecisionError::Status` carries the first 300 chars of the body): `ureq` 3 natively, `wasi-http-client` under `cfg(target_os = "wasi")` (wasm32-wasip2). Natively `timeout` bounds the whole request; on WASI only a connect timeout exists and OutLayer's 60 s cap bounds the rest. The budgets do not fit under that cap: the LLM client retries once, so the worst case is 20 s (Jev) + 2 × 25 s (LLM) = 70 s, and on WASI a Jev call that stalls after connecting uses the whole 60 s. Both fail closed: no verdict arrives, the yield times out and the Guardian unreserves. The budgets get retuned when the checker is wired to OutLayer (Wed). No other module opens sockets.
+- **HTTP** sits behind `checker::http::post_json(url, bearer, body, timeout)` (sends `Authorization: Bearer` when `bearer` is non-empty, and `Content-Type: application/json`; non-2xx statuses come back as `Ok`, and `DecisionError::Status` carries the first 300 chars of the body): `ureq` 3 natively, `wasi-http-client` under `cfg(target_os = "wasi")` (wasm32-wasip2). Natively `timeout` bounds the whole request; on WASI only a connect timeout exists and OutLayer's 60 s cap bounds the rest. The budgets do not fit under that cap: the LLM client retries once, so the worst case is 20 s (Jev) + 2 × 25 s (LLM) = 70 s, and on WASI a Jev call that stalls after connecting uses the whole 60 s. Both fail closed: no verdict arrives, the yield times out and the Guardian unreserves. The budgets get retuned when the checker is wired to OutLayer (Wed). No other module opens sockets.
 - `firewall-jev-ping` (agent package) sends the same four questions once, to verify the API shape and key.
 
 ## 5. Verdict rules
@@ -203,7 +204,7 @@ Answers to the former open questions:
 - **Yield timeout:** after the 200-block window (203 blocks after `requested_block`) `outlayer.testnet` logs `Execution promise failed: Failed`, refunds everything except the base fee and returns a **successful** promise with value `null`. It emits no `execution_completed` event. The Guardian records it as `timed_out` with `checker_failed` reason `null_result`. `clear_stuck_outlayer` was not needed.
 - **Attestation lookup:** `GET https://testnet-api.outlayer.ai/public/jobs?project=<owner>/firewall-checker` (the dashboard `/executions` data source) lists `request_id`, `job_id`, `worker_id`, `status` and `transaction_hash`.
 
-Next steps (not built): `DECISION_LOG_URL` off-chain record sink (the checker cannot write a record on OutLayer, so the OutLayer-mode DecisionRecord stays unwritten until the sink exists, §7); the HTTPS + signed-verdict alternative mode.
+Next steps: `DECISION_LOG_URL` off-chain record sink is implemented in `checker/src/sink.rs` (§7); redeploy the checker wasm on OutLayer and set `DECISION_LOG_URL` in OutLayer secrets to capture live OutLayer records.
 
 ## 7. Decision log
 
@@ -219,7 +220,7 @@ Formats are frozen in `schemas/` (version tags `firewall.checker_input.v1`, `fir
 Storage:
 
 - **Native / dry-run (scaffold):** the checker writes the record to `CHECKER_RECORD_DIR/<request_id>.json`, the same bytes that were hashed, and refuses to overwrite an existing record with different bytes (exit 2). Dry-run (`LocalGuardian`) uses `CHECKER_RECORD_DIR/dry-run/` and continues request ids from the highest existing record; the relayer uses `CHECKER_RECORD_DIR/<GUARDIAN_ID>/`.
-- **OutLayer (Mon/Wed):** the 900-byte stdout limit forces an off-chain sink. The checker POSTs the record to `DECISION_LOG_URL` (an OutLayer secret); if that POST fails, `allow` is downgraded to `hold`.
+- **OutLayer (A2, `checker/src/sink.rs`):** the 900-byte stdout limit forces an off-chain sink. When `DECISION_LOG_URL` (an OutLayer secret) is set and non-empty, `decide()` POSTs the serialized `DecisionRecord` JSON to `DECISION_LOG_URL` (10 s timeout). If that POST fails (transport error, timeout, or non-2xx HTTP status), an `allow` outcome is downgraded to `hold` on both `verdict` and `record` and `verdict.record_sha256` is recomputed to match the downgraded record (`hold` and `block` stay unchanged).
 
 ## 8. Configuration
 
@@ -244,7 +245,7 @@ All configuration comes from environment variables; `.env.example` is the canoni
 | `AGENT_PRIVATE_KEY` | Agent function-call key only | agent config (testnet guardian) |
 | `CHECKER_ACCOUNT_ID` | Account allowed to call `submit_verdict` | relayer, setup_testnet |
 | `CHECKER_PRIVATE_KEY` | Key for `CHECKER_ACCOUNT_ID` | relayer |
-| `CHECKER_BIN` | Checker binary; default `target/release/checker(.exe)` | agent config (LocalGuardian, relayer) |
+| `CHECKER_BIN` | Checker binary; default `target/release/checker(.exe)` | agent config (LocalGuardian, relayer, eval) |
 | `CHECKER_RECORD_DIR` | Record output dir, default `data/decisions` | checker (native), agent config |
 | `DECISION_BACKEND` | `jev` (default) or `llm`; see §4 | checker (`client_from_env`) |
 | `CHECKER_LLM_MODEL` | NEAR AI Cloud model for the checker's LLM decision fallback; required by the `llm` backend, and the fallback is disabled without it | checker (`LlmDecisionClient`) |
@@ -252,6 +253,7 @@ All configuration comes from environment variables; `.env.example` is the canoni
 | `POLICY_ALLOWLIST` | Comma-separated receiver account ids; empty or unset → no allowlist rule | checker |
 | `POLICY_MAX_AMOUNT` | Per-payment cap in token base units (positive integer); unset → no cap rule | checker |
 | `POLICY_MAX_MEMO_CHARS` | Memo length cap in characters, default 128 | checker |
+| `DECISION_LOG_URL` | Off-chain DecisionRecord sink URL (OutLayer secret); when set, the checker POSTs each DecisionRecord JSON and downgrades `allow` to `hold` on failure | checker (`SinkConfig`) |
 
 Added later:
 
@@ -259,18 +261,17 @@ Added later:
 | --- | --- | --- |
 | `CLASSIFIER_URL` | Hosted injection classifier endpoint | Tue |
 | `HF_TOKEN` | Hugging Face token for the gated Prompt Guard 2 | Tue |
-| `DECISION_LOG_URL` | Off-chain record sink for OutLayer runs (OutLayer secret) | Mon/Wed |
 | `OUTLAYER_PROJECT_ID` | Not read by any code: the OutLayer project id is an argument of `set_checker_mode` ([§6 runbook](#outlayer-checker-mode)); kept as a note for the human's shell | runbook only |
 
 ## 9. Testing & evaluation
 
 Run from the repo root unless noted (full command list: [AGENTS.md §6](../../AGENTS.md)).
 
-- **Rust:** `cargo test --workspace`. Guardian: every `request_payment` panic including the 8192/8193-byte context boundary, CheckerInput equals the request fields, `schemas/examples/` parse into the guardian types, `binds` rejects each mismatched field, `on_verdict` mapping of allow/hold/block/error, `ft_on_transfer` handling, per-payment and daily caps (boundary, rollover), unreserve on block and timeout, hold window boundaries, `release_held` after the window (and rejection before it), `cancel_held` by the owner (stranger rejected). Token: owner-only mint, auto-registration, decimals. Checker: verdict binds input, `record_sha256` matches, ≤ 900 bytes with maximum-length ids and 6 reasons, wrong format or unknown field rejected; `DecisionClient` request/response parsing, `JevDecisionClient::from_vars` provider selection (default TypeSafe, explicit `nearai`, trailing-slash base URL, `JEV_MODEL` override, unknown provider, missing key), LLM reply normalisation, fallback on primary error, and two `#[ignore]` live calls: `jev_live` (`cargo test -p checker -- --ignored jev_live`; uses the configured provider, so `TYPESAFE_API_KEY` by default, `NEAR_AI_API_KEY` with `JEV_PROVIDER=nearai`) and `llm_live` (`cargo test -p checker -- --ignored llm_live`; needs `NEAR_AI_API_KEY` and `CHECKER_LLM_MODEL`; spends credits).
+- **Rust:** `cargo test --workspace`. Guardian: every `request_payment` panic including the 8192/8193-byte context boundary, CheckerInput equals the request fields, `schemas/examples/` parse into the guardian types, `binds` rejects each mismatched field, `on_verdict` mapping of allow/hold/block/error, `ft_on_transfer` handling, per-payment and daily caps (boundary, rollover), unreserve on block and timeout, hold window boundaries, `release_held` after the window (and rejection before it), `cancel_held` by the owner (stranger rejected). Token: owner-only mint, auto-registration, decimals. Checker: verdict binds input, `record_sha256` matches, ≤ 900 bytes with maximum-length ids and 6 reasons, wrong format or unknown field rejected; `DecisionClient` request/response parsing, `JevDecisionClient::from_vars` provider selection (default TypeSafe, explicit `nearai`, trailing-slash base URL, `JEV_MODEL` override, unknown provider, missing key), LLM reply normalisation, fallback on primary error, `sink` record delivery (`DECISION_LOG_URL` config parsing, disabled no-op, 2xx success preserving `allow` and exact record bytes, HTTP status/timeout/transport failure downgrading `allow` to `hold` and preserving `hold`/`block`, local TCP server round-trip), and two `#[ignore]` live calls: `jev_live` (`cargo test -p checker -- --ignored jev_live`; uses the configured provider, so `TYPESAFE_API_KEY` by default, `NEAR_AI_API_KEY` with `JEV_PROVIDER=nearai`) and `llm_live` (`cargo test -p checker -- --ignored llm_live`; needs `NEAR_AI_API_KEY` and `CHECKER_LLM_MODEL`; spends credits).
 - **Contract builds:** `cargo near build non-reproducible-wasm --no-abi` inside `contract/guardian` and `contract/token` → `target/near/guardian/guardian.wasm`, `target/near/tusdc/tusdc.wasm` (`--no-abi`: the ABI step fails to link on Windows MSVC). Checker builds: `cargo build -p checker --release` and `cargo build -p checker --target wasm32-wasip2 --release`.
-- **Python:** `cd agent && uv sync && uv run pytest`. `test_formats` (amount conversion, context limits), `test_schemas` (every example and every built request validates against its schema; the scenario set is balanced: 30 benign / 30 attack, 5 per attack family), `test_local_guardian` (needs the built checker; verdict and record validate, record sha256 matches, a tampered verdict is rejected).
+- **Python:** `cd agent && uv sync && uv run pytest`. `test_formats` (amount conversion, context limits), `test_schemas` (every example and every built request validates against its schema; the scenario set is balanced: 30 benign / 30 attack, 5 per attack family), `test_local_guardian` (needs the built checker; verdict and record validate, record sha256 matches, a tampered verdict is rejected), `test_eval` (runs `firewall-eval` over all 60 scenarios and mixed outcomes, verifying `results.json` summary rates, per-family breakdown, and latency percentiles).
 - **No sandbox tests:** `near-workspaces` is not used (Windows host). The yield/resume path against a real chain is covered by the human-run testnet smoke (`firewall-demo --mode testnet`), listed in the README.
-- **Eval (Thu):** about 300 labelled cases (150 benign / 150 attack, six families), calibration/test split, per-check and combined ablation, unseen-family rotation, cost and latency with and without the cascade. Protocol and results table: [idea.md Evaluation and calibration](idea.md#evaluation-and-calibration). Attack fixture candidates: [huggingface models](../tools/huggingface_models_for_build.md) and [arxiv papers](../tools/arxiv_papers_for_build.md) (CrAIBench 2503.16248, Agentic Commerce Bench 2609.35886); verify each license before use.
+- **Eval (Thu):** `uv run firewall-eval` (A3 skeleton) runs the checker binary over every scenario and writes `results.json` (`data/eval/results.json`). Expanded in Sprint 3 to ~300 labelled cases (150 benign / 150 attack, six families, A6), calibration/test split, per-check and combined ablation (C4), unseen-family rotation (C5), cost and latency with and without the cascade (B5). Protocol and results table: [idea.md Evaluation and calibration](idea.md#evaluation-and-calibration). Attack fixture candidates: [huggingface models](../tools/huggingface_models_for_build.md) and [arxiv papers](../tools/arxiv_papers_for_build.md) (CrAIBench 2503.16248, Agentic Commerce Bench 2609.35886); verify each license before use.
 
 ## 10. Modules
 
@@ -278,7 +279,8 @@ Run from the repo root unless noted (full command list: [AGENTS.md §6](../../AG
 
 One line each, with the sprint task that adds it ([sprints.md](sprints.md)).
 
-- `checker/src/decide.rs` — scaffold stub returning `allow` / `stub_allow`; later calls the checks below and fusion (C3). Today it fills `signals.policy` from `policy::check` and leaves the other signals `null`; outcome and reasons are unchanged. `decide(bytes)` reads `PolicyConfig::from_env()` (a bad value is `CheckerError::Config`, exit 2, fail closed); `decide_with(bytes, &cfg)` takes the config explicitly (tests).
+- `checker/src/decide.rs` — scaffold stub returning `allow` / `stub_allow`; later calls the checks below and fusion (C3). Today it fills `signals.policy` from `policy::check`, leaves the other signals `null`, and delivers the record through `sink::deliver_with_config`. `decide(bytes)` reads `PolicyConfig::from_env()` (a bad value is `CheckerError::Config`, exit 2, fail closed) and `SinkConfig::from_env()`; `decide_with(bytes, &cfg)` takes the policy config explicitly without I/O (tests).
+- `checker/src/sink.rs` — off-chain `DecisionRecord` sink (A2). Reads `DECISION_LOG_URL` (`SinkConfig`); when set, POSTs the serialized `DecisionRecord` JSON via `checker::http::post_json` (10 s timeout). On any transport error, timeout or non-2xx HTTP status, downgrades `allow` to `hold` on both `verdict` and `record` and recomputes `verdict.record_sha256` (`hold` and `block` stay unchanged).
 - `checker/src/policy.rs` — policy rules (B1). Deterministic, no I/O, no AI; output is the frozen `{ok, violations[]}`, `ok` = no violations, violations listed in rule order. Config is env vars only (no files, so it works on wasm32-wasip2 where OutLayer secrets arrive as env vars; thresholds never live in prompts): `POLICY_ENABLED`, `POLICY_ALLOWLIST`, `POLICY_MAX_AMOUNT`, `POLICY_MAX_MEMO_CHARS` (§8). Rules and violation ids:
   - `receiver_not_allowlisted`: an allowlist is configured and `receiver_id` is not on it.
   - `memo_too_long`: more than `POLICY_MAX_MEMO_CHARS` characters (chars, not bytes).
@@ -298,4 +300,4 @@ One line each, with the sprint task that adds it ([sprints.md](sprints.md)).
 - `agent/firewall_agent/guardian.py` — `LocalGuardian` (dry-run, mirrors the contract) and `TestnetGuardian` (Sun).
 - `agent/firewall_agent/relayer.py` — polls `get_pending`, runs the checker, calls `submit_verdict`; human-gated.
 - `agent/firewall_agent/setup_testnet.py` — creates accounts, deploys, funds, scopes the agent key; human-gated.
-- Eval and conformal calibration (Python, runs the checker binary over labelled cases) — A3, C4, C5.
+- `agent/firewall_agent/eval.py` — `firewall-eval` CLI and evaluation harness skeleton (A3; expanded in C4, C5): runs the checker binary over every scenario, scores label vs. verdict (false holds, false blocks, missed attacks, per-family breakdown, p50/p95 latency), and writes `results.json`.

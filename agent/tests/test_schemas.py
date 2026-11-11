@@ -9,6 +9,7 @@ from firewall_agent.llm import ScriptedLLM
 from firewall_agent.scenarios import list_scenarios, load_scenario
 
 EXAMPLES = sorted((REPO_ROOT / "schemas" / "examples").glob("*.json"))
+FIXTURES = sorted((REPO_ROOT / "schemas" / "fixtures").glob("*.json"))
 
 
 @pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.name)
@@ -18,8 +19,13 @@ def test_examples_validate(path, validator):
 
 def test_examples_exist():
     assert {p.stem for p in EXAMPLES} == {
-        "payment-request", "checker-input", "verdict", "decision-record", "receipt"
+        "payment-request", "checker-input", "verdict", "decision-record", "receipt", "results"
     }
+
+
+@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.name)
+def test_decision_record_fixtures_validate(path, validator):
+    validator("decision-record").validate(json.loads(path.read_text(encoding="utf-8")))
 
 
 @pytest.mark.parametrize("name", list_scenarios())

@@ -1,0 +1,41 @@
+{
+  "format": "firewall.decision_record.v1",
+  "input_sha256": "d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef01a2b3c",
+  "request_id": "104",
+  "checker_version": "0.1.0",
+  "outcome": "block",
+  "reasons": [
+    "policy_violation",
+    "amount_mismatch"
+  ],
+  "signals": {
+    "policy": {
+      "ok": false,
+      "violations": [
+        "amount_over_cap",
+        "amount_mismatch_invoice"
+      ]
+    },
+    "injection": {
+      "max_score": 0.018,
+      "per_item": [
+        {
+          "ref": "ctx-invoice-forged",
+          "score": 0.018
+        }
+      ],
+      "model": "protectai/deberta-v3-base-prompt-injection-v2",
+      "model_sha256": "4a3b2c1d0e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b"
+    },
+    "melon": null,
+    "counterparty": {
+      "account_age_days": 120.0,
+      "is_contract": false,
+      "code_changed_recently": false,
+      "prior_payments": 2,
+      "lookalike_of": null,
+      "lookalike_distance": null
+    },
+    "jev": null
+  }
+}
