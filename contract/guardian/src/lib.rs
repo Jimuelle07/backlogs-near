@@ -945,6 +945,19 @@ mod tests {
     }
 
     #[test]
+    fn verdict_with_checks_passed_binds() {
+        let mut v: Verdict = serde_json::from_str(VERDICT_EXAMPLE).unwrap();
+        v.reasons = vec![ReasonCode::ChecksPassed];
+        let json = serde_json::to_string(&v).unwrap();
+        assert!(json.contains(r#""reasons":["checks_passed"]"#));
+        let v: Verdict = serde_json::from_str(&json).unwrap();
+        assert_eq!(v.reasons, vec![ReasonCode::ChecksPassed]);
+        let mut p = dummy_pending();
+        p.receiver_id = v.receiver_id.clone();
+        assert_eq!(validate::binds(&p, &v, U64(1), &v.token_id), Ok(()));
+    }
+
+    #[test]
     fn binds_rejects_each_field() {
         let p = dummy_pending();
         let tok = acct("tusdc.testnet");

@@ -5,7 +5,7 @@
   "checker_version": "0.1.0",
   "outcome": "allow",
   "reasons": [
-    "stub_allow"
+    "checks_passed"
   ],
   "signals": {
     "policy": {

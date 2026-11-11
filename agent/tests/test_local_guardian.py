@@ -26,11 +26,11 @@ def _benign_request(s):
     return propose_payment(scenario, ScriptedLLM(scenario), "ref-1")
 
 
-def test_benign_allow(settings, validator):
+def test_benign_without_decision_keys_holds(settings, validator):
     d = LocalGuardian(settings).request_payment(_benign_request(settings))
-    assert d.outcome == "allow"
-    assert d.status == "would_pay"
-    assert d.reasons == ["stub_allow"]
+    assert d.outcome == "hold"
+    assert d.status == "held"
+    assert d.reasons == ["check_unavailable"]
 
     record_path = settings.checker_record_dir / "dry-run" / "1.json"
     raw = record_path.read_bytes()

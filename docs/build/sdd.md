@@ -46,7 +46,7 @@ Dependency rules:
 
 ## 4. DecisionClient
 
-Every Jev call in the checker goes through this trait in `checker/src/decision.rs`. Shapes follow the TypeSafe System One API: `POST https://api.typesafe.ai/v1/systemone`, body `{model, state, questions}`, response `{model, answers, usage}`. **The clients, fallback and selection are implemented. `decide()` in `checker/src/decide.rs` still returns the stub allow and does not call them; wiring and fusion are [sprints.md](sprints.md) C3.**
+Every Jev call in the checker goes through this trait in `checker/src/decision.rs`. Shapes follow the TypeSafe System One API: `POST https://api.typesafe.ai/v1/systemone`, body `{model, state, questions}`, response `{model, answers, usage}`. **The clients, fallback and selection are implemented. `decide()` calls `client_from_env()` and fuses the answers in `checker/src/fusion.rs` ([sprints.md](sprints.md) C3, §5).**
 
 ```rust
 pub enum Question {
@@ -95,7 +95,32 @@ Verdicts are allow / hold / block. There is no human step. Source: [idea.md Deci
 - **No AI judges an amount.** The verdict binds receiver, token, exact amount and `request_id` (one-time nonce); the contract pays only on an exact match. Hard caps live in contract code ([idea.md Amount safety rules](idea.md#amount-safety-rules)).
 - **A Jev gate alone is not a security boundary.** Attackers can steer Jev-style models to a wrong-but-allowed answer ([arxiv papers](../tools/arxiv_papers_for_build.md) TL;DR #1 JevBreak 2611.03759, #2 2610.12292). The contract's binding, caps and function-call key bound the loss.
 - **Jev hardening:** neutral option labels (A/B/C plus definitions; mapped to outcomes in code); probabilities never returned to the agent or written on-chain; untrusted text goes into `state` as data only; policies written as examples plus counterexamples (arxiv TL;DR #3, 2611.02155).
-- **Unavailable checks** yield a null signal plus reason `check_unavailable`; an `allow` is then downgraded to `hold`.
+- **Unavailable checks.** An unavailable Jev check (no decision client, a client error, or an off-schema answer) yields `signals.jev: null` plus reason `check_unavailable`, and the outcome is `hold`, never `block`. A null signal from any other check (switched off, not configured, or not built yet) adds no flag. When the decision-log POST fails, an `allow` is downgraded to `hold` and a lone `checks_passed` becomes `check_unavailable` (§7).
+
+**Fusion as implemented** (`checker/src/fusion.rs`, C3). Thresholds come from `FusionConfig` (§8); the defaults (0.5 for every probability threshold, 7 days) are uncalibrated until C5 sets `FUSION_HOLD_THRESHOLD` to q̂. Every comparison against a threshold is strict (`>`), except the young-account check (`<`).
+
+- **Jev state.** `jev_state(input, signals)` sends `user_request`, `proposed_payment` (`receiver_id`, `amount`, `token`, `token_decimals`, `memo`), `untrusted_context` (each context item's `source`, `ref`, `trust`, `text`, as data only) and `signals` (`policy_ok`, `policy_violations`, `injection_max`, `masked_rerun_match`, `account_age_days`, `is_contract`, `code_changed_recently`, `prior_payments`, `lookalike_of`; `null` when that check produced no signal). No thresholds go into the state.
+- **Jev answers.** `unusual` and `injection_driven` are the `noul` probabilities. `receiver_risk` is P(level 2, "Suspicious payee") from the score answer's probabilities, never the expected `score`. `label` is the `verdict` choice and `label_probabilities` its A/B/C probabilities. A missing or wrongly shaped answer, or any client error, leaves `signals.jev` `null`.
+- **Flags**, in reason order. *Attack* flags count toward the block rule, one detector at a time:
+
+  | Reason | Fires when | Detector |
+  | --- | --- | --- |
+  | `check_unavailable` | `signals.jev` is `null` | — |
+  | `policy_violation` | policy signal present and `ok` is false | policy (attack) |
+  | `amount_mismatch` | policy violations include `amount_mismatch_request` or `amount_mismatch_invoice` | reason only |
+  | `injection_high` | classifier `max_score > FUSION_INJECTION_THRESHOLD` | classifier (attack) |
+  | `melon_match` | MELON `masked_call_matches` | MELON (attack) |
+  | `lookalike_receiver` | counterparty `lookalike_of` is set | counterparty (attack) |
+  | `contract_code_changed` | counterparty `code_changed_recently` | counterparty (attack) |
+  | `jev_injection_driven` | Jev `injection_driven > FUSION_JEV_INJECTION_THRESHOLD` | Jev (attack) |
+  | `jev_receiver_risk` | Jev `receiver_risk > FUSION_JEV_RECEIVER_RISK_THRESHOLD` | Jev (attack) |
+  | `unusual_for_agent` | Jev `unusual > FUSION_HOLD_THRESHOLD` | — |
+  | `young_account` | counterparty `account_age_days < FUSION_YOUNG_ACCOUNT_DAYS` | reason only |
+  | `new_receiver` | counterparty `prior_payments == 0` | reason only |
+
+  `detectors` = number of distinct detectors (policy, classifier, MELON, counterparty, Jev) with at least one attack flag, so Jev counts at most once. Other null signals add no flag.
+- **Outcome.** Jev `null` → `hold` (never `block`). `unusual > q̂` and `detectors ≥ 2` → `block`. `unusual > q̂` → `hold`. Otherwise `allow`, even when attack flags fire (they are still listed as reasons).
+- **Reasons.** The fired flags in table order, truncated to 6 (`check_unavailable` comes first, so it survives the cut). Nothing fired → `[checks_passed]`.
 
 ## 6. NEAR integration
 
@@ -213,14 +238,14 @@ Formats are frozen in `schemas/` (version tags `firewall.checker_input.v1`, `fir
 - **Verdict** (checker stdout, ≤ 900 bytes): `format`, `request_id`, `receiver_id`, `token_id`, `amount`, `outcome`, `reasons` (1–6 ReasonCodes), `record_sha256`, `checker_version`.
 - **DecisionRecord** (off-chain, owner only): `format`, `input_sha256` (sha256 of the exact stdin bytes), `request_id`, `checker_version`, `outcome`, `reasons`, and `signals` with required keys `policy`, `injection`, `melon`, `counterparty`, `jev`, each `null` (check disabled) or the check's output. Jev's probabilities live here and nowhere public (JevBreak needs them to tune attacks).
 - **Receipt** (on-chain, public, `get_receipt`): `request_id`, `client_ref`, `receiver_id`, `amount`, `input_sha256`, `outcome`, `reasons`, `record_sha256`, `checker_version`, `status` (`paying|paid|transfer_failed|refused|held|timed_out`), `requested_block`, `decided_block`.
-- ReasonCode (frozen): `stub_allow`, `policy_violation`, `injection_high`, `melon_match`, `lookalike_receiver`, `new_receiver`, `young_account`, `contract_code_changed`, `unusual_for_agent`, `jev_injection_driven`, `jev_receiver_risk`, `amount_mismatch`, `check_unavailable`.
+- ReasonCode (frozen): `stub_allow` (emitted only by the pre-C3 scaffold; kept so old receipts still decode), `policy_violation`, `injection_high`, `melon_match`, `lookalike_receiver`, `new_receiver`, `young_account`, `contract_code_changed`, `unusual_for_agent`, `jev_injection_driven`, `jev_receiver_risk`, `amount_mismatch`, `check_unavailable`, `checks_passed`.
 
 `record_sha256` is the sha256 of the serialized record bytes, so anyone given the record can check it against the receipt.
 
 Storage:
 
 - **Native / dry-run (scaffold):** the checker writes the record to `CHECKER_RECORD_DIR/<request_id>.json`, the same bytes that were hashed, and refuses to overwrite an existing record with different bytes (exit 2). Dry-run (`LocalGuardian`) uses `CHECKER_RECORD_DIR/dry-run/` and continues request ids from the highest existing record; the relayer uses `CHECKER_RECORD_DIR/<GUARDIAN_ID>/`.
-- **OutLayer (A2, `checker/src/sink.rs`):** the 900-byte stdout limit forces an off-chain sink. When `DECISION_LOG_URL` (an OutLayer secret) is set and non-empty, `decide()` POSTs the serialized `DecisionRecord` JSON to `DECISION_LOG_URL` (10 s timeout). If that POST fails (transport error, timeout, or non-2xx HTTP status), an `allow` outcome is downgraded to `hold` on both `verdict` and `record` and `verdict.record_sha256` is recomputed to match the downgraded record (`hold` and `block` stay unchanged).
+- **OutLayer (A2, `checker/src/sink.rs`):** the 900-byte stdout limit forces an off-chain sink. When `DECISION_LOG_URL` (an OutLayer secret) is set and non-empty, `decide()` POSTs the serialized `DecisionRecord` JSON to `DECISION_LOG_URL` (10 s timeout). If that POST fails (transport error, timeout, or non-2xx HTTP status), an `allow` outcome is downgraded to `hold` on both `verdict` and `record`, reasons `[checks_passed]` become `[check_unavailable]` (other reasons stay), and `verdict.record_sha256` is recomputed to match the downgraded record (`hold` and `block` stay unchanged).
 
 ## 8. Configuration
 
@@ -254,6 +279,11 @@ All configuration comes from environment variables; `.env.example` is the canoni
 | `POLICY_MAX_AMOUNT` | Per-payment cap in token base units (positive integer); unset → no cap rule | checker |
 | `POLICY_MAX_MEMO_CHARS` | Memo length cap in characters, default 128 | checker |
 | `DECISION_LOG_URL` | Off-chain DecisionRecord sink URL (OutLayer secret); when set, the checker POSTs each DecisionRecord JSON and downgrades `allow` to `hold` on failure | checker (`SinkConfig`) |
+| `FUSION_HOLD_THRESHOLD` | q̂ on Jev `unusual` (§5), in [0, 1]; default 0.5, uncalibrated until C5 | checker (`FusionConfig`) |
+| `FUSION_INJECTION_THRESHOLD` | `injection_high` fires above this classifier `max_score`, in [0, 1]; default 0.5 | checker (`FusionConfig`) |
+| `FUSION_JEV_INJECTION_THRESHOLD` | `jev_injection_driven` fires above this Jev probability, in [0, 1]; default 0.5 | checker (`FusionConfig`) |
+| `FUSION_JEV_RECEIVER_RISK_THRESHOLD` | `jev_receiver_risk` fires above this P("Suspicious payee"), in [0, 1]; default 0.5 | checker (`FusionConfig`) |
+| `FUSION_YOUNG_ACCOUNT_DAYS` | `young_account` fires below this account age in days (non-negative); default 7 | checker (`FusionConfig`) |
 
 Added later:
 
@@ -277,8 +307,8 @@ Run from the repo root unless noted (full command list: [AGENTS.md §6](../../AG
 
 One line each, with the sprint task that adds it ([sprints.md](sprints.md)).
 
-- `checker/src/decide.rs` — scaffold stub returning `allow` / `stub_allow`; later calls the checks below and fusion (C3). Today it fills `signals.policy` from `policy::check`, leaves the other signals `null`, and delivers the record through `sink::deliver_with_config`. `decide(bytes)` reads `PolicyConfig::from_env()` (a bad value is `CheckerError::Config`, exit 2, fail closed) and `SinkConfig::from_env()`; `decide_with(bytes, &cfg)` takes the policy config explicitly without I/O (tests).
-- `checker/src/sink.rs` — off-chain `DecisionRecord` sink (A2). Reads `DECISION_LOG_URL` (`SinkConfig`); when set, POSTs the serialized `DecisionRecord` JSON via `checker::http::post_json` (10 s timeout). On any transport error, timeout or non-2xx HTTP status, downgrades `allow` to `hold` on both `verdict` and `record` and recomputes `verdict.record_sha256` (`hold` and `block` stay unchanged).
+- `checker/src/decide.rs` — the checker pipeline (C3). `decide(bytes)` reads `PolicyConfig`, `InjectionConfig` and `FusionConfig` from the environment (a bad value is `CheckerError::Config`, exit 2, fail closed) and `SinkConfig`, builds the client with `decision::client_from_env()` (on error: warning on stderr, no client), then runs `decide_with_configs` and delivers the record through `sink::deliver_with_config`. `decide_with_configs` parses the input, runs the policy and injection checks, asks the four questions through the `DecisionClient` with `fusion::jev_state` (any error: warning, `signals.jev` `null`), and takes outcome and reasons from `fusion::fuse`. `decide_with(bytes, &policy_cfg, client)` uses default injection and fusion configs and no I/O beyond the given client (tests).
+- `checker/src/sink.rs` — off-chain `DecisionRecord` sink (A2). Reads `DECISION_LOG_URL` (`SinkConfig`); when set, POSTs the serialized `DecisionRecord` JSON via `checker::http::post_json` (10 s timeout). On any transport error, timeout or non-2xx HTTP status, downgrades `allow` to `hold` on both `verdict` and `record`, replaces reasons `[checks_passed]` with `[check_unavailable]` (other reasons stay), and recomputes `verdict.record_sha256` (`hold` and `block` stay unchanged).
 - `checker/src/policy.rs` — policy rules (B1). Deterministic, no I/O, no AI; output is the frozen `{ok, violations[]}`, `ok` = no violations, violations listed in rule order. Config is env vars only (no files, so it works on wasm32-wasip2 where OutLayer secrets arrive as env vars; thresholds never live in prompts): `POLICY_ENABLED`, `POLICY_ALLOWLIST`, `POLICY_MAX_AMOUNT`, `POLICY_MAX_MEMO_CHARS` (§8). Rules and violation ids:
   - `receiver_not_allowlisted`: an allowlist is configured and `receiver_id` is not on it.
   - `memo_too_long`: more than `POLICY_MAX_MEMO_CHARS` characters (chars, not bytes).
@@ -292,7 +322,7 @@ One line each, with the sprint task that adds it ([sprints.md](sprints.md)).
 - Injection classifier client (HTTP to `CLASSIFIER_URL`, scores each context item) — C2.
 - MELON masked re-run (NEAR AI Cloud inside the checker; compares the tool call with the user request masked) — not scheduled (first on the cut list).
 - Counterparty signals (account age, contract code hash changes, prior payments, lookalike distance, via OutLayer RPC `view`) — B3.
-- Jev fusion (conformal threshold and the two-signal block rule over the `DecisionClient` answers) — C3; the `DecisionClient` itself is implemented (§4).
+- `checker/src/fusion.rs` — Jev fusion (C3): `FusionConfig` (`FUSION_*`, §8), `jev_state` (input and signals → Jev `state`), `jev_signal` (answers → `signals.jev`) and `fuse` (signals → outcome and reasons, rules in §5). Tests run `fuse` on every `schemas/fixtures/` record.
 - Cascade (cheap checks first; expensive checks only for ambiguous cases) — B5, evaluated in the cost table.
 - `agent/firewall_agent/agent.py` and `llm.py` — bill-paying agent with a `pay_invoice` tool; scripted or NEAR AI Cloud LLM (Sun).
 - `agent/firewall_agent/guardian.py` — `LocalGuardian` (dry-run, mirrors the contract) and `TestnetGuardian` (Sun).

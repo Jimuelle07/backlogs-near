@@ -56,6 +56,7 @@ pub enum ReasonCode {
     JevReceiverRisk,
     AmountMismatch,
     CheckUnavailable,
+    ChecksPassed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
