@@ -16,9 +16,11 @@ import {
   Undo2,
   UserSearch,
 } from "lucide-react";
+import { ArchitectureDiagram } from "./components/ArchitectureDiagram";
 import { HeroConsole } from "./components/HeroConsole";
 import { Logo } from "./components/Logo";
 import { ReceiptsPanel } from "./components/ReceiptsPanel";
+import { VerdictExplorer } from "./components/VerdictExplorer";
 import { DAILY_CAP, PER_PAYMENT_CAP, PROJECT_NAME, REPO_URL, STATUS_NOTE } from "./config";
 
 const NAV = [
@@ -170,13 +172,7 @@ export default function App() {
               </div>
               <p>Four checks run on every payment. Jev fuses their signals into one verdict: allow, hold or block.</p>
             </div>
-            <div className="flow" aria-label="Payment path">
-              <div><KeyRound size={18} aria-hidden="true" />Agent<small>request_payment</small></div>
-              <div className="key"><Lock size={18} aria-hidden="true" />Guardian<small>yields</small></div>
-              <div className="key"><Cpu size={18} aria-hidden="true" />Checker<small>OutLayer TEE</small></div>
-              <div><Fingerprint size={18} aria-hidden="true" />Verdict<small>allow · hold · block</small></div>
-              <div><FileCheck size={18} aria-hidden="true" />Transfer + receipt<small>ft_transfer</small></div>
-            </div>
+            <ArchitectureDiagram />
             <ol className="steps">
               <li>
                 <KeyRound size={24} strokeWidth={1.5} aria-hidden="true" />
@@ -194,6 +190,7 @@ export default function App() {
                 <p>The Guardian acts on the verdict, pays only on an exact match, and writes the receipt.</p>
               </li>
             </ol>
+            <VerdictExplorer />
             <div className="grid4">
               {CHECKS.map(({ Icon, name, text, paper, planned }) => (
                 <div key={name}>
@@ -285,24 +282,14 @@ export default function App() {
             </div>
             <div className="tiers">
               <div className="tier">
-                <span className="name">Allow</span><span className="for">normal payments</span>
-                <span className="val">None <small>wait</small></span>
-                <p>Fits the agent's history and passes every check.</p>
-              </div>
-              <div className="tier">
-                <span className="name">Hold</span><span className="for">unusual payments</span>
-                <span className="val">10 min <small>to 6 h</small></span>
-                <p>Escrow, re-check, auto-release. Window grows with amount.</p>
-              </div>
-              <div className="tier">
-                <span className="name">Block</span><span className="for">clear attacks</span>
-                <span className="val">0 <small>moved</small></span>
-                <p>Refused and logged with reason codes.</p>
-              </div>
-              <div className="tier">
                 <span className="name">Hard cap</span><span className="for">whatever is fooled</span>
                 <span className="val">{DAILY_CAP} <small>tUSDC / day</small></span>
-                <p>{PER_PAYMENT_CAP} tUSDC per payment.</p>
+                <p>The absolute worst case, whatever the checks miss.</p>
+              </div>
+              <div className="tier">
+                <span className="name">Per payment</span><span className="for">checked before the TEE runs</span>
+                <span className="val">{PER_PAYMENT_CAP} <small>tUSDC</small></span>
+                <p>Larger requests are refused outright.</p>
               </div>
             </div>
             <div className="tablewrap">
