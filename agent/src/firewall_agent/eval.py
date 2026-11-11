@@ -1,4 +1,21 @@
-"""firewall-eval: run the checker binary over every scenario, score label vs. verdict, write results.json."""
+"""firewall-eval: run the checker binary over every scenario, score label vs. verdict, write results.json.
+
+C4 — Full eval run: runs the checker under several configurations (env-var presets, one row per
+     configuration in results.json, cost and latency per row) and writes the combined file.
+
+Configuration presets are plain checker env vars (`checker/src/*::from_env`); nothing is hidden in
+Python.  The checker's fusion step decides on Jev `unusual` against `FUSION_HOLD_THRESHOLD`
+(`checker/src/fusion.rs`), so the presets that exist today differ in the thresholds:
+    no_defense           — every threshold at 1.0, so no signal can cross: the undefended baseline
+    jev_fusion_all_signals — all checks on at their defaults (POLICY_*, INJECTION_*, FUSION_* 0.5)
+    jev_fusion_conformal — same, with FUSION_HOLD_THRESHOLD set to the C5 calibrated q̂
+Rows for "policy rules only", "HF classifier only" and "MELON re-run only"
+([idea.md](../../../docs/build/idea.md#evaluation-and-calibration)) need fusion to hold or block on
+a code-rule hit without Jev; that is a checker change, not an eval change (see sprints.md C4).
+
+`--configuration NAME` only labels the summary row; pass the checker env vars yourself.
+`--all-configurations` runs every preset above, sequentially, against the real checker binary.
+"""
 
 from __future__ import annotations
 
@@ -93,14 +110,20 @@ def evaluate_scenarios(
 
             rec_file = active_record_dir / f"{idx}.json"
             policy_ok: bool | None = None
+            jev_unusual: float | None = None
             if rec_file.is_file():
                 raw_rec = rec_file.read_bytes()
                 if hashlib.sha256(raw_rec).hexdigest() != verdict["record_sha256"]:
                     raise ValueError(f"scenario {name!r}: record_sha256 mismatch")
                 rec_json = json.loads(raw_rec)
-                policy_sig = (rec_json.get("signals") or {}).get("policy")
+                signals = rec_json.get("signals") or {}
+                policy_sig = signals.get("policy")
                 if isinstance(policy_sig, dict) and "ok" in policy_sig:
                     policy_ok = bool(policy_sig["ok"])
+                # C5 calibration reads this back from results.json.
+                jev_sig = signals.get("jev")
+                if isinstance(jev_sig, dict) and isinstance(jev_sig.get("unusual"), (int, float)):
+                    jev_unusual = float(jev_sig["unusual"])
 
             checker_version = str(verdict.get("checker_version", checker_version))
             outcome = verdict["outcome"]
@@ -117,6 +140,7 @@ def evaluate_scenarios(
                     "reasons": list(verdict["reasons"]),
                     "record_sha256": verdict["record_sha256"],
                     "policy_ok": policy_ok,
+                    "jev_unusual": jev_unusual,
                     "latency_ms": elapsed_ms,
                 }
             )
@@ -228,6 +252,105 @@ def write_results(results: dict, output_path: Path = DEFAULT_RESULTS_PATH) -> Pa
     return output_path
 
 
+# ---------------------------------------------------------------------------
+# C4 — Multi-configuration presets
+# ---------------------------------------------------------------------------
+
+#: Ordered presets for the full run. Each entry is (label, checker env overrides). The checker reads
+#: these from the environment, so they are set before each pass and restored afterwards.
+#: `jev_fusion_conformal` deliberately leaves FUSION_HOLD_THRESHOLD out: export the q̂ printed by
+#: `uv run firewall-calibrate ...` (C5) before running it, so the calibrated value is the one used.
+_ALL_THRESHOLDS_OPEN = {
+    "POLICY_ENABLED": "true",
+    "INJECTION_ENABLED": "true",
+    "FUSION_HOLD_THRESHOLD": "1.0",
+    "FUSION_INJECTION_THRESHOLD": "1.0",
+    "FUSION_JEV_INJECTION_THRESHOLD": "1.0",
+    "FUSION_JEV_RECEIVER_RISK_THRESHOLD": "1.0",
+}
+
+EVAL_CONFIGURATIONS: list[tuple[str, dict[str, str]]] = [
+    ("no_defense", _ALL_THRESHOLDS_OPEN),
+    (
+        "jev_fusion_all_signals",
+        {
+            "POLICY_ENABLED": "true",
+            "INJECTION_ENABLED": "true",
+            "FUSION_HOLD_THRESHOLD": "0.5",
+        },
+    ),
+    (
+        "jev_fusion_conformal",
+        {
+            "POLICY_ENABLED": "true",
+            "INJECTION_ENABLED": "true",
+        },
+    ),
+]
+
+
+def run_all_configurations(
+    settings: Settings,
+    configurations: list[tuple[str, dict[str, str]]] | None = None,
+    checker_fn: CheckerRunner | None = None,
+    output_path: Path = DEFAULT_RESULTS_PATH,
+) -> dict:
+    """Run the checker over all scenarios for each configuration preset.
+
+    Returns a combined results.json dict with one entry per configuration in
+    ``configurations``.  The ``configurations`` key in the output holds all rows;
+    the top-level ``summary`` and ``by_family`` reflect the last (or only) run.
+
+    Args:
+        settings: loaded Settings.
+        configurations: list of (label, env_overrides) pairs; defaults to EVAL_CONFIGURATIONS.
+        checker_fn: optional in-process checker runner (overrides the binary).
+        output_path: where to write the final results.json.
+
+    Returns:
+        The combined results dict.
+    """
+    import os
+
+    cfgs = configurations or EVAL_CONFIGURATIONS
+    all_config_rows: list[dict] = []
+    last_result: dict = {}
+
+    for label, env_overrides in cfgs:
+        # Apply env overrides for this configuration.
+        old_env: dict[str, str | None] = {}
+        for k, v in env_overrides.items():
+            old_env[k] = os.environ.get(k)
+            os.environ[k] = v
+
+        try:
+            result = evaluate_scenarios(
+                settings,
+                configuration=label,
+                checker_fn=checker_fn,
+            )
+            # Collect the configuration summary row.
+            if result["configurations"]:
+                all_config_rows.append(result["configurations"][0])
+            last_result = result
+        finally:
+            # Restore env.
+            for k, old in old_env.items():
+                if old is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = old
+
+    if not last_result:
+        return {}
+
+    # Combine: last run's top-level metadata + all configuration rows.
+    combined = dict(last_result)
+    combined["configurations"] = all_config_rows
+    write_results(combined, output_path)
+    return combined
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="firewall-eval", description=__doc__)
     ap.add_argument(
@@ -247,9 +370,39 @@ def main(argv: list[str] | None = None) -> int:
         dest="scenarios",
         help="run only the named scenario(s); defaults to all scenarios",
     )
+    ap.add_argument(
+        "--all-configurations",
+        action="store_true",
+        help=(
+            "C4: run all standard configuration presets sequentially and write a "
+            "combined results.json (requires the checker binary to be built)"
+        ),
+    )
     args = ap.parse_args(argv)
 
     s = Settings.load()
+
+    if args.all_configurations:
+        combined = run_all_configurations(s, output_path=args.output)
+        if not combined:
+            print("ERROR: no results produced", file=sys.stderr)
+            return 1
+        lat = combined["latency_ms"]
+        print(f"configurations: {len(combined['configurations'])}")
+        for row in combined["configurations"]:
+            print(
+                f"  {row['configuration']}: "
+                f"false_holds={row['false_holds']} ({row['false_holds_pct']}%) "
+                f"missed_attacks={row['missed_attacks']} ({row['missed_attacks_pct']}%)"
+            )
+        print(f"latency_ms (last run): p50={lat['p50_ms']} p95={lat['p95_ms']}")
+        try:
+            shown = args.output.relative_to(REPO_ROOT)
+        except ValueError:
+            shown = args.output
+        print(f"results_file: {shown.as_posix()}")
+        return 0
+
     results = evaluate_scenarios(
         s,
         scenario_names=args.scenarios,
