@@ -44,23 +44,36 @@ def base_settings():
     )
 
 
+ALLOW_THEN_BLOCK = [
+    ("allow", "paid", ["checks_passed"]),
+    ("block", "refused", ["injection_high", "lookalike_receiver"]),
+]
+DRY_ALLOW_THEN_BLOCK = [("allow", "would_pay", ["checks_passed"]), ALLOW_THEN_BLOCK[1]]
+
+
 class MockGuardian:
-    def __init__(self, outcome="allow", status="paid", reasons=None, should_panic=False):
+    def __init__(self, outcome="allow", status="paid", reasons=None, should_panic=False, sequence=None):
         self.outcome = outcome
         self.status = status
-        self.reasons = reasons or ["stub_allow"]
+        self.reasons = reasons or ["checks_passed"]
         self.should_panic = should_panic
+        # sequence[i] = (outcome, status, reasons) returned by the i-th request_payment call
+        self.sequence: list[tuple[str, str, list[str]]] | None = sequence
         self.calls = []
 
     def request_payment(self, req):
         self.calls.append(req)
         if self.should_panic:
             raise ContractRefusal("Daily cap reached")
+        if self.sequence is not None:
+            outcome, status, reasons = self.sequence[len(self.calls) - 1]
+        else:
+            outcome, status, reasons = self.outcome, self.status, self.reasons
         return Decision(
-            outcome=self.outcome,
-            reasons=list(self.reasons),
+            outcome=outcome,
+            reasons=list(reasons),
             record_sha256="aa" * 32,
-            status=self.status,
+            status=status,
             detail="request_id=1",
         )
 
@@ -110,8 +123,8 @@ def test_run_scenario_step_benign_success(base_settings):
     assert len(mock_g.calls) == 1
 
 
-def test_run_scenario_step_attack_stub_allow(base_settings):
-    mock_g = MockGuardian(outcome="allow", status="paid", reasons=["stub_allow"])
+def test_run_scenario_step_attack_allowed_fails(base_settings):
+    mock_g = MockGuardian(outcome="allow", status="paid", reasons=["checks_passed"])
     res = run_scenario_step(
         DEFAULT_ATTACK_SCENARIO,
         step_title="attack_test",
@@ -119,7 +132,7 @@ def test_run_scenario_step_attack_stub_allow(base_settings):
         mode="testnet",
         guardian_factory=lambda _s: mock_g,
     )
-    assert res.passed
+    assert not res.passed
     assert res.outcome == "allow"
     assert res.status == "paid"
     assert res.scenario == DEFAULT_ATTACK_SCENARIO
@@ -165,7 +178,7 @@ def test_run_scenario_step_contract_refusal(base_settings):
 
 
 def test_run_nightly_e2e_full_pass(base_settings):
-    mock_g = MockGuardian(outcome="allow", status="paid")
+    mock_g = MockGuardian(sequence=ALLOW_THEN_BLOCK)
     report = run_nightly_e2e(
         settings=base_settings,
         mode="testnet",
@@ -193,7 +206,7 @@ def test_run_nightly_e2e_interactive_abort(base_settings, monkeypatch):
 
 def test_run_nightly_e2e_interactive_confirm(base_settings, monkeypatch):
     monkeypatch.setattr("builtins.input", lambda _: "yes")
-    mock_g = MockGuardian(outcome="allow", status="paid")
+    mock_g = MockGuardian(sequence=ALLOW_THEN_BLOCK)
     report = run_nightly_e2e(
         settings=base_settings,
         mode="testnet",
@@ -205,14 +218,14 @@ def test_run_nightly_e2e_interactive_confirm(base_settings, monkeypatch):
 
 
 def test_main_cli_dry_run(monkeypatch):
-    mock_g = MockGuardian(outcome="allow", status="would_pay")
+    mock_g = MockGuardian(sequence=DRY_ALLOW_THEN_BLOCK)
     monkeypatch.setattr(nightly_e2e, "LocalGuardian", lambda _s: mock_g)
     code = main(["--mode", "dry-run", "-y"])
     assert code == 0
 
 
 def test_main_cli_json_output(monkeypatch, capsys):
-    mock_g = MockGuardian(outcome="allow", status="would_pay")
+    mock_g = MockGuardian(sequence=DRY_ALLOW_THEN_BLOCK)
     monkeypatch.setattr(nightly_e2e, "LocalGuardian", lambda _s: mock_g)
     code = main(["--mode", "dry-run", "-y", "--json"])
     assert code == 0
