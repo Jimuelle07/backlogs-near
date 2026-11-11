@@ -6,7 +6,14 @@ import pytest
 
 from firewall_agent import eval as eval_mod
 from firewall_agent.config import Settings
-from firewall_agent.eval import RESULTS_FORMAT, evaluate_scenarios, main, write_results
+from firewall_agent.eval import (
+    EVAL_CONFIGURATIONS,
+    RESULTS_FORMAT,
+    evaluate_scenarios,
+    main,
+    run_all_configurations,
+    write_results,
+)
 
 
 def _make_stub_runner(outcome_for=lambda _ci: ("allow", ["stub_allow"])):
@@ -152,3 +159,62 @@ def test_eval_with_real_checker_binary_when_built(tmp_path):
     by_name = {c["name"]: c for c in res["cases"]}
     assert by_name["benign-hosting"]["policy_ok"] is True
     assert by_name["attack-fake-invoice-amount-inflation"]["policy_ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# C4 — Multi-configuration run
+# ---------------------------------------------------------------------------
+
+
+def test_run_all_configurations_produces_multiple_rows(tmp_path):
+    """C4: run_all_configurations returns one config row per preset."""
+    s = Settings.load()
+    # Use stub runner so this test is fast and offline.
+    combined = run_all_configurations(
+        s,
+        configurations=[
+            ("cfg_a", {"JEV_ENABLED": "false"}),
+            ("cfg_b", {"JEV_ENABLED": "false"}),
+        ],
+        checker_fn=_make_stub_runner(),
+        output_path=tmp_path / "results.json",
+    )
+    assert combined["format"] == RESULTS_FORMAT
+    assert len(combined["configurations"]) == 2
+    labels = [r["configuration"] for r in combined["configurations"]]
+    assert labels == ["cfg_a", "cfg_b"]
+    assert (tmp_path / "results.json").is_file()
+
+
+def test_run_all_configurations_default_presets(tmp_path):
+    """C4: default EVAL_CONFIGURATIONS has the expected configuration labels."""
+    labels = [label for label, _ in EVAL_CONFIGURATIONS]
+    assert "no_defense" in labels
+    assert "jev_fusion_all_signals" in labels
+    assert "jev_fusion_conformal" in labels
+
+
+def test_eval_cli_all_configurations(tmp_path, monkeypatch, capsys):
+    """C4: --all-configurations CLI flag runs all presets and prints summary."""
+    monkeypatch.setattr(
+        eval_mod,
+        "run_checker",
+        lambda _bin, input_bytes, rec_dir: _make_stub_runner()(input_bytes, rec_dir),
+    )
+    out = tmp_path / "results.json"
+    # Monkeypatch run_all_configurations to use our stub runner for speed.
+    original_run_all = eval_mod.run_all_configurations
+
+    def _patched_run_all(settings, configurations=None, checker_fn=None, output_path=None):
+        return original_run_all(
+            settings,
+            configurations=[("no_defense", {}), ("jev_fusion_all_signals", {"POLICY_ENABLED": "true"})],
+            checker_fn=_make_stub_runner(),
+            output_path=output_path or out,
+        )
+
+    monkeypatch.setattr(eval_mod, "run_all_configurations", _patched_run_all)
+    rc = main(["--all-configurations", "--output", str(out)])
+    assert rc == 0
+    stdout = capsys.readouterr().out
+    assert "configurations:" in stdout

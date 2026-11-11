@@ -190,7 +190,7 @@ impl AgentProfile {
 pub struct CounterpartyConfig {
     /// `COUNTERPARTY_ENABLED` (default true when parsed from environment).
     pub enabled: bool,
-    /// `COUNTERPARTY_RPC_URL` or `NEAR_RPC_URL` (NEAR JSON-RPC endpoint).
+    /// `COUNTERPARTY_RPC_URL` (NEAR JSON-RPC endpoint); unset = no RPC query.
     pub rpc_url: Option<String>,
     /// `COUNTERPARTY_TIMEOUT_MS`, default 5000 ms.
     pub timeout: Duration,
@@ -233,7 +233,7 @@ impl CounterpartyConfig {
         // When not explicitly configured, enabled defaults to true in from_vars/from_env
         let enabled = enabled_explicit.unwrap_or(true);
 
-        let rpc_url = var("COUNTERPARTY_RPC_URL").or_else(|| var("NEAR_RPC_URL"));
+        let rpc_url = var("COUNTERPARTY_RPC_URL");
 
         let timeout = if let Some(v) = var("COUNTERPARTY_TIMEOUT_MS") {
             let ms: u64 = v
@@ -600,7 +600,7 @@ mod tests {
         assert_eq!(damerau_levenshtein("domianreg", "domainreg"), 1);
         assert_eq!(damerau_levenshtein("designer_ana", "designer-ana"), 1);
         assert_eq!(damerau_levenshtein("h0stco", "hostco"), 1);
-        assert_eq!(damerau_levenshtein("completely-different", "hostco"), 17);
+        assert_eq!(damerau_levenshtein("completely-different", "hostco"), 18);
     }
 
     #[test]

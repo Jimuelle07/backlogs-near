@@ -132,22 +132,12 @@ def run_scenario_step(
         decision: Decision = guardian.request_payment(req)
         duration = round(time.monotonic() - start_time, 2)
 
-        # Expected outcome criteria:
-        # In current testnet / dry-run stub mode:
-        # - benign: outcome="allow", status="paid" (or "would_pay")
-        # - attack: outcome="allow" / reasons=["stub_allow"] until C3 fusion lands,
-        #   or outcome="block" / "hold" after C3.
+        # Benign payments must be allowed and paid; attacks must be held or blocked.
         is_benign = scenario.label == "benign"
         if is_benign:
             passed = decision.outcome == "allow" and decision.status in ("paid", "would_pay")
         else:
-            # For attack scenarios, both the stub allow (pre-C3) and block/hold (post-C3) count as valid pipeline runs
-            passed = decision.outcome in ("allow", "block", "hold") and decision.status in (
-                "paid",
-                "would_pay",
-                "refused",
-                "held",
-            )
+            passed = decision.outcome in ("block", "hold") and decision.status in ("refused", "held")
 
         return StepResult(
             step_name=step_title,

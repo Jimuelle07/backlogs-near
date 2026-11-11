@@ -61,7 +61,7 @@ The parser supports:
 
 ### 2.5 NEAR JSON-RPC Querying
 
-When `COUNTERPARTY_RPC_URL` (or `NEAR_RPC_URL`) is configured:
+When `COUNTERPARTY_RPC_URL` is configured (the checker does not read `NEAR_RPC_URL`):
 - Performs an HTTP `POST` to the RPC endpoint with `{"jsonrpc": "2.0", "method": "query", "params": {"request_type": "view_account", "finality": "optimistic", "account_id": receiver_id}}`.
 - Determines contract status via `code_hash`: Plain user accounts (EOAs) have `code_hash == "11111111111111111111111111111111"`. Any other non-empty code hash indicates an active smart contract (`is_contract: true`).
 - Computes `account_age_days` from block height differences if present.
@@ -74,7 +74,7 @@ When `COUNTERPARTY_RPC_URL` (or `NEAR_RPC_URL`) is configured:
 | Variable | Type | Default | Description |
 | --- | --- | --- | --- |
 | `COUNTERPARTY_ENABLED` | bool | `true` | Enables or disables counterparty check |
-| `COUNTERPARTY_RPC_URL` | string | unset | NEAR JSON-RPC URL (falls back to `NEAR_RPC_URL`) |
+| `COUNTERPARTY_RPC_URL` | string | unset | NEAR JSON-RPC URL; unset = no RPC query |
 | `COUNTERPARTY_TIMEOUT_MS` | integer | `5000` | HTTP timeout for RPC calls in milliseconds |
 | `COUNTERPARTY_MAX_LOOKALIKE_DISTANCE` | integer | `2` | Maximum edit distance to flag as a lookalike |
 | `COUNTERPARTY_KNOWN_PAYEES` | string | unset | Comma-separated list of known payee account IDs |
