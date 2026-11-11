@@ -59,7 +59,7 @@ impl PolicyConfig {
                 .split(',')
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .map(String::from)
+                .map(|s| s.to_ascii_lowercase())
                 .collect();
         }
         if let Some(v) = var("POLICY_MAX_AMOUNT") {
@@ -82,7 +82,9 @@ pub fn check(input: &CheckerInput, cfg: &PolicyConfig) -> PolicySignal {
     let mut violations: Vec<String> = Vec::new();
     let mut add = |id: &str| violations.push(id.to_string());
 
-    if !cfg.allowlist.is_empty() && !cfg.allowlist.iter().any(|a| a == &input.receiver_id) {
+    if !cfg.allowlist.is_empty()
+        && !cfg.allowlist.iter().any(|a| a.eq_ignore_ascii_case(&input.receiver_id))
+    {
         add(V_RECEIVER_NOT_ALLOWLISTED);
     }
 
@@ -521,6 +523,11 @@ mod tests {
         assert_eq!(ids(&miss, &cfg), vec![V_RECEIVER_NOT_ALLOWLISTED]);
         // empty allowlist = rule off
         assert!(ids(&miss, &PolicyConfig::default()).is_empty());
+        // Case-insensitive allowlist parsing and matching (B1 review follow-up #1 closed in B4).
+        let upper_cfg = PolicyConfig::from_vars(vars(&[("POLICY_ALLOWLIST", "HostCo.Demo.Testnet, OTHER.TESTNET")])).unwrap();
+        assert_eq!(upper_cfg.allowlist, vec!["hostco.demo.testnet", "other.testnet"]);
+        assert!(ids(&input(), &upper_cfg).is_empty());
+        assert!(ids(&with(|i| i.receiver_id = "HOSTCO.DEMO.TESTNET".into()), &upper_cfg).is_empty());
     }
 
     #[test]

@@ -87,6 +87,9 @@ class Decision:
     detail: str = ""
     record_path: Path | None = None
     release_at_ns: int | None = None
+    tx_hash: str | None = None
+    balance_before: int | None = None
+    balance_after: int | None = None
 
 
 def binds(checker_input: dict, verdict: dict) -> str | None:
@@ -341,3 +344,126 @@ class TestnetGuardian:
             status=receipt["status"],
             detail=f"request_id={receipt.get('request_id')}",
         )
+
+
+STORAGE_DEPOSIT_YOCTO = 10**24 * 125 // 100_000  # 0.00125 NEAR (NEP-145 minimum)
+
+
+def _extract_tx_hash(tx_res) -> str:
+    """Best-effort transaction hash extraction across py-near return shapes."""
+    if isinstance(tx_res, str):
+        return tx_res
+    tx = getattr(tx_res, "transaction", None)
+    if tx is not None and getattr(tx, "hash", None):
+        return str(tx.hash)
+    if isinstance(tx_res, dict):
+        return str(tx_res.get("transaction", {}).get("hash") or tx_res.get("tx_hash") or "")
+    return str(tx_res or "")
+
+
+class UnprotectedLocalAgent:
+    """Dry-run plain agent for demo step 3 (A5): no Guardian, no checker, no caps or escrow."""
+
+    def __init__(self, settings: Settings | None = None):
+        self.s = settings
+
+    def reset_spend(self) -> None:
+        """No-op in unprotected mode (no daily cap state exists)."""
+
+    def request_payment(self, req: PaymentRequest) -> Decision:
+        req.validate()
+        return Decision(
+            outcome=None,
+            reasons=["unprotected_no_guardian"],
+            record_sha256=None,
+            status="would_pay_unprotected",
+            detail="plain agent with full-access key (no Guardian)",
+        )
+
+
+class UnprotectedTestnetAgent:
+    """Testnet plain agent for demo step 3 (A5): holds a full-access key and calls NEP-141
+    `ft_transfer` directly on `TOKEN_ID` without the Guardian. Human-gated (signs testnet txs).
+    """
+
+    __test__ = False  # not a pytest class
+
+    def __init__(self, settings: Settings):
+        self.s = settings
+        self.payer_id = settings.unprotected_agent_account_id or settings.owner_account_id
+        self.payer_key = settings.unprotected_agent_private_key or settings.owner_private_key
+        if not self.s.token_id:
+            raise SystemExit("TOKEN_ID not set (run firewall-setup-testnet first)")
+        if not (self.payer_id and self.payer_key):
+            raise SystemExit(
+                "UNPROTECTED_AGENT_ACCOUNT_ID/UNPROTECTED_AGENT_PRIVATE_KEY "
+                "(or OWNER_ACCOUNT_ID/OWNER_PRIVATE_KEY) not set (run firewall-setup-testnet first)"
+            )
+
+    def request_payment(self, req: PaymentRequest) -> Decision:
+        req.validate()
+        return asyncio.run(self._run(req))
+
+    async def _run(self, req: PaymentRequest) -> Decision:
+        try:
+            from py_near.account import Account
+        except ImportError:
+            raise SystemExit("py-near not installed; run: uv sync --extra testnet")
+        rpc = self.s.near_rpc_url or DEFAULT_TESTNET_RPC
+        acc = Account(self.payer_id, self.payer_key, rpc_addr=rpc)
+        await acc.startup()
+        try:
+            bal_before_res = await acc.view_function(
+                self.s.token_id, "ft_balance_of", {"account_id": self.payer_id}
+            )
+            before = int(bal_before_res.result or 0)
+            if before < req.amount:
+                raise ContractRefusal(
+                    f"Insufficient tUSDC balance on {self.payer_id}: have {before}, need {req.amount}"
+                )
+
+            sb = await acc.view_function(
+                self.s.token_id, "storage_balance_of", {"account_id": req.receiver_id}
+            )
+            if not sb.result:
+                await acc.function_call(
+                    self.s.token_id,
+                    "storage_deposit",
+                    {"account_id": req.receiver_id, "registration_only": True},
+                    gas=30 * TGAS,
+                    amount=STORAGE_DEPOSIT_YOCTO,
+                )
+
+            tx_res = await acc.function_call(
+                self.s.token_id,
+                "ft_transfer",
+                {
+                    "receiver_id": req.receiver_id,
+                    "amount": str(req.amount),
+                    "memo": req.memo or None,
+                },
+                gas=30 * TGAS,
+                amount=1,
+            )
+            status = getattr(tx_res, "status", None)
+            if isinstance(status, dict) and "Failure" in status:
+                raise ContractRefusal(_failure_message(status))
+            tx_hash = _extract_tx_hash(tx_res)
+
+            bal_after_res = await acc.view_function(
+                self.s.token_id, "ft_balance_of", {"account_id": self.payer_id}
+            )
+            after = int(bal_after_res.result or 0)
+
+            return Decision(
+                outcome=None,
+                reasons=["unprotected_no_guardian"],
+                record_sha256=None,
+                status="paid_unprotected",
+                detail=f"tx={tx_hash}" if tx_hash else "paid directly without Guardian",
+                tx_hash=tx_hash or None,
+                balance_before=before,
+                balance_after=after,
+            )
+        finally:
+            await acc.shutdown()

@@ -10,7 +10,13 @@ from datetime import datetime, timezone
 from .agent import propose_payment
 from .config import REPO_ROOT, TOKEN_DECIMALS, Settings
 from .formats import units_to_display
-from .guardian import ContractRefusal, LocalGuardian, TestnetGuardian
+from .guardian import (
+    ContractRefusal,
+    LocalGuardian,
+    TestnetGuardian,
+    UnprotectedLocalAgent,
+    UnprotectedTestnetAgent,
+)
 from .llm import NearAiLLM, ScriptedLLM
 from .scenarios import list_scenarios, load_scenario
 
@@ -29,12 +35,25 @@ def make_client_ref(scenario_name: str, mode: str, now_ns: int | None = None) ->
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="firewall-demo", description=__doc__)
     ap.add_argument("--scenario", required=True, help=f"one of: {', '.join(list_scenarios())}")
-    ap.add_argument("--mode", choices=["dry-run", "testnet"], default="dry-run")
+    ap.add_argument(
+        "--mode",
+        choices=["dry-run", "testnet", "unprotected"],
+        default="dry-run",
+        help="execution mode ('unprotected' is shorthand for --mode testnet --unprotected)",
+    )
+    ap.add_argument(
+        "--unprotected",
+        action="store_true",
+        help="demo step 3: bypass the Guardian and pay directly as a plain agent with a full-access key",
+    )
     ap.add_argument("--llm", choices=["scripted", "near-ai"], default="scripted")
     ap.add_argument(
         "--reset-spend", action="store_true", help="dry-run only: clear today's daily spend first"
     )
     args = ap.parse_args(argv)
+
+    unprotected = args.unprotected or args.mode == "unprotected"
+    chain_mode = "testnet" if args.mode in ("testnet", "unprotected") else "dry-run"
 
     s = Settings.load()
     scenario = load_scenario(args.scenario, s.ns)
@@ -44,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
         llm = NearAiLLM(s.near_ai_base_url, s.near_ai_api_key, s.agent_model)
 
     print(f"scenario: {scenario.name} ({scenario.label})")
-    req = propose_payment(scenario, llm, client_ref=make_client_ref(scenario.name, args.mode))
+    req = propose_payment(scenario, llm, client_ref=make_client_ref(scenario.name, chain_mode))
     if req is None:
         print("proposed: none")
         return 0
@@ -52,9 +71,12 @@ def main(argv: list[str] | None = None) -> int:
         f"proposed: pay {req.amount} units ({units_to_display(req.amount, TOKEN_DECIMALS)} tUSDC) "
         f'to {req.receiver_id} memo="{req.memo}"'
     )
-    guardian = LocalGuardian(s) if args.mode == "dry-run" else TestnetGuardian(s)
+    if unprotected:
+        guardian = UnprotectedLocalAgent(s) if chain_mode == "dry-run" else UnprotectedTestnetAgent(s)
+    else:
+        guardian = LocalGuardian(s) if chain_mode == "dry-run" else TestnetGuardian(s)
     if args.reset_spend:
-        if args.mode == "dry-run":
+        if chain_mode == "dry-run":
             guardian.reset_spend()
         else:
             print("note: --reset-spend only applies to dry-run; ignored")
@@ -62,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         d = guardian.request_payment(req)
     except ContractRefusal as e:
         print(f"refused by contract: {e}")
-        if args.mode == "dry-run" and str(e) == "Daily cap reached":
+        if chain_mode == "dry-run" and str(e) == "Daily cap reached":
             print(
                 "dry-run: daily spend is kept across runs like the contract; "
                 "rerun with --reset-spend to start a fresh day"
@@ -70,10 +92,19 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(f"verdict: {d.outcome} reasons={','.join(d.reasons)} record={d.record_sha256}")
     print(f"action: {d.status}")
+    if d.tx_hash:
+        print(f"tx_hash: {d.tx_hash}")
+    if d.balance_before is not None and d.balance_after is not None:
+        before_disp = units_to_display(d.balance_before, TOKEN_DECIMALS)
+        after_disp = units_to_display(d.balance_after, TOKEN_DECIMALS)
+        print(
+            f"balance: {d.balance_before} -> {d.balance_after} units "
+            f"({before_disp} -> {after_disp} tUSDC)"
+        )
     if d.release_at_ns is not None:
         release = datetime.fromtimestamp(d.release_at_ns // 10**9, tz=timezone.utc)
         print(f"held until {release.strftime('%Y-%m-%dT%H:%M:%SZ')}")
-    if args.mode == "dry-run" and d.record_path is not None:
+    if chain_mode == "dry-run" and d.record_path is not None:
         try:
             shown = d.record_path.relative_to(REPO_ROOT)
         except ValueError:
