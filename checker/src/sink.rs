@@ -1,8 +1,8 @@
 //! Off-chain DecisionRecord sink (A2): POSTs each serialized DecisionRecord to
-//! `DECISION_LOG_URL`. If the POST fails, an `allow` outcome is downgraded to `hold`
-//! (`sdd.md §7`).
+//! `DECISION_LOG_URL`. If the POST fails, an `allow` outcome is downgraded to `hold`, and a lone
+//! `checks_passed` reason becomes `check_unavailable` (`sdd.md §7`).
 use crate::decide::{record_bytes, sha256_hex, CheckerError};
-use crate::formats::{DecisionRecord, Outcome, Verdict};
+use crate::formats::{DecisionRecord, Outcome, ReasonCode, Verdict};
 use crate::http::{self, HttpError};
 use std::fmt;
 use std::time::Duration;
@@ -79,7 +79,8 @@ impl RecordSink for HttpRecordSink {
 }
 
 /// POST `record` to `sink`. On failure, downgrades `allow` to `hold` on both `verdict` and
-/// `record` and recomputes `verdict.record_sha256` so it matches the downgraded record.
+/// `record` (reasons `[checks_passed]` become `[check_unavailable]`; other reasons stay) and
+/// recomputes `verdict.record_sha256` so it matches the downgraded record.
 pub fn deliver(
     verdict: &mut Verdict,
     record: &mut DecisionRecord,
@@ -92,6 +93,10 @@ pub fn deliver(
         if verdict.outcome == Outcome::Allow {
             verdict.outcome = Outcome::Hold;
             record.outcome = Outcome::Hold;
+            if verdict.reasons == [ReasonCode::ChecksPassed] {
+                verdict.reasons = vec![ReasonCode::CheckUnavailable];
+                record.reasons = verdict.reasons.clone();
+            }
             verdict.record_sha256 = sha256_hex(&record_bytes(record)?);
         }
     }
@@ -115,6 +120,7 @@ pub fn deliver_with_config(
 mod tests {
     use super::*;
     use crate::decide::decide_with;
+    use crate::fusion::testing::FixedClient;
     use crate::policy::PolicyConfig;
     use std::cell::RefCell;
 
@@ -178,7 +184,7 @@ mod tests {
 
     #[test]
     fn disabled_sink_leaves_allow_unchanged() {
-        let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default()).unwrap();
+        let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default(), Some(&FixedClient::benign())).unwrap();
         let orig_sha = v.record_sha256.clone();
         deliver_with_config(&mut v, &mut r, &SinkConfig::default()).unwrap();
         assert_eq!(v.outcome, Outcome::Allow);
@@ -188,7 +194,7 @@ mod tests {
 
     #[test]
     fn post_success_preserves_allow_and_sends_exact_record_bytes() {
-        let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default()).unwrap();
+        let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default(), Some(&FixedClient::benign())).unwrap();
         let orig_sha = v.record_sha256.clone();
         let sink = FakeSink::ok();
         deliver(&mut v, &mut r, &sink).unwrap();
@@ -204,15 +210,35 @@ mod tests {
 
     #[test]
     fn post_status_failure_downgrades_allow_to_hold() {
-        let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default()).unwrap();
+        let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default(), Some(&FixedClient::benign())).unwrap();
         let orig_sha = v.record_sha256.clone();
         let sink = FakeSink::err_status(500);
         deliver(&mut v, &mut r, &sink).unwrap();
         assert_eq!(v.outcome, Outcome::Hold);
         assert_eq!(r.outcome, Outcome::Hold);
+        assert_eq!(v.reasons, vec![ReasonCode::CheckUnavailable]);
+        assert_eq!(r.reasons, v.reasons);
         assert_ne!(v.record_sha256, orig_sha);
         assert_eq!(v.record_sha256, sha256_hex(&record_bytes(&r).unwrap()));
         assert!(serde_json::to_vec(&v).unwrap().len() <= 900);
+    }
+
+    #[test]
+    fn post_failure_keeps_attack_reasons_on_downgrade() {
+        let mut j: serde_json::Value = serde_json::from_str(INPUT).unwrap();
+        j["amount"] = "180000000".into();
+        j["user_request"] = "Pay the 18 USDC hosting bill.".into();
+        let bytes = serde_json::to_vec(&j).unwrap();
+        let (mut v, mut r) =
+            decide_with(&bytes, &PolicyConfig::default(), Some(&FixedClient::benign())).unwrap();
+        assert_eq!(v.outcome, Outcome::Allow);
+        let reasons = vec![ReasonCode::PolicyViolation, ReasonCode::AmountMismatch];
+        assert_eq!(v.reasons, reasons);
+        deliver(&mut v, &mut r, &FakeSink::err_status(503)).unwrap();
+        assert_eq!(v.outcome, Outcome::Hold);
+        assert_eq!(v.reasons, reasons);
+        assert_eq!(r.reasons, reasons);
+        assert_eq!(v.record_sha256, sha256_hex(&record_bytes(&r).unwrap()));
     }
 
     #[test]
@@ -221,7 +247,7 @@ mod tests {
             (|| HttpError::Timeout) as fn() -> HttpError,
             || HttpError::Transport("connection refused".into()),
         ] {
-            let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default()).unwrap();
+            let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default(), Some(&FixedClient::benign())).unwrap();
             let sink = TransportErrSink(err_fn);
             deliver(&mut v, &mut r, &sink).unwrap();
             assert_eq!(v.outcome, Outcome::Hold);
@@ -233,7 +259,7 @@ mod tests {
     #[test]
     fn post_failure_preserves_hold_and_block() {
         for initial in [Outcome::Hold, Outcome::Block] {
-            let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default()).unwrap();
+            let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default(), Some(&FixedClient::benign())).unwrap();
             v.outcome = initial;
             r.outcome = initial;
             v.record_sha256 = sha256_hex(&record_bytes(&r).unwrap());
@@ -286,7 +312,7 @@ mod tests {
                 .unwrap();
             req
         });
-        let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default()).unwrap();
+        let (mut v, mut r) = decide_with(INPUT.as_bytes(), &PolicyConfig::default(), Some(&FixedClient::benign())).unwrap();
         let cfg = SinkConfig { url: Some(format!("http://{addr}/decisions")) };
         deliver_with_config(&mut v, &mut r, &cfg).unwrap();
         let raw_req = handle.join().unwrap();
@@ -305,7 +331,7 @@ mod tests {
                 .write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 4\r\nConnection: close\r\n\r\nfail")
                 .unwrap();
         });
-        let (mut v2, mut r2) = decide_with(INPUT.as_bytes(), &PolicyConfig::default()).unwrap();
+        let (mut v2, mut r2) = decide_with(INPUT.as_bytes(), &PolicyConfig::default(), Some(&FixedClient::benign())).unwrap();
         let cfg2 = SinkConfig { url: Some(format!("http://{addr}/decisions")) };
         deliver_with_config(&mut v2, &mut r2, &cfg2).unwrap();
         handle.join().unwrap();
