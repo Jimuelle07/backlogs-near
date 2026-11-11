@@ -36,7 +36,7 @@ Four specific reviewer follow-up considerations were identified during PR #3:
 
 ### Follow-up 1: Allowlist case-sensitivity and account whitespace
 - **Analysis:** `PolicyConfig::from_vars` splits `POLICY_ALLOWLIST` on commas and trims leading/trailing whitespace (`.map(str::trim).filter(|s| !s.is_empty())`). NEAR account IDs are strictly lowercase alphanumeric with `.` and `_` / `-`.
-- **Verdict & Recommendation:** Current trimming prevents whitespace issues. For Sprint 2 (B3/B4), we can add `.to_ascii_lowercase()` during parsing to make misconfigured uppercase inputs resilient.
+- **Verdict & Resolution (closed in B4):** `.to_ascii_lowercase()` normalization in `PolicyConfig::from_vars` and case-insensitive `eq_ignore_ascii_case` matching in `policy::check` are now implemented and unit-tested in `checker/src/policy.rs`.
 
 ### Follow-up 2: Thousands separators and decimal fractions
 - **Analysis:** `scan_amounts` properly handles comma thousands separators (e.g., `1,234.50 USDC` scales to `1234500000`). In `stated_fractions`, percentages support up to 6 decimal digits (scaled by `1_000_000`), e.g. `12.5 percent of 80 USDC` matches `10000000` base units.

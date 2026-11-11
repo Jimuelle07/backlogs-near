@@ -27,6 +27,7 @@ ACCOUNTS = {
     "tusdc": 3 * NEAR,
     "guardian": 5 * NEAR,
     "agent": 2 * NEAR,
+    "unprotected": NEAR,
     "checker": 2 * NEAR,
     "hostco": NEAR // 2,
     "hostc0": NEAR // 2,
@@ -146,7 +147,7 @@ async def _run(s: Settings) -> None:
         await owner.function_call(
             ids["tusdc"], "mint", {"account_id": owner_id, "amount": str(1000 * USDC)}, gas=30 * TGAS
         )
-        for name in ("guardian", "hostco", "hostc0"):
+        for name in ("guardian", "unprotected", "hostco", "hostc0"):
             print(f"storage_deposit for {ids[name]}")
             await owner.function_call(
                 ids["tusdc"],
@@ -165,6 +166,15 @@ async def _run(s: Settings) -> None:
             amount=1,
         )
 
+        print("funding unprotected plain agent with 200 tUSDC")
+        await owner.function_call(
+            ids["tusdc"],
+            "ft_transfer",
+            {"receiver_id": ids["unprotected"], "amount": str(200 * USDC), "memo": "unprotected-agent-seed"},
+            gas=30 * TGAS,
+            amount=1,
+        )
+
         print("restricting agent key to a function-call key")
         fc_secret, fc_public = new_keypair()
         _record_key(f"{ids['agent']}#function_call", fc_secret)
@@ -180,6 +190,8 @@ async def _run(s: Settings) -> None:
                 f"TOKEN_ID={ids['tusdc']}",
                 f"AGENT_ACCOUNT_ID={ids['agent']}",
                 f"AGENT_PRIVATE_KEY={fc_secret}",
+                f"UNPROTECTED_AGENT_ACCOUNT_ID={ids['unprotected']}",
+                f"UNPROTECTED_AGENT_PRIVATE_KEY={keys['unprotected'][0]}",
                 f"CHECKER_ACCOUNT_ID={ids['checker']}",
                 f"CHECKER_PRIVATE_KEY={keys['checker'][0]}",
             ],
@@ -288,6 +300,8 @@ async def _redeploy(s: Settings, suffix: str) -> None:
                 f"TOKEN_ID={token_id}",
                 f"AGENT_ACCOUNT_ID={agent_id}",
                 f"AGENT_PRIVATE_KEY={fc_secret}",
+                f"UNPROTECTED_AGENT_ACCOUNT_ID={s.unprotected_agent_account_id or owner_id}",
+                f"UNPROTECTED_AGENT_PRIVATE_KEY={s.unprotected_agent_private_key or s.owner_private_key}",
                 f"CHECKER_ACCOUNT_ID={s.checker_account_id}",
                 f"CHECKER_PRIVATE_KEY={s.checker_private_key}",
             ],

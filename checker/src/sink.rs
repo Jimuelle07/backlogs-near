@@ -7,7 +7,7 @@ use crate::http::{self, HttpError};
 use std::fmt;
 use std::time::Duration;
 
-pub const SINK_TIMEOUT: Duration = Duration::from_secs(10);
+pub const SINK_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SinkConfig {

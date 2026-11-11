@@ -4,6 +4,8 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-11
 
+- **Component:** unprotected-agent mode (`--unprotected` / `--mode unprotected` in `firewall-demo`, `UnprotectedLocalAgent` and `UnprotectedTestnetAgent` in `agent/src/firewall_agent/guardian.py`, `unprotected` account setup in `setup_testnet.py`) for demo step 3 where a plain agent with a full-access key pays an attack directly without the Guardian (A5).
+- **Security:** checker hardening in `checker/src/{decision,http,injection,policy,sink}.rs`: range-check Jev `confidence`/`score` and verify `choice` matches `argmax(probabilities)`, enforce HTTPS-only `NEAR_AI_BASE_URL`, disable HTTP redirects (`max_redirects(0)`), fit HTTP timeout budgets (`3s + 8s + 2×8s + 3s = 30s`) to OutLayer's execution limit, and normalize `POLICY_ALLOWLIST` case-insensitively (B4).
 - **Plan:** Sprint 2 (due Wed 11 Nov) and Sprint 3 (due Thu 12 Nov) planned in [sprints.md](docs/build/sprints.md#sprint-2--due-wed-11-nov-2359-pht-1559z): owners, roles, due dates; D1/E1 carried over into Sprint 2; B4 moved to Jesus.
 - **Sign-off:** Jim signed off Sprint 1 backend tasks A2, A3 (PR #6), B1 (PR #3), B2 (PR #9), C1 and C2 (PR #7); [sprints.md](docs/build/sprints.md#progress-updated-2026-11-11) marks them Done.
 - **Format:** results.json frozen as [schemas/results.schema.json](schemas/results.schema.json) with [schemas/examples/results.json](schemas/examples/results.json); five DecisionRecord fixtures in [schemas/fixtures/](schemas/fixtures/) (C1, PR #7).
