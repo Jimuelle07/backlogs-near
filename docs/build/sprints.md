@@ -42,11 +42,7 @@ Rule for every lane: code against the frozen format and a fixture; swap in the r
 
 Sync points (the only moments lanes must meet): **end of Sprint 2** — testnet gate G2; **end of Sprint 3** — numbers frozen for the demo and site.
 
-<<<<<<< HEAD
-## Progress (E1 updated 2026-11-11; other statuses 2026-11-10)
-=======
 ## Progress (updated 2026-11-11)
->>>>>>> efc64b78502f7e6888bfea836ff418150efc724a
 
 Status: **Done** (merged and signed off by Jim), **In progress** (work merged or started, sign-off pending), **Not started** (no branch or PR on GitHub as of 2026-11-10); a backend task counts as done only after Jim signs it off.
 
@@ -79,7 +75,7 @@ Sprints 2–3: planned (owners and due dates below), not started. Sprints 4–5:
 | paticolcol | C1 results format and fixtures first (unblocks A3 and frontend), then C2 classifier |
 | Jesus | A2 record sink, A3 eval harness skeleton |
 | Helena (frontend lead) | D1 landing page skeleton; picks the stack and host for both frontend lanes; reviews E1 |
-| Ace | E1 live receipts panel (React + Vite, explicitly chosen by Ace on 2026-11-11; coordinate landing-page integration with Helena) |
+| Ace | E1 live receipts panel (uses Helena's stack choice) |
 
 | ID | Lane | Track | Size | Task | Done when | Starts from | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
