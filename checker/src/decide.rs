@@ -135,6 +135,7 @@ pub fn decide_with_configs(
     if cascade && signals.jev.as_ref().is_some_and(|j| j.unusual > fusion_cfg.hold_threshold) {
         signals.injection = injection::check(&input, injection_cfg).map_err(CheckerError::Check)?.0;
     }
+    let (outcome, reasons) = fusion::fuse(&signals, fusion_cfg);
     let record = DecisionRecord {
         format: RECORD_FORMAT.to_string(),
         input_sha256: sha256_hex(input_bytes),
