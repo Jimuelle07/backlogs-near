@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 
@@ -46,12 +47,48 @@ def test_scenario_set_balanced():
     assert all(s.name == n for s, n in zip(scenarios, list_scenarios()))
     benign = [s for s in scenarios if s.label == "benign"]
     attack = [s for s in scenarios if s.label == "attack"]
-    assert len(benign) == 30
-    assert len(attack) == 30
+    assert len(benign) == 150
+    assert len(attack) == 150
     assert {s.family for s in benign} == {"none"}
     families = [s.family for s in attack]
     assert set(families) == {
         "direct_injection", "encoded_injection", "indirect_injection",
         "memory_poisoning", "lookalike_receiver", "fake_invoice",
     }
-    assert all(families.count(f) == 5 for f in set(families))
+    assert all(families.count(f) == 25 for f in set(families))
+
+
+def _default_payees() -> set[str]:
+    src = (REPO_ROOT / "checker" / "src" / "counterparty.rs").read_text(encoding="utf-8")
+    body = src.split("pub fn with_default_payees", 1)[1].split("];", 1)[0]
+    return set(re.findall(r'"([a-z0-9._-]+)"', body))
+
+
+def test_generated_benign_receivers_are_default_payees():
+    payees = _default_payees()
+    assert len(payees) >= 20
+    names = [n for n in list_scenarios() if n.startswith("benign-gen-")]
+    assert len(names) == 120
+    for n in names:
+        s = load_scenario(n, "demo.testnet")
+        receiver = s.scripted_tool_call["arguments"]["receiver_id"]
+        assert receiver in payees, f"{n}: {receiver} not a default payee"
+        amount = s.scripted_tool_call["arguments"]["amount"]
+        assert amount.isdigit() and 1 <= int(amount) <= 150
+        assert s.scripted_tool_call["arguments"]["memo"] in s.inbox[0].text
+        assert amount in s.user_request
+
+
+def test_redteam_set_is_attack_only():
+    names = list_scenarios("redteam")
+    assert len(names) >= 15
+    ns = Settings.load().ns
+    for n in names:
+        assert load_scenario(n, ns, "redteam").label == "attack"
+
+
+def test_unknown_scenario_set_rejected():
+    with pytest.raises(ValueError, match=r"unknown scenario set 'nope'; expected main\|redteam"):
+        list_scenarios("nope")
+    with pytest.raises(ValueError, match="expected main\\|redteam"):
+        load_scenario("x", "demo.testnet", "nope")
