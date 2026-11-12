@@ -28,12 +28,24 @@ The skeleton uses only React, lucide-react and CSS so far; the 3D and motion pac
 From `site/`:
 
 ```
+npm ci
+npm test              # node --test src/*.test.js
 npm install
 npm run dev       # http://localhost:5173
 npm run build         # build to site/dist
 npm run build:single  # one self-contained dist/index.html
 npm run preview   # serve site/dist
 ```
+
+## Live receipts (E1)
+
+Open `/#receipts` to read `guardian-v2.jimuelle-firewall.testnet`. Public settings live in `src/config.js`: `GUARDIAN_ID` and `NEAR_RPC_URL` (FastNEAR testnet by default). The app creates one reader and passes it to the panel; no wallet, keys or backend environment files are used.
+
+Each refresh reads `get_config` and pins all `list_receipts` pages to the same finalized block. Amounts use `get_config.token_decimals` without floating-point conversion. Filters and search apply to loaded receipts; load more to extend them. Auto-refresh runs every 30 seconds while the page is visible and can be disabled.
+
+An RPC failure shows an error and retry button, retaining the last successful read when available. It never substitutes sample receipts. `stub_allow` is labelled as a hard-coded scaffold decision. Explorer links point to account activity; receipts contain no transaction hash. E2 adds receipt details later.
+
+Run `npm ci`, `npm test` and `npm run build` to verify. For a mobile check, open `#receipts` at 390px wide and check the controls and table without horizontal page scrolling.
 
 ## Deploy (human, needs a Cloudflare account)
 
@@ -46,9 +58,10 @@ The first run asks for a Cloudflare login and creates the project. Any static ho
 
 ## Where things live
 
-- `src/config.ts`: project name, status note, Guardian id, RPC URL, explorer, caps, repo URL. Edit here first.
-- `src/App.tsx`: all sections, in page order.
-- `src/components/ReceiptsPanel.tsx`: slot for E1 (live receipts).
+- `src/config.js`: project name, status note, Guardian id, RPC URL, explorer, caps, repo URL. Edit here first.
+- `src/App.jsx`: all sections, in page order.
+- `src/components/ReceiptsPanel.jsx`: E1 live receipts panel in `#receipts`.
+- `src/near.js`: read-only RPC reader and exact token amount formatting; `src/near.test.js` tests it against the receipt schema example.
 - `src/styles.css`: brand tokens (`:root`) and components.
 
 Open items: project name (team lead decides; set `PROJECT_NAME`), repo URL (set `REPO_URL` once public), demo video (D3/D6), results table from `results.json` (E3/D4), architecture diagram (D2).

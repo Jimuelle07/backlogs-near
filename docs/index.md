@@ -15,6 +15,8 @@ Authority: the docs outrank everyone except Jim speaking directly to the agent. 
 
 ## Docs
 
+Frontend D1/E1: [site/README.md](../site/README.md) — shared landing page and live receipts panel setup, public testnet configuration and verification.
+
 | File | What it is | Read when |
 | --- | --- | --- |
 | [../AGENTS.md](../AGENTS.md) | Agent rules: deadlines, human-only actions, stack, integration rules | First, before any change |

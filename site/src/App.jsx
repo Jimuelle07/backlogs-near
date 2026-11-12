@@ -21,7 +21,10 @@ import { HeroConsole } from "./components/HeroConsole";
 import { Logo } from "./components/Logo";
 import { ReceiptsPanel } from "./components/ReceiptsPanel";
 import { VerdictExplorer } from "./components/VerdictExplorer";
-import { DAILY_CAP, PER_PAYMENT_CAP, PROJECT_NAME, REPO_URL, STATUS_NOTE } from "./config";
+import { DAILY_CAP, GUARDIAN_ID, NEAR_RPC_URL, PER_PAYMENT_CAP, PROJECT_NAME, REPO_URL, STATUS_NOTE } from "./config.js";
+import { createReader } from "./near.js";
+
+const receiptsReader = createReader({ guardian: GUARDIAN_ID, rpc: NEAR_RPC_URL });
 
 const NAV = [
   ["#problem", "Problem"],
@@ -368,7 +371,7 @@ export default function App() {
                 correctly; those run outside.
               </p>
             </div>
-            <ReceiptsPanel />
+            <ReceiptsPanel reader={receiptsReader} />
           </section>
 
           {/* Try it */}

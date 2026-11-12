@@ -308,6 +308,8 @@ Run from the repo root unless noted (full command list: [AGENTS.md §6](../../AG
 
 ## 10. Modules
 
+- `site/` — shared React 18.3.1 + Vite 5.4.21 (plain JSX) landing page and E1 read-only receipts panel. Uses browser `fetch` for public `get_config` / `list_receipts` calls on `guardian-v2.jimuelle-firewall.testnet`; receipt pages are pinned to one finalized block per refresh. `src/App.jsx` creates one reader from `GUARDIAN_ID` and `NEAR_RPC_URL` in `src/config.js` (public values only). Includes filters, exact integer amount formatting using Guardian token decimals, account explorer links, pagination, and optional 30-second refresh. Uses the shared Geist / lilac CSS tokens. [Run and verification instructions](../../site/README.md). Hosting and E2 detail views remain later work.
+
 One line each, with the sprint task that adds it ([sprints.md](sprints.md)).
 
 - `checker/src/decide.rs` — the checker pipeline (C3). `decide(bytes)` reads `PolicyConfig`, `InjectionConfig` and `FusionConfig` from the environment (a bad value is `CheckerError::Config`, exit 2, fail closed) and `SinkConfig`, builds the client with `decision::client_from_env()` (on error: warning on stderr, no client), then runs `decide_with_configs` and delivers the record through `sink::deliver_with_config`. `decide_with_configs` parses the input, runs the policy and injection checks, asks the four questions through the `DecisionClient` with `fusion::jev_state` (any error: warning, `signals.jev` `null`), and takes outcome and reasons from `fusion::fuse`. `decide_with(bytes, &policy_cfg, client)` uses default injection and fusion configs and no I/O beyond the given client (tests).
