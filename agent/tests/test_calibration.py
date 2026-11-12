@@ -55,6 +55,18 @@ def test_false_hold_rate_basic():
     assert false_hold_rate(scores, q_hat=1.1) == pytest.approx(0.0)
 
 
+def test_false_hold_rate_strict_with_ties_at_q_hat():
+    # 20 scores; rank = ceil(21 * 0.95) = 20 -> q_hat = sorted[19] = 0.9, which appears 3 times.
+    scores = [0.1] * 10 + [0.5] * 7 + [0.9] * 3
+    q_hat = compute_q_hat(scores, epsilon=0.05)
+    assert q_hat == pytest.approx(0.9)
+    assert scores.count(0.9) == 3
+    # Only scores strictly above q_hat count; the ties at 0.9 do not (>= would give 3/20).
+    assert false_hold_rate(scores, q_hat) == pytest.approx(0.0)
+    # Just below the tie, the three 0.9 scores are strictly above and do count.
+    assert false_hold_rate(scores, 0.89) == pytest.approx(3 / 20)
+
+
 def test_false_hold_rate_empty():
     assert false_hold_rate([], q_hat=0.5) == 0.0
 
@@ -85,7 +97,8 @@ def test_calibrate_reads_jev_unusual_from_cases():
     assert result["n"] == 4
     # rank = ceil(5 * 0.95) = 5, clamped to 4 -> sorted[3] = 0.4
     assert result["q_hat"] == pytest.approx(0.4)
-    assert result["empirical_false_hold_rate"] == pytest.approx(0.25)
+    # Hold is strict (unusual > q_hat): nothing exceeds the max score.
+    assert result["empirical_false_hold_rate"] == pytest.approx(0.0)
 
 
 def test_calibrate_skips_cases_without_jev_signal():

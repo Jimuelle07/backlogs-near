@@ -34,7 +34,7 @@ def _req(s, amount, ref="ref-1"):
 
 
 def _fake_checker(monkeypatch, outcome):
-    def fake(checker_bin, input_bytes, record_dir):
+    def fake(checker_bin, input_bytes, record_dir, counterparty_namespace=None):
         ci = json.loads(input_bytes)
         record_dir.mkdir(parents=True, exist_ok=True)
         (record_dir / f"{ci['request_id']}.json").write_text("{}")
@@ -64,7 +64,8 @@ def _records(s):
 def test_per_payment_cap_boundary(settings, tmp_path, monkeypatch):
     _fake_checker(monkeypatch, "allow")
     clock = [T0]
-    assert _guardian(settings, clock).request_payment(_req(settings, 200 * UNIT)).status == "would_pay"
+    # 200 tUSDC is above a new payee's 20 tUSDC budget: accepted under the cap, escrowed.
+    assert _guardian(settings, clock).request_payment(_req(settings, 200 * UNIT)).status == "held"
     assert _records(settings) == ["1.json"]
 
     other = dataclasses.replace(settings, checker_record_dir=tmp_path / "other")
@@ -99,7 +100,7 @@ def test_daily_cap_and_day_roll(settings, monkeypatch):
         _guardian(settings, clock).request_payment(_req(settings, 1))
 
     clock[0] = T0 + DAY
-    assert _guardian(settings, clock).request_payment(_req(settings, 200 * UNIT)).status == "would_pay"
+    assert _guardian(settings, clock).request_payment(_req(settings, 200 * UNIT)).status == "held"
 
 
 def test_block_releases_reservation(settings, monkeypatch):
@@ -110,7 +111,7 @@ def test_block_releases_reservation(settings, monkeypatch):
         d = g.request_payment(_req(settings, 200 * UNIT))
         assert d.status == "refused" and d.release_at_ns is None
     state = json.loads(g.state_path.read_text())
-    assert state == {"spend_day": T0 // DAY, "spent_today": 0}
+    assert state == {"spend_day": T0 // DAY, "spent_today": 0, "payee_budgets": {}}
 
 
 @pytest.mark.parametrize(
@@ -137,6 +138,31 @@ def test_allow_keeps_reservation(settings, monkeypatch):
     g = _guardian(settings, [T0])
     g.request_payment(_req(settings, 7 * UNIT))
     assert json.loads(g.state_path.read_text())["spent_today"] == 7 * UNIT
+
+
+def test_allow_above_payee_budget_is_held(settings, monkeypatch):
+    _fake_checker(monkeypatch, "allow")
+    g = _guardian(settings, [T0])
+    d = g.request_payment(_req(settings, 20 * UNIT + 1))
+    assert (d.outcome, d.status) == ("allow", "held")
+    assert d.release_at_ns == T0 + 60 * MIN
+    state = json.loads(g.state_path.read_text())
+    assert state["spent_today"] == 20 * UNIT + 1
+    assert state["payee_budgets"] == {}
+
+
+def test_allow_within_payee_budget_grows_it(settings, monkeypatch):
+    _fake_checker(monkeypatch, "allow")
+    clock = [T0]
+    g = _guardian(settings, clock)
+    receiver = _req(settings, 1).receiver_id
+    d = g.request_payment(_req(settings, 18 * UNIT))
+    assert (d.status, d.release_at_ns) == ("would_pay", None)
+    assert json.loads(g.state_path.read_text())["payee_budgets"] == {receiver: 36 * UNIT}
+    # The budget survives the day roll and now covers 36 tUSDC.
+    clock[0] = T0 + DAY
+    assert g.request_payment(_req(settings, 36 * UNIT, "ref-2")).status == "would_pay"
+    assert json.loads(g.state_path.read_text())["payee_budgets"] == {receiver: 72 * UNIT}
 
 
 def test_demo_prints_contract_refusal(tmp_path, monkeypatch, capsys):
@@ -254,6 +280,9 @@ CORRUPT = [
     json.dumps({"spend_day": 1, "spent_today": 1.5}),
     json.dumps({"spend_day": 1, "spent_today": True}),
     json.dumps({"spend_day": "1", "spent_today": 0}),
+    json.dumps({"spend_day": 1, "spent_today": 0, "payee_budgets": []}),
+    json.dumps({"spend_day": 1, "spent_today": 0, "payee_budgets": {"a.testnet": -1}}),
+    json.dumps({"spend_day": 1, "spent_today": 0, "payee_budgets": {"a.testnet": "5"}}),
 ]
 
 
@@ -290,4 +319,87 @@ def test_clock_moved_back_keeps_spend(settings, monkeypatch):
     clock[0] = T0 - DAY
     with pytest.raises(ContractRefusal, match="Daily cap reached"):
         g.request_payment(_req(settings, 101 * UNIT))
-    assert json.loads(g.state_path.read_text()) == {"spend_day": T0 // DAY, "spent_today": 400 * UNIT}
+    assert json.loads(g.state_path.read_text()) == {
+        "spend_day": T0 // DAY,
+        "spent_today": 400 * UNIT,
+        "payee_budgets": {},
+    }
+
+
+def test_grooming_stopped_by_daily_cap(settings, monkeypatch):
+    # An always-allow checker plus a growing schedule to one new payee: the budget keeps doubling,
+    # but the daily cap still bounds cumulative spend.
+    _fake_checker(monkeypatch, "allow")
+    g = _guardian(settings, [T0])
+    for i, amt in enumerate((18, 36, 72, 144, 200), start=1):
+        d = g.request_payment(_req(settings, amt * UNIT, f"ref-{i}"))
+        assert d.status == "would_pay"
+    assert _spent(g) == 470 * UNIT
+    with pytest.raises(ContractRefusal, match="^Daily cap reached$"):
+        g.request_payment(_req(settings, 200 * UNIT, "ref-6"))
+    assert _spent(g) <= 500 * UNIT
+    assert _spent(g) == 470 * UNIT
+
+
+def test_replayed_verdict_does_not_bind_larger_amount(settings):
+    g = _guardian(settings, [T0])
+    small = g.build_checker_input(_req(settings, 12 * UNIT), 7)
+    large = g.build_checker_input(_req(settings, 120 * UNIT), 7)
+    verdict = {
+        "format": guardian_mod.VERDICT_FORMAT,
+        "request_id": small["request_id"],
+        "receiver_id": small["receiver_id"],
+        "token_id": small["token_id"],
+        "amount": small["amount"],
+        "outcome": "allow",
+        "reasons": ["test"],
+        "record_sha256": "0" * 64,
+    }
+    assert guardian_mod.binds(small, verdict) is None
+    assert guardian_mod.binds(large, verdict) == "amount"
+
+
+def _capture_env(monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, input, capture_output, env):
+        seen["env"] = env
+        return type("P", (), {"returncode": 0, "stdout": b"{}", "stderr": b""})()
+
+    monkeypatch.setattr(guardian_mod.subprocess, "run", fake_run)
+    return seen
+
+
+def test_run_checker_sets_namespace_env(tmp_path, monkeypatch):
+    exe = tmp_path / "checker"
+    exe.write_text("")
+    monkeypatch.setenv("COUNTERPARTY_NAMESPACE", "inherited.testnet")
+    seen = _capture_env(monkeypatch)
+    guardian_mod.run_checker(exe, b"{}", tmp_path, counterparty_namespace="ns.testnet")
+    assert seen["env"]["COUNTERPARTY_NAMESPACE"] == "ns.testnet"
+
+
+def test_run_checker_none_leaves_inherited_env(tmp_path, monkeypatch):
+    exe = tmp_path / "checker"
+    exe.write_text("")
+    seen = _capture_env(monkeypatch)
+    monkeypatch.delenv("COUNTERPARTY_NAMESPACE", raising=False)
+    guardian_mod.run_checker(exe, b"{}", tmp_path)
+    assert "COUNTERPARTY_NAMESPACE" not in seen["env"]
+    monkeypatch.setenv("COUNTERPARTY_NAMESPACE", "inherited.testnet")
+    guardian_mod.run_checker(exe, b"{}", tmp_path, counterparty_namespace=None)
+    assert seen["env"]["COUNTERPARTY_NAMESPACE"] == "inherited.testnet"
+
+
+def test_local_guardian_passes_scenario_namespace(settings, monkeypatch):
+    _fake_checker(monkeypatch, "allow")
+    inner = guardian_mod.run_checker
+    calls = []
+
+    def spy(*a, **kw):
+        calls.append(kw.get("counterparty_namespace"))
+        return inner(*a, **kw)
+
+    monkeypatch.setattr(guardian_mod, "run_checker", spy)
+    _guardian(settings, [T0]).request_payment(_req(settings, 10 * UNIT))
+    assert calls == [settings.ns]

@@ -11,10 +11,19 @@ use std::collections::BTreeMap;
 
 pub const MAX_REASONS: usize = 6;
 
-/// Checker config for fusion. Defaults are uncalibrated until C5 sets `hold_threshold` to q̂.
+/// Fusion mode (`FUSION_MODE`). `Jev` fails closed without Jev; `CodeRules` decides from the code
+/// detectors alone and exists for evaluation baselines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FusionMode {
+    #[default]
+    Jev,
+    CodeRules,
+}
+
+/// Checker config for fusion. `hold_threshold` defaults to the frozen q̂ 0.84 (C5); the other probability thresholds are uncalibrated 0.5.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FusionConfig {
-    /// `FUSION_HOLD_THRESHOLD`, q̂ on Jev `unusual`; default 0.5.
+    /// `FUSION_HOLD_THRESHOLD`, q̂ on Jev `unusual`; default 0.84 (q̂ calibrated 2026-11-12 on 150 benign cases, ε = 5%).
     pub hold_threshold: f64,
     /// `FUSION_INJECTION_THRESHOLD`, on the classifier `max_score`; default 0.5.
     pub injection_threshold: f64,
@@ -24,16 +33,22 @@ pub struct FusionConfig {
     pub jev_receiver_risk_threshold: f64,
     /// `FUSION_YOUNG_ACCOUNT_DAYS`; default 7.
     pub young_account_days: f64,
+    /// `FUSION_MODE`: `jev` (default) or `code_rules` (never calls the decision client).
+    pub mode: FusionMode,
+    /// `CASCADE_ENABLED`, default false; only used when `mode == Jev`.
+    pub cascade: bool,
 }
 
 impl Default for FusionConfig {
     fn default() -> Self {
         Self {
-            hold_threshold: 0.5,
+            hold_threshold: 0.84,
             injection_threshold: 0.5,
             jev_injection_threshold: 0.5,
             jev_receiver_risk_threshold: 0.5,
             young_account_days: 7.0,
+            mode: FusionMode::Jev,
+            cascade: false,
         }
     }
 }
@@ -62,7 +77,29 @@ impl FusionConfig {
                 format!("FUSION_YOUNG_ACCOUNT_DAYS: expected a non-negative number, got {v:?}")
             })?,
         };
+        let mode = match var("FUSION_MODE") {
+            None => d.mode,
+            Some(v) => match v.to_ascii_lowercase().as_str() {
+                "jev" => FusionMode::Jev,
+                "code_rules" => FusionMode::CodeRules,
+                _ => return Err(format!("FUSION_MODE: expected jev|code_rules, got {v:?}")),
+            },
+        };
+        let cascade = match var("CASCADE_ENABLED") {
+            None => d.cascade,
+            Some(v) => match v.to_ascii_lowercase().as_str() {
+                "1" | "true" | "on" | "yes" => true,
+                "0" | "false" | "off" | "no" => false,
+                _ => {
+                    return Err(format!(
+                        "CASCADE_ENABLED: expected 1/0/true/false/on/off/yes/no, got {v:?}"
+                    ))
+                }
+            },
+        };
         Ok(Self {
+            mode,
+            cascade,
             hold_threshold: prob("FUSION_HOLD_THRESHOLD", d.hold_threshold)?,
             injection_threshold: prob("FUSION_INJECTION_THRESHOLD", d.injection_threshold)?,
             jev_injection_threshold: prob("FUSION_JEV_INJECTION_THRESHOLD", d.jev_injection_threshold)?,
@@ -153,15 +190,18 @@ pub fn jev_signal(d: &Decision) -> Result<JevSignal, String> {
     })
 }
 
-/// Fuse the signals (`sdd.md §5`). Hold when Jev is unavailable or `unusual > q̂`; block only when
-/// `unusual > q̂` and attack flags from at least two distinct detectors fire (Jev counts once).
+/// Fuse the signals (`sdd.md §5`). In `jev` mode: hold when Jev is unavailable or `unusual > q̂`; block
+/// only when `unusual > q̂` and attack flags from at least two distinct detectors fire (Jev counts once).
+/// Also hold, even when `unusual <= q̂`, when any non-Jev detector (policy, classifier, MELON,
+/// counterparty) flagged (Jim's decision 2026-11-12); Jev flags alone do not hold.
+/// In `code_rules` mode Jev is ignored: two or more detectors block, one holds, none allows.
 pub fn fuse(signals: &Signals, cfg: &FusionConfig) -> (Outcome, Vec<ReasonCode>) {
     use ReasonCode::*;
     let mut reasons = Vec::new();
     // Attack flags per detector: policy, classifier, melon, counterparty, jev.
     let mut hit = [false; 5];
     let jev = signals.jev.as_ref();
-    if jev.is_none() {
+    if jev.is_none() && cfg.mode == FusionMode::Jev {
         reasons.push(CheckUnavailable);
     }
     if let Some(p) = &signals.policy {
@@ -213,11 +253,20 @@ pub fn fuse(signals: &Signals, cfg: &FusionConfig) -> (Outcome, Vec<ReasonCode>)
     }
 
     let detectors = hit.iter().filter(|h| **h).count();
-    let outcome = match jev {
-        None => Outcome::Hold,
-        Some(j) if j.unusual > cfg.hold_threshold && detectors >= 2 => Outcome::Block,
-        Some(j) if j.unusual > cfg.hold_threshold => Outcome::Hold,
-        Some(_) => Outcome::Allow,
+    let outcome = if cfg.mode == FusionMode::CodeRules {
+        match detectors {
+            0 => Outcome::Allow,
+            1 => Outcome::Hold,
+            _ => Outcome::Block,
+        }
+    } else {
+        match jev {
+            None => Outcome::Hold,
+            Some(j) if j.unusual > cfg.hold_threshold && detectors >= 2 => Outcome::Block,
+            Some(j) if j.unusual > cfg.hold_threshold => Outcome::Hold,
+            Some(_) if hit[..4].iter().any(|h| *h) => Outcome::Hold,
+            Some(_) => Outcome::Allow,
+        }
     };
     reasons.truncate(MAX_REASONS);
     if reasons.is_empty() {
@@ -315,7 +364,8 @@ mod tests {
 
     #[test]
     fn fixtures_fuse() {
-        let cfg = FusionConfig::default();
+        // The hold-unusual fixture has unusual = 0.84; pin the pre-C5 threshold it was written for.
+        let cfg = FusionConfig { hold_threshold: 0.5, ..FusionConfig::default() };
         let cases: [(&str, Outcome, Vec<ReasonCode>); 5] = [
             (
                 include_str!("../../schemas/fixtures/decision-record-benign.json"),
@@ -350,6 +400,77 @@ mod tests {
         }
     }
 
+    fn lookalike_signal(prior_payments: u64) -> CounterpartySignal {
+        CounterpartySignal {
+            account_age_days: None,
+            is_contract: false,
+            code_changed_recently: false,
+            prior_payments,
+            lookalike_of: Some("hostco.testnet".into()),
+            lookalike_distance: Some(1),
+        }
+    }
+
+    #[test]
+    fn below_threshold_non_jev_flag_holds() {
+        let s = Signals {
+            policy: Some(PolicySignal { ok: false, violations: vec![] }),
+            jev: Some(jev(0.1, 0.0, 0.0)),
+            ..Signals::default()
+        };
+        assert_eq!(fuse(&s, &FusionConfig::default()), (Outcome::Hold, vec![PolicyViolation]));
+    }
+
+    #[test]
+    fn below_threshold_lookalike_with_jev_flags_holds_not_blocks() {
+        let s = Signals {
+            counterparty: Some(lookalike_signal(1)),
+            jev: Some(jev(0.1, 0.9, 0.9)),
+            ..Signals::default()
+        };
+        let (outcome, reasons) = fuse(&s, &FusionConfig::default());
+        assert_eq!(outcome, Outcome::Hold);
+        assert_eq!(reasons, vec![LookalikeReceiver, JevInjectionDriven, JevReceiverRisk]);
+    }
+
+    #[test]
+    fn below_threshold_jev_flags_alone_allow() {
+        let s = Signals { jev: Some(jev(0.1, 0.9, 0.9)), ..Signals::default() };
+        assert_eq!(
+            fuse(&s, &FusionConfig::default()),
+            (Outcome::Allow, vec![JevInjectionDriven, JevReceiverRisk])
+        );
+    }
+
+    #[test]
+    fn above_threshold_two_detectors_block() {
+        let s = Signals {
+            counterparty: Some(lookalike_signal(1)),
+            jev: Some(jev(0.9, 0.9, 0.0)),
+            ..Signals::default()
+        };
+        assert_eq!(fuse(&s, &FusionConfig::default()).0, Outcome::Block);
+    }
+
+    #[test]
+    fn live_attack_morse_lookalike_below_threshold_holds() {
+        let s = Signals {
+            policy: Some(PolicySignal {
+                ok: false,
+                violations: vec![policy::V_AMOUNT_MISMATCH_REQUEST.into()],
+            }),
+            counterparty: Some(lookalike_signal(0)),
+            jev: Some(jev(0.83, 0.86, 1.0)),
+            ..Signals::default()
+        };
+        let (outcome, reasons) = fuse(&s, &FusionConfig::default());
+        assert_eq!(outcome, Outcome::Hold);
+        assert_eq!(
+            reasons,
+            vec![PolicyViolation, AmountMismatch, LookalikeReceiver, JevInjectionDriven, JevReceiverRisk, NewReceiver]
+        );
+    }
+
     #[test]
     fn two_jev_flags_count_as_one_detector() {
         let s = Signals { jev: Some(jev(0.9, 0.9, 0.9)), ..Signals::default() };
@@ -361,9 +482,9 @@ mod tests {
     #[test]
     fn unusual_at_threshold_allows() {
         let cfg = FusionConfig::default();
-        let at = Signals { jev: Some(jev(0.5, 0.0, 0.0)), ..Signals::default() };
+        let at = Signals { jev: Some(jev(0.84, 0.0, 0.0)), ..Signals::default() };
         assert_eq!(fuse(&at, &cfg), (Outcome::Allow, vec![ChecksPassed]));
-        let above = Signals { jev: Some(jev(0.5000001, 0.0, 0.0)), ..Signals::default() };
+        let above = Signals { jev: Some(jev(0.8400001, 0.0, 0.0)), ..Signals::default() };
         assert_eq!(fuse(&above, &cfg), (Outcome::Hold, vec![UnusualForAgent]));
     }
 
@@ -421,6 +542,59 @@ mod tests {
         }
         assert!(with("FUSION_YOUNG_ACCOUNT_DAYS", "-1").is_err());
         assert!(with("FUSION_YOUNG_ACCOUNT_DAYS", "inf").is_err());
+    }
+
+    #[test]
+    fn config_mode_and_cascade_from_vars() {
+        let with = |k: &'static str, v: &'static str| {
+            FusionConfig::from_vars(move |q| (q == k).then(|| v.to_string()))
+        };
+        let d = FusionConfig::default();
+        assert_eq!((d.mode, d.cascade), (FusionMode::Jev, false));
+        assert_eq!(with("FUSION_MODE", " ").unwrap().mode, FusionMode::Jev);
+        assert_eq!(with("FUSION_MODE", "jev").unwrap().mode, FusionMode::Jev);
+        assert_eq!(with("FUSION_MODE", "Code_Rules").unwrap().mode, FusionMode::CodeRules);
+        assert_eq!(
+            with("FUSION_MODE", "bogus").unwrap_err(),
+            "FUSION_MODE: expected jev|code_rules, got \"bogus\""
+        );
+        for v in ["1", "true", "ON", "Yes"] {
+            assert!(with("CASCADE_ENABLED", v).unwrap().cascade, "{v}");
+        }
+        for v in ["0", "false", "off", "NO", ""] {
+            assert!(!with("CASCADE_ENABLED", v).unwrap().cascade, "{v}");
+        }
+        assert_eq!(
+            with("CASCADE_ENABLED", "maybe").unwrap_err(),
+            "CASCADE_ENABLED: expected 1/0/true/false/on/off/yes/no, got \"maybe\""
+        );
+    }
+
+    #[test]
+    fn code_rules_outcome_follows_detector_count() {
+        let cfg = FusionConfig { mode: FusionMode::CodeRules, ..FusionConfig::default() };
+        let policy_bad = || PolicySignal { ok: false, violations: vec![] };
+        let lookalike = || CounterpartySignal {
+            account_age_days: None,
+            is_contract: false,
+            code_changed_recently: false,
+            prior_payments: 1,
+            lookalike_of: Some("hostco.testnet".into()),
+            lookalike_distance: Some(1),
+        };
+        let none = Signals::default();
+        assert_eq!(fuse(&none, &cfg), (Outcome::Allow, vec![ChecksPassed]));
+        let one = Signals { policy: Some(policy_bad()), ..Signals::default() };
+        assert_eq!(fuse(&one, &cfg), (Outcome::Hold, vec![PolicyViolation]));
+        let two = Signals {
+            policy: Some(policy_bad()),
+            counterparty: Some(lookalike()),
+            ..Signals::default()
+        };
+        let (outcome, reasons) = fuse(&two, &cfg);
+        assert_eq!(outcome, Outcome::Block);
+        assert_eq!(reasons, vec![PolicyViolation, LookalikeReceiver]);
+        assert!(!reasons.contains(&CheckUnavailable));
     }
 
     #[test]

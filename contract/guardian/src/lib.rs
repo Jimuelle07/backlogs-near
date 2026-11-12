@@ -4,6 +4,7 @@ pub mod types;
 pub mod validate;
 
 use near_contract_standards::fungible_token::core::ext_ft_core;
+use near_contract_standards::storage_management::ext_storage_management;
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::{self, json};
 use near_sdk::store::{IterableMap, LookupMap};
@@ -16,15 +17,24 @@ use types::*;
 
 pub const MAX_CONTEXT_BYTES: usize = validate::MAX_CONTEXT_BYTES;
 pub const MAX_PENDING: u32 = 16;
-pub const CALLBACK_GAS: Gas = Gas::from_tgas(40);
+/// Gas for the verdict callbacks (`on_verdict`, `on_outlayer_verdict`); `settle` may schedule the
+/// three-step payout chain (`storage_deposit` → `ft_transfer` → `on_transfer_done`) from it.
+pub const CALLBACK_GAS: Gas = Gas::from_tgas(50);
 /// Gas attached to OutLayer's `request_execution`. The docs attach 100 TGas and say its
 /// settlement callback takes 50 TGas from it.
 pub const OUTLAYER_REQUEST_GAS: Gas = Gas::from_tgas(100);
 pub const FT_TRANSFER_GAS: Gas = Gas::from_tgas(10);
 pub const TRANSFER_DONE_GAS: Gas = Gas::from_tgas(5);
+/// Gas and deposit for registering the receiver with the token (NEP-145) before `ft_transfer`.
+/// An already-registered receiver gets the deposit refunded by the token.
+pub const STORAGE_DEPOSIT_GAS: Gas = Gas::from_tgas(10);
+pub const STORAGE_DEPOSIT_YOCTO: u128 = 1_250_000_000_000_000_000_000;
 const MAX_LIST: u64 = 50;
 pub const PER_PAYMENT_CAP_WHOLE: u128 = 200;
 pub const DAILY_CAP_WHOLE: u128 = 500;
+/// Budget of a payee that was never paid. An `allow` above the receiver's budget is escrowed
+/// like a `hold`; each paid transfer grows the budget (`validate::grown_budget`).
+pub const PAYEE_START_BUDGET_WHOLE: u128 = 20;
 pub const NANOS_PER_DAY: u64 = 86_400_000_000_000;
 /// Cap on the NEAR deposit per OutLayer request (enforced by `valid_mode`).
 pub const MAX_OUTLAYER_DEPOSIT: NearToken = validate::MAX_OUTLAYER_DEPOSIT;
@@ -81,6 +91,15 @@ const MODE_KEY: &[u8] = b"checker_mode";
 const OUTLAYER_REQ_PREFIX: &[u8] = b"outlayer_req:";
 /// Raw storage key of the daily OutLayer request counter: borsh `(day_index, count)`.
 const OUTLAYER_DAY_KEY: &[u8] = b"outlayer_day";
+/// Raw storage key prefix of a per-payee budget: `payee_budget:` + receiver account id bytes,
+/// value borsh `u128` (token base units). Absent = `PAYEE_START_BUDGET_WHOLE`.
+const PAYEE_BUDGET_PREFIX: &[u8] = b"payee_budget:";
+
+fn payee_budget_key(receiver: &AccountId) -> Vec<u8> {
+    let mut k = PAYEE_BUDGET_PREFIX.to_vec();
+    k.extend_from_slice(receiver.as_bytes());
+    k
+}
 
 fn today() -> u64 {
     env::block_timestamp() / NANOS_PER_DAY
@@ -238,6 +257,38 @@ impl Guardian {
 
     fn daily_cap(&self) -> u128 {
         DAILY_CAP_WHOLE * self.unit()
+    }
+
+    /// Current budget of `receiver` (start budget when never paid). A present but undecodable
+    /// value is a hard error, like a corrupt checker mode.
+    fn payee_budget(&self, receiver: &AccountId) -> u128 {
+        match env::storage_read(&payee_budget_key(receiver)) {
+            None => PAYEE_START_BUDGET_WHOLE * self.unit(),
+            Some(b) => near_sdk::borsh::from_slice::<u128>(&b)
+                .unwrap_or_else(|_| env::panic_str("Corrupt payee budget")),
+        }
+    }
+
+    fn set_payee_budget(&mut self, receiver: &AccountId, budget: u128) {
+        let bytes = near_sdk::borsh::to_vec(&budget).unwrap_or_else(|_| env::abort());
+        env::storage_write(&payee_budget_key(receiver), &bytes);
+    }
+
+    /// Escrows `pending` under `id` for its amount's hold window; returns `release_at_ns`.
+    /// The reservation stays until release (paid) or `cancel_held` (unreserved).
+    fn escrow(&mut self, id: u64, pending: &Pending) -> u64 {
+        let at = env::block_timestamp()
+            + validate::hold_window_ns(pending.amount.0, self.token_decimals);
+        self.held.insert(
+            id,
+            Held {
+                receiver_id: pending.receiver_id.clone(),
+                amount: pending.amount,
+                release_at_ns: at,
+                charged_day: pending.charged_day,
+            },
+        );
+        at
     }
 
     /// Rolls the daily counter when the UTC day changed; returns today's index.
@@ -450,10 +501,10 @@ impl Guardian {
         let id = request_id.0;
         let mut receipt = Receipt {
             request_id,
-            client_ref: pending.client_ref,
+            client_ref: pending.client_ref.clone(),
             receiver_id: pending.receiver_id.clone(),
             amount: pending.amount,
-            input_sha256: pending.input_sha256,
+            input_sha256: pending.input_sha256.clone(),
             outcome: None,
             reasons: vec![],
             record_sha256: None,
@@ -476,28 +527,33 @@ impl Guardian {
                         ReceiptStatus::Refused
                     }
                     Outcome::Hold => {
-                        let at = env::block_timestamp()
-                            + validate::hold_window_ns(pending.amount.0, self.token_decimals);
-                        self.held.insert(
-                            id,
-                            Held {
-                                receiver_id: pending.receiver_id.clone(),
-                                amount: pending.amount,
-                                release_at_ns: at,
-                                charged_day: pending.charged_day,
-                            },
-                        );
-                        release_at_ns = Some(U64(at));
+                        release_at_ns = Some(U64(self.escrow(id, &pending)));
                         ReceiptStatus::Held
                     }
                     Outcome::Allow => {
-                        transfer = Some(self.pay(
-                            request_id,
-                            pending.receiver_id,
-                            pending.amount,
-                            pending.charged_day,
-                        ));
-                        ReceiptStatus::Paying
+                        let budget = self.payee_budget(&pending.receiver_id);
+                        if pending.amount.0 > budget {
+                            // Above the payee's budget: escrow like a hold; outcome stays `allow`.
+                            release_at_ns = Some(U64(self.escrow(id, &pending)));
+                            emit(
+                                "payee_budget_hold",
+                                json!({
+                                    "request_id": request_id,
+                                    "receiver_id": pending.receiver_id,
+                                    "amount": pending.amount,
+                                    "budget": U128(budget),
+                                }),
+                            );
+                            ReceiptStatus::Held
+                        } else {
+                            transfer = Some(self.pay(
+                                request_id,
+                                pending.receiver_id.clone(),
+                                pending.amount,
+                                pending.charged_day,
+                            ));
+                            ReceiptStatus::Paying
+                        }
                     }
                 };
             }
@@ -528,13 +584,21 @@ impl Guardian {
         amount: U128,
         charged_day: u64,
     ) -> Promise {
-        ext_ft_core::ext(self.token_id.clone())
-            .with_attached_deposit(NearToken::from_yoctonear(1))
-            .with_static_gas(FT_TRANSFER_GAS)
-            .ft_transfer(
-                receiver_id,
-                amount,
-                Some(format!("firewall request {}", request_id.0)),
+        // Register the receiver first (NEP-145; refunded if already registered). `.then` runs the
+        // transfer whatever the registration result; `on_transfer_done` reads the transfer's.
+        ext_storage_management::ext(self.token_id.clone())
+            .with_attached_deposit(NearToken::from_yoctonear(STORAGE_DEPOSIT_YOCTO))
+            .with_static_gas(STORAGE_DEPOSIT_GAS)
+            .storage_deposit(Some(receiver_id.clone()), Some(true))
+            .then(
+                ext_ft_core::ext(self.token_id.clone())
+                    .with_attached_deposit(NearToken::from_yoctonear(1))
+                    .with_static_gas(FT_TRANSFER_GAS)
+                    .ft_transfer(
+                        receiver_id,
+                        amount,
+                        Some(format!("firewall request {}", request_id.0)),
+                    ),
             )
             .then(
                 Self::ext(env::current_account_id())
@@ -556,8 +620,17 @@ impl Guardian {
             self.unreserve(charged_day.0, amount.0);
             ReceiptStatus::TransferFailed
         };
+        let mut paid_to = None;
         if let Some(r) = self.receipts.get_mut(&request_id.0) {
             r.status = status;
+            if status == ReceiptStatus::Paid {
+                paid_to = Some(r.receiver_id.clone());
+            }
+        }
+        if let Some(receiver) = paid_to {
+            let grown =
+                validate::grown_budget(self.payee_budget(&receiver), amount.0, self.per_payment_cap());
+            self.set_payee_budget(&receiver, grown);
         }
         status
     }
@@ -663,6 +736,11 @@ impl Guardian {
             per_payment_cap: U128(self.per_payment_cap()),
             daily_cap: U128(self.daily_cap()),
         }
+    }
+
+    /// Budget of `receiver_id` in token base units (the start budget if it was never paid).
+    pub fn get_payee_budget(&self, receiver_id: AccountId) -> U128 {
+        U128(self.payee_budget(&receiver_id))
     }
 
     pub fn get_daily_spent(&self) -> U128 {
@@ -1936,5 +2014,152 @@ mod tests {
         let rec = g.get_receipt(U64(1)).unwrap();
         assert_eq!(rec.status, ReceiptStatus::TimedOut);
         assert_eq!(rec.outcome, None);
+    }
+
+    // ---- per-payee budgets (A4) ----
+
+    fn verdict_amt(outcome: Outcome, amount: u128) -> Verdict {
+        let mut v = verdict(outcome);
+        v.amount = U128(amount);
+        v
+    }
+
+    /// Requests `amount` to hostco (id 1, ref "r1") at t=0, then settles it with `outcome`.
+    fn decide_amt(outcome: Outcome, amount: u128) -> (Guardian, PromiseOrValue<ReceiptStatus>) {
+        let mut g = new_guardian();
+        let _ = request_amt(&mut g, "r1", amount, 0);
+        set_ctx("guardian.testnet");
+        let r = g.on_verdict(U64(1), Ok(verdict_amt(outcome, amount)));
+        (g, r)
+    }
+
+    /// Runs `on_transfer_done` for `request_id` with a successful or failed transfer result.
+    fn transfer_done(g: &mut Guardian, request_id: u64, amount: u128, ok: bool) -> ReceiptStatus {
+        let result = if ok { PromiseResult::Successful(vec![]) } else { PromiseResult::Failed };
+        testing_env!(
+            VMContextBuilder::new()
+                .current_account_id(acct("guardian.testnet"))
+                .predecessor_account_id(acct("guardian.testnet"))
+                .build(),
+            near_sdk::test_vm_config(),
+            near_sdk::RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![result]
+        );
+        g.on_transfer_done(U64(request_id), U64(0), U128(amount))
+    }
+
+    /// Writes a `paying` receipt to hostco for `request_id` and completes its transfer.
+    fn pay_hostco(g: &mut Guardian, request_id: u64, amount: u128) -> ReceiptStatus {
+        g.receipts.insert(
+            request_id,
+            Receipt {
+                request_id: U64(request_id),
+                client_ref: format!("r{request_id}"),
+                receiver_id: acct("hostco.testnet"),
+                amount: U128(amount),
+                input_sha256: HASH.into(),
+                outcome: Some(Outcome::Allow),
+                reasons: vec![ReasonCode::ChecksPassed],
+                record_sha256: Some(HASH.into()),
+                checker_version: Some("0.1.0".into()),
+                status: ReceiptStatus::Paying,
+                requested_block: U64(1),
+                decided_block: U64(2),
+            },
+        );
+        transfer_done(g, request_id, amount, true)
+    }
+
+    fn hostco_budget(g: &Guardian) -> u128 {
+        g.get_payee_budget(acct("hostco.testnet")).0
+    }
+
+    #[test]
+    fn payee_budget_starts_at_twenty() {
+        let g = new_guardian();
+        assert_eq!(hostco_budget(&g), 20 * T);
+        assert_eq!(g.get_payee_budget(acct("someone-new.testnet")), U128(20 * T));
+    }
+
+    #[test]
+    fn allow_over_payee_budget_is_escrowed() {
+        let (g, r) = decide_amt(Outcome::Allow, 21 * T);
+        assert_eq!(value(r), ReceiptStatus::Held);
+        let rec = g.get_receipt(U64(1)).unwrap();
+        assert_eq!(rec.status, ReceiptStatus::Held);
+        assert_eq!(rec.outcome, Some(Outcome::Allow));
+        let held = g.get_held(0, 10);
+        assert_eq!(held.len(), 1);
+        assert_eq!(held[0].amount, U128(21 * T));
+        assert_eq!(held[0].release_at_ns, U64(validate::hold_window_ns(21 * T, 6)));
+        assert_eq!(g.get_daily_spent(), U128(21 * T));
+        let logs = near_sdk::test_utils::get_logs().join("\n");
+        assert!(logs.contains("payee_budget_hold") && logs.contains("\"budget\":\"20000000\""), "logs: {logs}");
+    }
+
+    #[test]
+    fn allow_at_payee_budget_pays() {
+        let (g, r) = decide_amt(Outcome::Allow, 20 * T);
+        assert!(matches!(r, PromiseOrValue::Promise(_)));
+        assert_eq!(g.get_receipt(U64(1)).unwrap().status, ReceiptStatus::Paying);
+        assert!(g.get_held(0, 10).is_empty());
+    }
+
+    #[test]
+    fn allow_within_payee_budget_pays() {
+        let (g, r) = decide_amt(Outcome::Allow, 18 * T);
+        assert!(matches!(r, PromiseOrValue::Promise(_)));
+        assert_eq!(g.get_receipt(U64(1)).unwrap().status, ReceiptStatus::Paying);
+        assert!(g.get_held(0, 10).is_empty());
+    }
+
+    #[test]
+    fn block_over_budget_is_refused() {
+        let (g, r) = decide_amt(Outcome::Block, 21 * T);
+        assert_eq!(value(r), ReceiptStatus::Refused);
+        assert!(g.get_held(0, 10).is_empty());
+        assert_eq!(g.get_daily_spent(), U128(0));
+        assert!(!near_sdk::test_utils::get_logs().join("\n").contains("payee_budget_hold"));
+    }
+
+    #[test]
+    fn paid_transfer_grows_budget() {
+        let mut g = new_guardian();
+        assert_eq!(pay_hostco(&mut g, 1, 18 * T), ReceiptStatus::Paid);
+        assert_eq!(hostco_budget(&g), 36 * T);
+        assert_eq!(pay_hostco(&mut g, 2, 150 * T), ReceiptStatus::Paid);
+        assert_eq!(hostco_budget(&g), 200 * T);
+        assert_eq!(pay_hostco(&mut g, 3, T), ReceiptStatus::Paid);
+        assert_eq!(hostco_budget(&g), 200 * T);
+        // Other payees keep the start budget.
+        assert_eq!(g.get_payee_budget(acct("hostc0.testnet")), U128(20 * T));
+    }
+
+    #[test]
+    fn failed_transfer_keeps_budget() {
+        let (mut g, _) = decide_amt(Outcome::Allow, 18 * T);
+        assert_eq!(transfer_done(&mut g, 1, 18 * T, false), ReceiptStatus::TransferFailed);
+        assert_eq!(hostco_budget(&g), 20 * T);
+        assert_eq!(g.get_receipt(U64(1)).unwrap().status, ReceiptStatus::TransferFailed);
+    }
+
+    #[test]
+    fn released_hold_payment_grows_budget() {
+        let (mut g, _) = decide_amt(Outcome::Allow, 21 * T);
+        set_ctx_at("anyone.testnet", validate::hold_window_ns(21 * T, 6));
+        let _p = g.release_held(U64(1));
+        assert_eq!(g.get_receipt(U64(1)).unwrap().status, ReceiptStatus::Paying);
+        assert_eq!(transfer_done(&mut g, 1, 21 * T, true), ReceiptStatus::Paid);
+        assert_eq!(hostco_budget(&g), 42 * T);
+        assert_eq!(g.get_receipt(U64(1)).unwrap().outcome, Some(Outcome::Allow));
+    }
+
+    #[test]
+    #[should_panic(expected = "Corrupt payee budget")]
+    fn corrupt_payee_budget_panics() {
+        let g = new_guardian();
+        env::storage_write(&payee_budget_key(&acct("hostco.testnet")), &[0xff]);
+        let _ = hostco_budget(&g);
     }
 }

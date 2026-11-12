@@ -12,7 +12,7 @@ pub const TYPESAFE_JEV_URL: &str = "https://api.typesafe.ai/v1/systemone";
 pub const TYPESAFE_JEV_MODEL: &str = "jev-latest";
 pub const NEAR_AI_JEV_MODEL: &str = "typesafe/jev-1.13";
 pub const JEV_TIMEOUT: Duration = Duration::from_secs(8);
-pub const LLM_TIMEOUT: Duration = Duration::from_secs(8);
+pub const LLM_TIMEOUT: Duration = Duration::from_secs(7);
 pub const OUTLAYER_EXECUTION_BUDGET: Duration = Duration::from_secs(30);
 const DEFAULT_NEAR_AI_BASE_URL: &str = "https://cloud-api.near.ai/v1";
 
@@ -197,7 +197,7 @@ fn check_answers(
     Ok(())
 }
 
-fn validate_https_base_url(raw: &str) -> Result<String, DecisionError> {
+pub(crate) fn validate_https_base_url(raw: &str) -> Result<String, DecisionError> {
     let trimmed = raw.trim().trim_end_matches('/');
     let Some(rest) = trimmed.strip_prefix("https://") else {
         return Err(DecisionError::Config(
@@ -845,8 +845,12 @@ mod tests {
     fn timeout_budget_fits_outlayer_limit() {
         let decision_worst_case = JEV_TIMEOUT + 2 * LLM_TIMEOUT;
         let classifier_timeout = Duration::from_millis(crate::injection::DEFAULT_TIMEOUT_MS);
+        let counterparty_timeout = Duration::from_millis(crate::counterparty::DEFAULT_TIMEOUT_MS);
         let sink_timeout = crate::sink::SINK_TIMEOUT;
-        let total_worst_case = classifier_timeout + decision_worst_case + sink_timeout;
+        let total_worst_case =
+            classifier_timeout + counterparty_timeout + decision_worst_case + sink_timeout;
+        // 3 s classifier + 2 s counterparty RPC + 8 s Jev + 2 x 7 s LLM + 3 s sink.
+        assert_eq!(total_worst_case, Duration::from_secs(3 + 2 + 8 + 2 * 7 + 3));
         assert!(
             decision_worst_case <= OUTLAYER_EXECUTION_BUDGET,
             "decision budget {decision_worst_case:?} exceeds {OUTLAYER_EXECUTION_BUDGET:?}"

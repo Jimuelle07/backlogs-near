@@ -225,14 +225,13 @@ mod tests {
 
     #[test]
     fn post_failure_keeps_attack_reasons_on_downgrade() {
-        let mut j: serde_json::Value = serde_json::from_str(INPUT).unwrap();
-        j["amount"] = "180000000".into();
-        j["user_request"] = "Pay the 18 USDC hosting bill.".into();
-        let bytes = serde_json::to_vec(&j).unwrap();
+        use crate::decision::Answer;
+        let mut d = crate::fusion::testing::benign_decision();
+        d.answers.insert("injection_driven".into(), Answer::Noul { noul: 0.9 });
         let (mut v, mut r) =
-            decide_with(&bytes, &PolicyConfig::default(), Some(&FixedClient::benign())).unwrap();
+            decide_with(INPUT.as_bytes(), &PolicyConfig::default(), Some(&FixedClient(Ok(d)))).unwrap();
         assert_eq!(v.outcome, Outcome::Allow);
-        let reasons = vec![ReasonCode::PolicyViolation, ReasonCode::AmountMismatch];
+        let reasons = vec![ReasonCode::JevInjectionDriven];
         assert_eq!(v.reasons, reasons);
         deliver(&mut v, &mut r, &FakeSink::err_status(503)).unwrap();
         assert_eq!(v.outcome, Outcome::Hold);

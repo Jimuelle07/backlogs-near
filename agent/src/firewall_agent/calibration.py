@@ -3,6 +3,7 @@
 Split-conformal calibration on the pooled benign calibration set (`sdd.md §5`,
 [idea.md Evaluation and calibration](../../../docs/build/idea.md#evaluation-and-calibration)):
     q_hat = the ceil((n+1)(1-epsilon))-th smallest benign Jev `unusual` score, n >= 1/epsilon - 1
+    hold rule (strict, as in the checker, sdd.md §5): hold when `unusual > q_hat`
 
 The calibration set is the benign cases of a completed `firewall-eval` run (the `cases` list in
 results.json, `jev_unusual` per case, DecisionRecords as fallback). Cases without a Jev signal are
@@ -36,8 +37,9 @@ def compute_q_hat(scores: Sequence[float], epsilon: float = EPSILON_DEFAULT) -> 
     """Return the split-conformal hold threshold q_hat for the given nonconformity scores.
 
     ``scores`` are Jev ``unusual`` values from benign calibration examples (higher = more unusual).
-    We want to *hold* when unusual >= q_hat, so a *false hold* is a benign example with
-    unusual >= q_hat.  q_hat is chosen so that the false-hold rate is bounded by epsilon.
+    We want to *hold* when unusual > q_hat (strict, matching the checker's hold rule), so a
+    *false hold* is a benign example with unusual > q_hat.  q_hat is chosen so that the false-hold
+    rate is bounded by epsilon.
 
     Args:
         scores: Jev unusual scores for the calibration set (benign examples only).
@@ -57,10 +59,10 @@ def compute_q_hat(scores: Sequence[float], epsilon: float = EPSILON_DEFAULT) -> 
 
 
 def false_hold_rate(scores: Sequence[float], q_hat: float) -> float:
-    """Fraction of calibration benign examples with unusual >= q_hat (empirical false-hold rate)."""
+    """Fraction of calibration benign examples with unusual > q_hat (strict; empirical false-hold rate)."""
     if not scores:
         return 0.0
-    return sum(1 for s in scores if s >= q_hat) / len(scores)
+    return sum(1 for s in scores if s > q_hat) / len(scores)
 
 
 # ---------------------------------------------------------------------------
