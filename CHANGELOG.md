@@ -4,6 +4,7 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-12
 
+- **Sign-off:** Jim signed off A4, A6, A7, B3, B5, B6, B7, C4, C5 and C6 (PR #21); [sprints.md](docs/build/sprints.md#progress-updated-2026-11-12) marks them Done.
 - **Rules:** Jim's decision 2026-11-12: any non-Jev attack flag (policy, classifier, MELON, counterparty) holds the payment even when Jev `unusual` is at or below q̂; block still needs Jev `unusual` > q̂ and at least 2 distinct detectors (Jev counts once). Recorded in [AGENTS.md §7](AGENTS.md) and [sdd.md §5](docs/build/sdd.md); `docs/build/idea.md` (human-authored) still says hold only above the threshold (`cc15b79`).
 - **Rules:** Jim's decision 2026-11-12: a qualified account id never matches a bare profile name exactly; new optional `COUNTERPARTY_NAMESPACE` adds `<base>.<ns>` for the default payees (`a40f7d6`, B3).
 - **Config:** new `FUSION_MODE` (`jev` | `code_rules`; `code_rules` is evaluation-only), `CASCADE_ENABLED` (B5), `COUNTERPARTY_NAMESPACE`; `COUNTERPARTY_TIMEOUT_MS` default and maximum 2000; `LLM_TIMEOUT` 7 s, so the timeout budget is `3s + 2s + 8s + 2×7s + 3s = 30s`; `FUSION_HOLD_THRESHOLD` default frozen at 0.84 (C5, `61e9f52`; 150 benign cases, ε = 5%).
