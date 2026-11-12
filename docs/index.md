@@ -28,6 +28,7 @@ Frontend D1/E1: [site/README.md](../site/README.md) — shared landing page and 
 | [build/sprints.md](build/sprints.md) | Remaining work cut into sprints for a team of 6 (4 backend, 2 frontend), with an owner column to fill | Assigning or picking up work |
 | [build/b1-policy-review.md](build/b1-policy-review.md) | Rc's review of B1 (policy rules check, PR #3): rule-by-rule checks, the four PR #3 follow-ups, test evidence | Signing off B1; changing checker/src/policy.rs |
 | [build/nightly-e2e.md](build/nightly-e2e.md) | B2 runbook for firewall-nightly-e2e: one benign and one attack payment on testnet, CLI flags, expected output | Running or signing off the nightly testnet check (human signs) |
+| [results/ledger.md](results/ledger.md) | Ledger of every recorded test and eval run: what ran, keys, result, Jev calls, link to the record; entry template | Adding a run; finding the record of a run |
 | [build/demo-storyboard.md](build/demo-storyboard.md) | D3 demo storyboard: shot list for the 2-minute demo, numbers slide, 20-second GIF plan, open questions | Recording the demo (A8), making the GIF and slide (E4) |
 | [hackathon-context/HACKATHON.md](hackathon-context/HACKATHON.md) | Official agent instructions and rules snapshot; the live https://nearhackathon.com/HACKATHON.md wins | Before any rules question or submission step |
 | [hackathon-context/near_hackathon_web.md](hackathon-context/near_hackathon_web.md) | Full site capture: timeline, prizes, judges, tracks, submission API | Looking up event facts |
