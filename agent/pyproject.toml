@@ -22,6 +22,7 @@ firewall-eval = "firewall_agent.eval:main"
 firewall-relayer = "firewall_agent.relayer:main"
 firewall-setup-testnet = "firewall_agent.setup_testnet:main"
 firewall-jev-ping = "firewall_agent.jev_ping:main"
+firewall-calibrate = "firewall_agent.calibration:main"
 firewall-classifier = "firewall_agent.classifier:main"
 firewall-nightly-e2e = "firewall_agent.nightly_e2e:main"
 

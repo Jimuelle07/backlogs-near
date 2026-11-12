@@ -21,7 +21,7 @@
     "Outcome": {"enum": ["allow", "hold", "block"]},
     "ReasonCode": {
       "description": "Frozen reason codes. Adding a code is a format change.",
-      "enum": ["stub_allow", "policy_violation", "injection_high", "melon_match", "lookalike_receiver", "new_receiver", "young_account", "contract_code_changed", "unusual_for_agent", "jev_injection_driven", "jev_receiver_risk", "amount_mismatch", "check_unavailable"]
+      "enum": ["stub_allow", "policy_violation", "injection_high", "melon_match", "lookalike_receiver", "new_receiver", "young_account", "contract_code_changed", "unusual_for_agent", "jev_injection_driven", "jev_receiver_risk", "amount_mismatch", "check_unavailable", "checks_passed"]
     },
     "Sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "Semver": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"}

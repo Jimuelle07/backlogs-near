@@ -66,6 +66,8 @@ class Settings:
     agent_private_key: str
     checker_account_id: str
     checker_private_key: str
+    unprotected_agent_account_id: str = ""
+    unprotected_agent_private_key: str = ""
 
     @classmethod
     def load(cls) -> "Settings":
@@ -73,6 +75,8 @@ class Settings:
         e = os.environ.get
         exe = "checker.exe" if sys.platform == "win32" else "checker"
         ns = e("OWNER_ACCOUNT_ID") or "demo.testnet"
+        owner_id = e("OWNER_ACCOUNT_ID", "")
+        owner_key = e("OWNER_PRIVATE_KEY", "")
         return cls(
             ns=ns,
             checker_bin=_path(e("CHECKER_BIN", ""), REPO_ROOT / "target" / "release" / exe),
@@ -83,12 +87,14 @@ class Settings:
             typesafe_api_key=e("TYPESAFE_API_KEY", ""),
             near_network=e("NEAR_NETWORK", "testnet"),
             near_rpc_url=e("NEAR_RPC_URL", ""),
-            owner_account_id=e("OWNER_ACCOUNT_ID", ""),
-            owner_private_key=e("OWNER_PRIVATE_KEY", ""),
+            owner_account_id=owner_id,
+            owner_private_key=owner_key,
             guardian_id=e("GUARDIAN_ID", ""),
             token_id=e("TOKEN_ID", ""),
             agent_account_id=e("AGENT_ACCOUNT_ID", ""),
             agent_private_key=e("AGENT_PRIVATE_KEY", ""),
             checker_account_id=e("CHECKER_ACCOUNT_ID", ""),
             checker_private_key=e("CHECKER_PRIVATE_KEY", ""),
+            unprotected_agent_account_id=e("UNPROTECTED_AGENT_ACCOUNT_ID", "") or owner_id,
+            unprotected_agent_private_key=e("UNPROTECTED_AGENT_PRIVATE_KEY", "") or owner_key,
         )
