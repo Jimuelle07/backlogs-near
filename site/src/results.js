@@ -68,6 +68,7 @@ export function headline(results) {
 export function redteamRow(redteam) {
   validateResultsFormat(redteam);
   const s = redteam.summary;
+  const [config] = redteam.configurations ?? [];
   return {
     total: redteam.attack_total,
     missedPct: s.missed_attacks_pct,
@@ -75,6 +76,8 @@ export function redteamRow(redteam) {
     held: s.held_attacks,
     blocked: s.blocked_attacks,
     medianMs: redteam.latency_ms.p50_ms,
+    jevCalls: config?.jev_calls_per_payment ?? 0,
+    classifierCalls: config?.classifier_calls_per_payment ?? 0,
   };
 }
 
