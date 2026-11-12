@@ -64,7 +64,8 @@ def _records(s):
 def test_per_payment_cap_boundary(settings, tmp_path, monkeypatch):
     _fake_checker(monkeypatch, "allow")
     clock = [T0]
-    assert _guardian(settings, clock).request_payment(_req(settings, 200 * UNIT)).status == "would_pay"
+    # 200 tUSDC is above a new payee's 20 tUSDC budget: accepted under the cap, escrowed.
+    assert _guardian(settings, clock).request_payment(_req(settings, 200 * UNIT)).status == "held"
     assert _records(settings) == ["1.json"]
 
     other = dataclasses.replace(settings, checker_record_dir=tmp_path / "other")
@@ -99,7 +100,7 @@ def test_daily_cap_and_day_roll(settings, monkeypatch):
         _guardian(settings, clock).request_payment(_req(settings, 1))
 
     clock[0] = T0 + DAY
-    assert _guardian(settings, clock).request_payment(_req(settings, 200 * UNIT)).status == "would_pay"
+    assert _guardian(settings, clock).request_payment(_req(settings, 200 * UNIT)).status == "held"
 
 
 def test_block_releases_reservation(settings, monkeypatch):
@@ -110,7 +111,7 @@ def test_block_releases_reservation(settings, monkeypatch):
         d = g.request_payment(_req(settings, 200 * UNIT))
         assert d.status == "refused" and d.release_at_ns is None
     state = json.loads(g.state_path.read_text())
-    assert state == {"spend_day": T0 // DAY, "spent_today": 0}
+    assert state == {"spend_day": T0 // DAY, "spent_today": 0, "payee_budgets": {}}
 
 
 @pytest.mark.parametrize(
@@ -137,6 +138,31 @@ def test_allow_keeps_reservation(settings, monkeypatch):
     g = _guardian(settings, [T0])
     g.request_payment(_req(settings, 7 * UNIT))
     assert json.loads(g.state_path.read_text())["spent_today"] == 7 * UNIT
+
+
+def test_allow_above_payee_budget_is_held(settings, monkeypatch):
+    _fake_checker(monkeypatch, "allow")
+    g = _guardian(settings, [T0])
+    d = g.request_payment(_req(settings, 20 * UNIT + 1))
+    assert (d.outcome, d.status) == ("allow", "held")
+    assert d.release_at_ns == T0 + 60 * MIN
+    state = json.loads(g.state_path.read_text())
+    assert state["spent_today"] == 20 * UNIT + 1
+    assert state["payee_budgets"] == {}
+
+
+def test_allow_within_payee_budget_grows_it(settings, monkeypatch):
+    _fake_checker(monkeypatch, "allow")
+    clock = [T0]
+    g = _guardian(settings, clock)
+    receiver = _req(settings, 1).receiver_id
+    d = g.request_payment(_req(settings, 18 * UNIT))
+    assert (d.status, d.release_at_ns) == ("would_pay", None)
+    assert json.loads(g.state_path.read_text())["payee_budgets"] == {receiver: 36 * UNIT}
+    # The budget survives the day roll and now covers 36 tUSDC.
+    clock[0] = T0 + DAY
+    assert g.request_payment(_req(settings, 36 * UNIT, "ref-2")).status == "would_pay"
+    assert json.loads(g.state_path.read_text())["payee_budgets"] == {receiver: 72 * UNIT}
 
 
 def test_demo_prints_contract_refusal(tmp_path, monkeypatch, capsys):
@@ -254,6 +280,9 @@ CORRUPT = [
     json.dumps({"spend_day": 1, "spent_today": 1.5}),
     json.dumps({"spend_day": 1, "spent_today": True}),
     json.dumps({"spend_day": "1", "spent_today": 0}),
+    json.dumps({"spend_day": 1, "spent_today": 0, "payee_budgets": []}),
+    json.dumps({"spend_day": 1, "spent_today": 0, "payee_budgets": {"a.testnet": -1}}),
+    json.dumps({"spend_day": 1, "spent_today": 0, "payee_budgets": {"a.testnet": "5"}}),
 ]
 
 
@@ -290,4 +319,8 @@ def test_clock_moved_back_keeps_spend(settings, monkeypatch):
     clock[0] = T0 - DAY
     with pytest.raises(ContractRefusal, match="Daily cap reached"):
         g.request_payment(_req(settings, 101 * UNIT))
-    assert json.loads(g.state_path.read_text()) == {"spend_day": T0 // DAY, "spent_today": 400 * UNIT}
+    assert json.loads(g.state_path.read_text()) == {
+        "spend_day": T0 // DAY,
+        "spent_today": 400 * UNIT,
+        "payee_budgets": {},
+    }

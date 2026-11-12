@@ -23,10 +23,12 @@ _STATUS_BY_OUTCOME = {"allow": "would_pay", "hold": "held", "block": "refused"}
 TGAS = 10**12
 
 # Hard limits: mirror contract/guardian/src/lib.rs (PER_PAYMENT_CAP_WHOLE, DAILY_CAP_WHOLE,
-# NANOS_PER_DAY) and contract/guardian/src/validate.rs (hold_window_ns).
+# NANOS_PER_DAY, PAYEE_START_BUDGET_WHOLE) and contract/guardian/src/validate.rs (hold_window_ns,
+# grown_budget).
 PER_PAYMENT_CAP_WHOLE = 200
 DAILY_CAP_WHOLE = 500
 NANOS_PER_DAY = 86_400_000_000_000
+PAYEE_START_BUDGET_WHOLE = 20
 
 
 def hold_window_ns(amount: int, decimals: int) -> int:
@@ -129,9 +131,11 @@ class LocalGuardian:
     """Dry-run guardian: same validation, caps and CheckerInput as the contract, native checker.
 
     Mirrors the contract's hard limits: per-payment cap, daily cap (reserved at request time,
-    released on `block`, kept for `allow`/`hold`) persisted in `<record_dir>/state.json`.
-    A `hold` verdict yields status `held` with `release_at_ns`; dry-run never waits and never
-    auto-releases or cancels the hold. State is single-process (no file lock).
+    released on `block`, kept for `allow`/`hold`) and per-payee budgets, persisted in
+    `<record_dir>/state.json`. A `hold` verdict, or an `allow` above the receiver's budget, yields
+    status `held` with `release_at_ns` (outcome unchanged); dry-run never waits and never
+    auto-releases or cancels the hold. An `allow` within budget (`would_pay`) counts as paid and
+    grows the budget. State is single-process (no file lock).
     """
 
     def __init__(self, settings: Settings, now_ns: Callable[[], int] | None = None):
@@ -153,16 +157,16 @@ class LocalGuardian:
         return max(stems, default=0) + 1
 
     def _load_state(self, today: int) -> dict:
-        """Daily spend state, rolled forward to `today` (mirror of the contract's roll_day).
+        """Spend and budget state, rolled forward to `today` (mirror of the contract's roll_day).
 
         Only a missing file is a fresh state; anything unreadable or malformed fails closed.
-        A clock that moved back keeps the stored day and spend.
+        A clock that moved back keeps the stored day and spend. Payee budgets survive the day roll.
         """
         corrupt = ContractRefusal("dry-run state.json is corrupt; rerun with --reset-spend")
         try:
             raw = json.loads(self.state_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return {"spend_day": today, "spent_today": 0}
+            return {"spend_day": today, "spent_today": 0, "payee_budgets": {}}
         except (OSError, ValueError):
             raise corrupt from None
         if not isinstance(raw, dict):
@@ -170,12 +174,18 @@ class LocalGuardian:
         day, spent = raw.get("spend_day"), raw.get("spent_today")
         if type(day) is not int or type(spent) is not int or day < 0 or spent < 0:
             raise corrupt
+        budgets = raw.get("payee_budgets", {})
+        if not isinstance(budgets, dict) or not all(
+            isinstance(k, str) and type(v) is int and v >= 0 for k, v in budgets.items()
+        ):
+            raise corrupt
         if today > day:
-            return {"spend_day": today, "spent_today": 0}
-        return {"spend_day": day, "spent_today": spent}
+            return {"spend_day": today, "spent_today": 0, "payee_budgets": budgets}
+        return {"spend_day": day, "spent_today": spent, "payee_budgets": budgets}
 
     def reset_spend(self) -> None:
-        """Dry-run only: forget today's spend (demo convenience; the contract has no such call)."""
+        """Dry-run only: forget today's spend and every payee budget (demo convenience; the
+        contract has no such call)."""
         self.state_path.unlink(missing_ok=True)
 
     def _save_state(self, state: dict) -> None:
@@ -227,16 +237,26 @@ class LocalGuardian:
             self._save_state(state)
             raise
         release_at_ns = None
+        status = _STATUS_BY_OUTCOME[verdict["outcome"]]
         if verdict["outcome"] == "block":
             state["spent_today"] -= req.amount
             self._save_state(state)
         elif verdict["outcome"] == "hold":
             release_at_ns = now + hold_window_ns(req.amount, TOKEN_DECIMALS)
+        else:
+            cap = PER_PAYMENT_CAP_WHOLE * unit
+            budget = state["payee_budgets"].get(req.receiver_id, PAYEE_START_BUDGET_WHOLE * unit)
+            if req.amount > budget:
+                status = "held"
+                release_at_ns = now + hold_window_ns(req.amount, TOKEN_DECIMALS)
+            else:
+                state["payee_budgets"][req.receiver_id] = min(cap, max(budget, 2 * req.amount))
+                self._save_state(state)
         return Decision(
             outcome=verdict["outcome"],
             reasons=list(verdict["reasons"]),
             record_sha256=verdict["record_sha256"],
-            status=_STATUS_BY_OUTCOME[verdict["outcome"]],
+            status=status,
             record_path=self.record_dir / f"{request_id}.json",
             release_at_ns=release_at_ns,
         )
@@ -293,7 +313,7 @@ class TestnetGuardian:
         await acc.startup()
         try:
             # included=True returns the hash once the tx is included; it never reports a contract panic.
-            # OutLayer checker mode needs ~160 TGas (request_execution 100 + callback 40); relayer mode is unaffected.
+            # OutLayer checker mode needs ~170 TGas (request_execution 100 + callback 50); relayer mode is unaffected.
             tx_hash = await acc.function_call(
                 self.s.guardian_id, "request_payment", req.to_args(), gas=200 * TGAS, included=True
             )

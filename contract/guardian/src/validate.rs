@@ -59,6 +59,12 @@ pub fn hold_window_ns(amount: u128, decimals: u8) -> u64 {
     }
 }
 
+/// Per-payee budget after a paid transfer of `paid`: never shrinks, grows to twice the payment,
+/// capped at `cap` (the per-payment cap).
+pub fn grown_budget(budget: u128, paid: u128, cap: u128) -> u128 {
+    budget.max(paid.saturating_mul(2)).min(cap)
+}
+
 /// Checks that `verdict` binds exactly the pending request. Err carries the offending field.
 pub fn binds(
     pending: &Pending,
@@ -163,4 +169,20 @@ pub fn valid_mode(mode: &CheckerMode) -> Result<(), &'static str> {
         return Err("max_requests_per_day");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::grown_budget;
+
+    const T: u128 = 1_000_000;
+
+    #[test]
+    fn grown_budget_doubles_caps_and_never_shrinks() {
+        assert_eq!(grown_budget(20 * T, 18 * T, 200 * T), 36 * T);
+        assert_eq!(grown_budget(20 * T, 5 * T, 200 * T), 20 * T);
+        assert_eq!(grown_budget(36 * T, 150 * T, 200 * T), 200 * T);
+        assert_eq!(grown_budget(200 * T, 1, 200 * T), 200 * T);
+        assert_eq!(grown_budget(20 * T, u128::MAX, 200 * T), 200 * T);
+    }
 }

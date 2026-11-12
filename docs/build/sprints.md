@@ -52,6 +52,7 @@ Status: **Done** (merged and signed off by Jim), **In progress** (work merged or
 | A1-FU | A1 follow-ups: full setup saves `GUARDIAN_PRIVATE_KEY`; keys saved before account creation | Jim | **Done** | PR #2 |
 | A2 | Record sink | Jesus | **Done** | Merged in PR #6: `checker/src/sink.rs`; signed off by Jim 2026-11-11 |
 | A3 | Eval harness skeleton | Jesus | **Done** | Merged in PR #6: `agent/src/firewall_agent/eval.py` (`firewall-eval`); signed off by Jim 2026-11-11 |
+| A4 | Per-payee budgets + receiver registration | Jim | **In progress** | Branch `a4-payee-budgets`; redeploy pending (human) |
 | B1 | Policy rules check | Rc (pairs with Jim) | **Done** | Merged in PR #3; Rc review completed in PR #9 ([b1-policy-review.md](b1-policy-review.md)); signed off by Jim 2026-11-11 |
 | B2 | Nightly e2e script | Rc | **Done** | Merged in PR #9: `agent/src/firewall_agent/nightly_e2e.py` (`firewall-nightly-e2e`), `scripts/nightly-e2e.*`; unit tests in `agent/tests/test_nightly_e2e.py`; expected output in [nightly-e2e.md](nightly-e2e.md); signed off by Jim 2026-11-11 |
 | C1 | results.json format + fixtures | paticolcol | **Done** | Merged in PR #7: `schemas/results.schema.json`, `schemas/examples/results.json`, 5 fixtures in `schemas/fixtures/`; signed off by Jim 2026-11-11 |
@@ -144,7 +145,7 @@ Goal: gate G2. Frontend first finishes the Sprint 1 carry-over (D1 In progress i
 
 | ID | Lane | Track | Size | Task | Done when | Starts from | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A4 | A | Backend | M | Contract: per-payee budgets; register the receiver with the token before `ft_transfer` (sdd §6 planned additions) | Unit tests; human redeploys | — | Jim | Not started |
+| A4 | A | Backend | M | Contract: per-payee budgets; register the receiver with the token before `ft_transfer` (sdd §6 planned additions) | Unit tests; human redeploys | — | Jim | In progress |
 | A5 | A | Backend | S | Unprotected-agent mode for demo step 3: plain agent with a full-access key pays the attack | Attack pays without the Guardian on testnet | — | Jesus | In progress |
 | B3 | B | Backend | M | Counterparty signals over RPC: account age, is-contract, code-hash change, prior payments, lookalike distance; agent behaviour profile; output `signals.counterparty` | `hostc0` flagged as lookalike of `hostco` | frozen `signals.counterparty` | Rc | In progress (main merged in locally 2026-11-11; PR pending) |
 | B4 | B | Backend | S | Checker hardening: range-check Jev `confidence`/`score` and choice vs argmax, HTTPS-only base URL, no HTTP redirects, timeout budget fitted to OutLayer's limit | Tests; review findings closed | — | Jesus | Not started |
