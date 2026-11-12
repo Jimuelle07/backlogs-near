@@ -65,8 +65,8 @@ const DEMO = [
   ["Normal payment", "The agent pays an 18 tUSDC hosting invoice. Allow; the receipt is on the explorer."],
   ["Attack, unprotected", "A plain agent with a full-access key pays a lookalike account. The balance drops."],
   ["Same attack, protected", "Through the Guardian: high injection score, lookalike payee, two days old. Block; the receipt shows why."],
-  ["Hold path", "A bigger invoice from a known supplier waits in escrow, is re-checked and released. No human."],
-  ["Numbers", "Missed attacks and false blocks on the held-out test set, with cost and latency per check."],
+  ["Hold path", "A bigger invoice from a known supplier waits in escrow and is released when its window ends. No human."],
+  ["Numbers", "Missed attacks, false blocks and false holds from the evaluation, with latency and calls per payment."],
 ];
 
 const PAPERS = [
@@ -294,7 +294,7 @@ export default function App() {
                   <tr><td>Hard caps</td><td>{PER_PAYMENT_CAP} tUSDC per payment, {DAILY_CAP} tUSDC per day</td><td>Contract code</td></tr>
                   <tr><td>Hold windows</td><td>10 min under 20 tUSDC, 1 h up to 100, 6 h above</td><td>Contract escrow</td></tr>
                   <tr><td>Whole units only</td><td>Amounts in the token's smallest unit, compared with the request or invoice</td><td>Checker code</td></tr>
-                  <tr><td>Per-payee budgets <span className="tag">Planned</span></td><td>New payees start small and grow with clean payments</td><td>Contract code</td></tr>
+                  <tr><td>Per-payee budgets</td><td>A new payee starts at 20 tUSDC; an allow above the budget waits in escrow like a hold; each paid transfer raises the budget to twice that amount, up to the per-payment cap</td><td>Contract code</td></tr>
                 </tbody>
               </table>
             </div>
