@@ -69,12 +69,12 @@ Status: **Done** (merged and signed off by Jim), **In progress** (work merged or
 | C6 | README results and limits; freeze thresholds | — | **Done** (PR #21; signed off by Jim 2026-11-12) | `README.md` Results and Limits from `docs/results/results.json` (`78e3fcb`); `FUSION_HOLD_THRESHOLD` 0.84 |
 | D1 | Landing page skeleton | Helena | **Not started** | No branch or PR yet |
 | E1 | Live receipts panel | Ace | **In progress** | PR #11 review changes: panel integrated into `site/` using the shared React 18.3.1 / Vite 5.4.21 stack and brand; standalone app removed. 8/8 unit tests, production build and 7 Edge browser checks pass (390px, no horizontal scroll); Helena's re-review pending; see [site/README.md](../../site/README.md) |
-| P1 | Classifier fails loudly; `firewall-eval --preset`, scenario sets `external` and `paysim` | Jim | **In progress** | `805a573`, follow-ups `73cb901`, `457d727`; sign-off pending |
-| P2 | ASCII confusable skeleton for lookalike detection | Jim | **In progress** | `b9ba730`: `checker/src/counterparty.rs`, `docs/results/lookalike-bench.json`; sign-off pending |
-| P3 | Injection classifier benchmark on public corpora | Jim | **In progress** | `90e6fe9`: `agent/tools/bench_classifier.py`, `docs/results/classifier-bench.{json,md}`; sign-off pending |
-| P4 | External held-out scenario set; opt-in Jev reference examples; per-agent hold threshold | Jim | **In progress** | `c816c20`, `3460b50`, `0a6e0fa`: `agent/scenarios/external/` (200 scenarios), `JEV_REFERENCE_EXAMPLES_JSON`, `FUSION_AGENT_HOLD_THRESHOLD`; sign-off pending |
-| P5 | Kaggle-derived builders (BEC reference examples, PaySim agent) | Jim | **In progress** | `1d289e7`, `bc76e18`: `agent/tools/build_bec_examples.py`, `agent/tools/build_paysim_set.py`; sign-off pending |
-| P6 | Live runs, README results, Hugging Face dataset export | Jim | **In progress** | export script `beb8939`; live runs and results `8bb0618`, `docs/results/jev-budget.md`; run 9 not run (budget); sign-off pending |
+| P1 | Classifier fails loudly; `firewall-eval --preset`, scenario sets `external` and `paysim` | Jim | **Done** (signed off by Jim 2026-11-13) | `805a573`, follow-ups `73cb901`, `457d727`; signed off by Jim 2026-11-13 |
+| P2 | ASCII confusable skeleton for lookalike detection | Jim | **Done** (signed off by Jim 2026-11-13) | `b9ba730`: `checker/src/counterparty.rs`, `docs/results/lookalike-bench.json`; signed off by Jim 2026-11-13 |
+| P3 | Injection classifier benchmark on public corpora | Jim | **Done** (signed off by Jim 2026-11-13) | `90e6fe9`: `agent/tools/bench_classifier.py`, `docs/results/classifier-bench.{json,md}`; signed off by Jim 2026-11-13 |
+| P4 | External held-out scenario set; opt-in Jev reference examples; per-agent hold threshold | Jim | **Done** (signed off by Jim 2026-11-13) | `c816c20`, `3460b50`, `0a6e0fa`: `agent/scenarios/external/` (200 scenarios), `JEV_REFERENCE_EXAMPLES_JSON`, `FUSION_AGENT_HOLD_THRESHOLD`; signed off by Jim 2026-11-13 |
+| P5 | Kaggle-derived builders (BEC reference examples, PaySim agent) | Jim | **Done** (signed off by Jim 2026-11-13) | `1d289e7`, `bc76e18`: `agent/tools/build_bec_examples.py`, `agent/tools/build_paysim_set.py`; signed off by Jim 2026-11-13 |
+| P6 | Live runs, README results, Hugging Face dataset export | Jim | **Done** (signed off by Jim 2026-11-13) | export script `beb8939`; live runs and results `8bb0618`, `docs/results/jev-budget.md`; run 9 not run (budget); signed off by Jim 2026-11-13 |
 
 Sign-off checks 2026-11-11 (A2, A3, B1, B2, C1, C2): `cargo test --workspace --no-fail-fast` passed (checker 49, guardian 91, tusdc 3; 2 ignored) after fixing the A2 test server in `checker/src/sink.rs` to read the full request body; `cd agent && uv run pytest` passed (158).
 
