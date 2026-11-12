@@ -235,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn policy_violation_with_normal_jev_allows() {
+    fn policy_violation_with_normal_jev_holds() {
         let mut j: serde_json::Value = serde_json::from_str(INPUT).unwrap();
         j["amount"] = "180000000".into();
         j["user_request"] = "Pay the 18 USDC hosting bill.".into();
@@ -245,7 +245,7 @@ mod tests {
         let p = r.signals.policy.unwrap();
         assert!(!p.ok);
         assert_eq!(p.violations, vec![crate::policy::V_AMOUNT_MISMATCH_REQUEST]);
-        assert_eq!(v.outcome, Outcome::Allow);
+        assert_eq!(v.outcome, Outcome::Hold);
         assert_eq!(v.reasons, vec![ReasonCode::PolicyViolation, ReasonCode::AmountMismatch]);
         assert!(serde_json::to_vec(&v).unwrap().len() <= 900);
     }

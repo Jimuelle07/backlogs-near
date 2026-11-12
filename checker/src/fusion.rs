@@ -192,6 +192,8 @@ pub fn jev_signal(d: &Decision) -> Result<JevSignal, String> {
 
 /// Fuse the signals (`sdd.md §5`). In `jev` mode: hold when Jev is unavailable or `unusual > q̂`; block
 /// only when `unusual > q̂` and attack flags from at least two distinct detectors fire (Jev counts once).
+/// Also hold, even when `unusual <= q̂`, when any non-Jev detector (policy, classifier, MELON,
+/// counterparty) flagged (Jim's decision 2026-11-12); Jev flags alone do not hold.
 /// In `code_rules` mode Jev is ignored: two or more detectors block, one holds, none allows.
 pub fn fuse(signals: &Signals, cfg: &FusionConfig) -> (Outcome, Vec<ReasonCode>) {
     use ReasonCode::*;
@@ -262,6 +264,7 @@ pub fn fuse(signals: &Signals, cfg: &FusionConfig) -> (Outcome, Vec<ReasonCode>)
             None => Outcome::Hold,
             Some(j) if j.unusual > cfg.hold_threshold && detectors >= 2 => Outcome::Block,
             Some(j) if j.unusual > cfg.hold_threshold => Outcome::Hold,
+            Some(_) if hit[..4].iter().any(|h| *h) => Outcome::Hold,
             Some(_) => Outcome::Allow,
         }
     };
@@ -395,6 +398,77 @@ mod tests {
             let rid = serde_json::from_str::<DecisionRecord>(json).unwrap().request_id;
             assert_eq!(fuse(&fixture(json), &cfg), (outcome, reasons), "fixture request {rid}");
         }
+    }
+
+    fn lookalike_signal(prior_payments: u64) -> CounterpartySignal {
+        CounterpartySignal {
+            account_age_days: None,
+            is_contract: false,
+            code_changed_recently: false,
+            prior_payments,
+            lookalike_of: Some("hostco.testnet".into()),
+            lookalike_distance: Some(1),
+        }
+    }
+
+    #[test]
+    fn below_threshold_non_jev_flag_holds() {
+        let s = Signals {
+            policy: Some(PolicySignal { ok: false, violations: vec![] }),
+            jev: Some(jev(0.1, 0.0, 0.0)),
+            ..Signals::default()
+        };
+        assert_eq!(fuse(&s, &FusionConfig::default()), (Outcome::Hold, vec![PolicyViolation]));
+    }
+
+    #[test]
+    fn below_threshold_lookalike_with_jev_flags_holds_not_blocks() {
+        let s = Signals {
+            counterparty: Some(lookalike_signal(1)),
+            jev: Some(jev(0.1, 0.9, 0.9)),
+            ..Signals::default()
+        };
+        let (outcome, reasons) = fuse(&s, &FusionConfig::default());
+        assert_eq!(outcome, Outcome::Hold);
+        assert_eq!(reasons, vec![LookalikeReceiver, JevInjectionDriven, JevReceiverRisk]);
+    }
+
+    #[test]
+    fn below_threshold_jev_flags_alone_allow() {
+        let s = Signals { jev: Some(jev(0.1, 0.9, 0.9)), ..Signals::default() };
+        assert_eq!(
+            fuse(&s, &FusionConfig::default()),
+            (Outcome::Allow, vec![JevInjectionDriven, JevReceiverRisk])
+        );
+    }
+
+    #[test]
+    fn above_threshold_two_detectors_block() {
+        let s = Signals {
+            counterparty: Some(lookalike_signal(1)),
+            jev: Some(jev(0.9, 0.9, 0.0)),
+            ..Signals::default()
+        };
+        assert_eq!(fuse(&s, &FusionConfig::default()).0, Outcome::Block);
+    }
+
+    #[test]
+    fn live_attack_morse_lookalike_below_threshold_holds() {
+        let s = Signals {
+            policy: Some(PolicySignal {
+                ok: false,
+                violations: vec![policy::V_AMOUNT_MISMATCH_REQUEST.into()],
+            }),
+            counterparty: Some(lookalike_signal(0)),
+            jev: Some(jev(0.83, 0.86, 1.0)),
+            ..Signals::default()
+        };
+        let (outcome, reasons) = fuse(&s, &FusionConfig::default());
+        assert_eq!(outcome, Outcome::Hold);
+        assert_eq!(
+            reasons,
+            vec![PolicyViolation, AmountMismatch, LookalikeReceiver, JevInjectionDriven, JevReceiverRisk, NewReceiver]
+        );
     }
 
     #[test]
