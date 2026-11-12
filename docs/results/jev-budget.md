@@ -1,0 +1,32 @@
+# Jev call budget ledger (Sprint 4b, P6)
+
+Budget: at most 2,500 Jev calls. Stop line for starting a new run: 2,400. Calls are counted as cases with `jev_called` in each output file; the two aborted runs have no file and are booked at the counts below.
+
+## Environment of every live run
+
+Runs of 2026-11-13, 01:04 to 02:34 local. The checker was built from this branch. The injection classifier `protectai/deberta-v3-base-prompt-injection-v2` was served locally on CPU (`firewall-classifier`, port 8088). `INJECTION_TIMEOUT_MS=20000` was set for every run: a 300-case stability pass had 2 of 300 cases over 3 s end to end, and one classifier timeout aborts a whole run with no file (the checker treats a classifier failure as an error, not a verdict). `TYPESAFE_API_KEY` was set. No NEAR AI key was set, so there was no LLM fallback; a Jev failure would show as `check_unavailable`. No profile, reference-example or threshold variables were exported except where a preset sets them. Latency columns in the results include the local CPU classifier (about 1.1 to 1.8 s per payment).
+
+## Ledger
+
+| # | Run | Output | Jev calls | Cumulative |
+| --- | --- | --- | --- | --- |
+| 0 | smoke: 2 scenarios, `jev_fusion_conformal` | not kept | 2 | 2 |
+| 1 | main set, `jev_fusion_all_signals` | `calibration-all-signals-classifier.json` | 300 | 302 |
+| 2 | `firewall-calibrate` on run 1 | none | 0 | 302 |
+| 3 | main set, `--all-configurations` (3 Jev presets) | `results.json` | 900 | 1,202 |
+| 4 | red-team set, `jev_fusion_conformal` | `redteam-results.json` | 17 | 1,219 |
+| 5 | external set, code rules and classifier only | `external-code-rules.json`, `external-classifier-only.json` | 0 | 1,219 |
+| 6a | external set, `jev_fusion_conformal`: aborted after 185 s because the checker process failed to start (exit 0xC000012D, Windows commit limit reached); no file | none | about 143 by timing, booked 200 | 1,419 |
+| 6 | external set, `jev_fusion_conformal` (retry) | `external-results.json` | 200 | 1,619 |
+| 7a | BEC preset `jev_fusion_conformal_bec`: aborted on the 200th scenario because an operator scripting error added a carriage return to the last `--scenario` argument; 199 cases had run; no file | none | 199, booked 200 | 1,819 |
+| 7 | BEC preset (retry) | `bec-results.json` | 200 | 2,019 |
+| 8 | PaySim agent, `jev_fusion_conformal` | `paysim-pooled.json` | 220 | 2,239 |
+| 9 | PaySim agent with `FUSION_AGENT_HOLD_THRESHOLD` = q̂ₐ | not run: 2,239 + 220 = 2,459 is above the 2,400 stop line, and the plan's cut rule drops run 9 first | 0 | 2,239 |
+
+Total booked: 2,239 calls, of which 400 are booked for the two aborted runs 6a and 7a.
+
+## Notes
+
+- The external set was rebuilt twice before any Jev call on it (first the attack amounts, then label words in `ref` fields), so no Jev call was spent on a set with those leaks.
+- The stop rule (`check_unavailable` above 5% of cases) was never triggered: `check_unavailable` is 0 in every completed run.
+- Counts in the table were checked against the committed files: `calibration-all-signals-classifier.json` 300, `redteam-results.json` 17, `external-results.json` 200, `bec-results.json` 200, `paysim-pooled.json` 220 cases with `jev_called`. `results.json` keeps `cases` of its last preset only (300); the 900 for run 3 is 3 Jev presets × 300 payments.
