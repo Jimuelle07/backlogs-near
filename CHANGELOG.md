@@ -4,6 +4,7 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-13
 
+- **Sign-off:** Jim signed off D3, the demo storyboard ([demo-storyboard.md](docs/build/demo-storyboard.md), PR #26): shot list, numbers slide read from `docs/results/results.json`, 20-second GIF plan; shot 4 records attempts until one blocks, with the run-variance disclosure; shot 5 releases after the hold window with no re-check. [sprints.md](docs/build/sprints.md) marks D3 Done.
 - **Component:** E2 inline receipt details in `site/`: keyboard opening, Escape/close with focus restoration, all receipt fields and labelled reason codes, hash copy controls and NearBlocks account links. Held entries are paginated at the receipt snapshot block; countdowns use integer nanoseconds and show `releasing` at expiry.
 
 ## 2026-11-12

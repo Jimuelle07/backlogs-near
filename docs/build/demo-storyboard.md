@@ -1,6 +1,6 @@
 # Demo storyboard (D3)
 
-Shot list for the ~2-minute demo in [idea.md Demo script](idea.md#demo-script-about-2-minutes), plus the numbers slide and the 20-second GIF. Status: **answers from Jim applied (PR #26, 2026-11-13); awaiting his approval** (D3 is done when he approves). Recording is A8 (human signs every testnet transaction); the GIF and numbers slide are E4; X post visuals are E6.
+Shot list for the ~2-minute demo in [idea.md Demo script](idea.md#demo-script-about-2-minutes), plus the numbers slide and the 20-second GIF. Status: **approved by Jim (PR #26, 2026-11-13)**; D3 is done. Recording is A8 (human signs every testnet transaction); the GIF and numbers slide are E4; X post visuals are E6.
 
 ## Shot list
 
