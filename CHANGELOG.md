@@ -4,6 +4,7 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-13
 
+- **Component:** E3 results section in `site/` renders the C1 JSON example as a labelled sample-data table and grouped inline SVG chart, with cost/latency units and exchangeability/known-family caveats. Build and renderer validate `firewall.results.v1`; Node tests cover mapping, format rejection and rendered output.
 - **Sign-off:** Jim signed off Sprint 4b P1–P6; [sprints.md](docs/build/sprints.md#progress-updated-2026-11-13) marks them Done. Run 9 (live per-agent threshold) remains not run.
 - **Results:** live runs 2026-11-13 with the classifier on: new [results.json](docs/results/results.json), [redteam-results.json](docs/results/redteam-results.json), `external-*.json`, [bec-results.json](docs/results/bec-results.json), [paysim-pooled.json](docs/results/paysim-pooled.json) and [calibration-all-signals-classifier.json](docs/results/calibration-all-signals-classifier.json); Jev budget ledger [jev-budget.md](docs/results/jev-budget.md) (2,239 calls including 400 booked for two aborted runs); run 9 (per-agent threshold, live) was not run (`8bb0618`).
 - **Rules:** Jim's decision 2026-11-13: `FUSION_HOLD_THRESHOLD` stays 0.84 (pooled re-estimate 0.85, split 0.88).
