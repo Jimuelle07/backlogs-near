@@ -20,6 +20,7 @@ import { ArchitectureDiagram } from "./components/ArchitectureDiagram";
 import { HeroConsole } from "./components/HeroConsole";
 import { Logo } from "./components/Logo";
 import { ReceiptsPanel } from "./components/ReceiptsPanel";
+import { ResultsSection } from "./components/ResultsSection";
 import { VerdictExplorer } from "./components/VerdictExplorer";
 import { DAILY_CAP, GUARDIAN_ID, NEAR_RPC_URL, PER_PAYMENT_CAP, PROJECT_NAME, REPO_URL, STATUS_NOTE } from "./config.js";
 import { createReader } from "./near.js";
@@ -66,16 +67,6 @@ const DEMO = [
   ["Same attack, protected", "Through the Guardian: high injection score, lookalike payee, two days old. Block; the receipt shows why."],
   ["Hold path", "A bigger invoice from a known supplier waits in escrow, is re-checked and released. No human."],
   ["Numbers", "Missed attacks and false blocks on the held-out test set, with cost and latency per check."],
-];
-
-const RESULT_ROWS = [
-  "No defense",
-  "Policy rules only",
-  "Classifier only",
-  "All signals, code rules only (no Jev)",
-  "Jev fusion, all signals",
-  "Jev fusion + conformal hold threshold (ε = 5%)",
-  "Same, unseen attack family",
 ];
 
 const PAPERS = [
@@ -332,32 +323,7 @@ export default function App() {
           </section>
 
           {/* Results */}
-          <section className="sec" id="results" aria-labelledby="results-title">
-            <div className="head2">
-              <div className="l">
-                <span className="kicker">Results</span>
-                <h2 id="results-title">Measured, not promised</h2>
-              </div>
-              <p>Every check on and off over a labelled set of benign and attack payments. Numbers land after the full eval run.</p>
-            </div>
-            <div className="tablewrap">
-              <table>
-                <thead>
-                  <tr><th>Configuration</th><th>False holds</th><th>False blocks</th><th>Missed attacks</th><th>Median latency</th></tr>
-                </thead>
-                <tbody>
-                  {RESULT_ROWS.map((r) => (
-                    <tr key={r}><td>{r}</td><td className="num">—</td><td className="num">—</td><td className="num">—</td><td className="num">—</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="note">
-              The false-hold bound holds only while an agent behaves like its calibration history (exchangeability), and
-              covers known attack families; the unseen-family row shows what happens outside them. The hard cap holds
-              regardless.
-            </p>
-          </section>
+          <ResultsSection />
 
           {/* Live receipts (E1) */}
           <section className="sec" id="receipts" aria-labelledby="receipts-title">

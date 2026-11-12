@@ -253,6 +253,26 @@ td.num { font-family: var(--mono); color: var(--dim); }
 @media (max-width: 900px) { .dsteps { border-left: 0; border-top: 1px dashed var(--dash); } }
 
 /* Results / receipts notes */
+.results-table-wrap { margin-top: 0; }
+.results-table { min-width: 900px; }
+.results-table th:not(:first-child), .results-table td.num { text-align: right; }
+.results-table td.num { color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.results-table th[scope="row"] { width: 34%; background: transparent; text-transform: none; letter-spacing: normal; }
+.results-config { display: block; color: var(--text); font: 500 14px var(--mono); overflow-wrap: anywhere; }
+.results-description { display: block; margin-top: 6px; color: var(--muted); font: 14px/1.5 var(--sans); }
+.results-chart { margin: 32px var(--gutter) 0; padding: clamp(12px, 2vw, 24px); border: 1px solid var(--line); border-radius: 8px; }
+.results-chart figcaption { font-weight: 500; }
+.results-legend { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 12px 0 20px; padding: 0; list-style: none; color: var(--muted); font-size: 14px; }
+.results-legend li { display: flex; align-items: center; gap: 8px; }
+.results-legend span { display: inline-block; width: 16px; height: 12px; }
+.results-missed { fill: var(--accent); background: var(--accent); }
+.results-blocks { fill: var(--alarm); background: var(--alarm); }
+.results-chart svg { display: block; width: 100%; max-width: 600px; height: auto; margin-inline: auto; overflow: visible; }
+.results-chart text { fill: var(--muted); font: 14px var(--mono); font-variant-numeric: tabular-nums; }
+.results-chart .results-axis-title, .results-chart .results-config-label { fill: var(--text); }
+.results-gridline { stroke: var(--line); stroke-dasharray: 3 4; }
+.results-axis { stroke: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .note { margin: 16px var(--gutter) 0; color: var(--dim); font-size: 14px; max-width: 60em; }
 .panel {
   margin: 0 var(--gutter); border: 1px dashed var(--dash); border-radius: 12px; padding: clamp(20px, 3vw, 32px);

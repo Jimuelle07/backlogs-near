@@ -46,6 +46,12 @@ An RPC failure shows an error and retry button, retaining the last successful re
 
 Run `npm ci`, `npm test` and `npm run build` to verify. For a mobile check, open `#receipts` at 390px wide and check the controls and table without horizontal page scrolling.
 
+## Sample results (E3)
+
+Open `/#results` for the **Sample data** table and grouped inline SVG chart. `src/components/ResultsSection.jsx` imports `../schemas/examples/results.json` relative to the site root at build time; every displayed metric comes from a configuration entry. `vite.config.js` validates the same source during builds; update both imports for D4. The build and row mapper reject any format other than `firewall.results.v1`. Missing optional cost is labelled “Not reported”.
+
+The table includes configuration descriptions, percentages, median latency (ms) and cost per payment (USD). The chart compares missed attacks and false blocks using shared colour tokens and horizontal grouped bars to keep labels readable at 390px. The exchangeability and known-attack-family caveats stay below both views. `npm test` checks mapping, format validation and rendered sample output; `npm run build` checks bundling. D4 will switch the import to the committed real results and remove the sample label.
+
 ## Deploy (human, needs a Cloudflare account)
 
 ```
@@ -59,8 +65,9 @@ The first run asks for a Cloudflare login and creates the project. Any static ho
 
 - `src/config.js`: project name, status note, Guardian id, RPC URL, explorer, caps, repo URL. Edit here first.
 - `src/App.jsx`: all sections, in page order.
+- `src/components/ResultsSection.jsx` and `src/results.js`: sample results table/chart and validated row mapping; `src/results.test.js` covers the C1 example.
 - `src/components/ReceiptsPanel.jsx`: E1 live receipts panel in `#receipts`.
 - `src/near.js`: read-only RPC reader and exact token amount formatting; `src/near.test.js` tests it against the receipt schema example.
 - `src/styles.css`: brand tokens (`:root`) and components.
 
-Open items: project name (team lead decides; set `PROJECT_NAME`), repo URL (set `REPO_URL` once public), demo video (D3/D6), results table from `results.json` (E3/D4), architecture diagram (D2).
+Open items: project name (team lead decides; set `PROJECT_NAME`), repo URL (set `REPO_URL` once public), demo video (D3/D6), results switched to real data (D4), architecture diagram (D2).

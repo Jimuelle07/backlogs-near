@@ -328,6 +328,8 @@ Run from the repo root unless noted (full command list: [AGENTS.md §6](../../AG
 
 ## 10. Modules
 
+- `site/src/components/ResultsSection.jsx` — E3 results table and grouped inline SVG chart from a build-time import of `schemas/examples/results.json`, labelled **Sample data**. One row per configuration includes its description, false holds (%), false blocks (%), missed attacks (%), median latency (ms), and cost per payment (USD); missing optional cost is shown as not reported. Chart bars compare missed attacks and false blocks with shared site colour tokens and labelled axes readable at 390px. Both the build and renderer reject a format other than `firewall.results.v1`. Keep the exchangeability and known-attack-family caveats below the results. D4 later switches to committed real results.
+
 - `site/` — shared React 18.3.1 + Vite 5.4.21 (plain JSX) landing page and E1 read-only receipts panel. Uses browser `fetch` for public `get_config` / `list_receipts` calls on `guardian-v2.jimuelle-firewall.testnet`; receipt pages are pinned to one finalized block per refresh. `src/App.jsx` creates one reader from `GUARDIAN_ID` and `NEAR_RPC_URL` in `src/config.js` (public values only). Includes filters, exact integer amount formatting using Guardian token decimals, account explorer links, pagination, and optional 30-second refresh. Uses the shared Geist / lilac CSS tokens. [Run and verification instructions](../../site/README.md). Hosting and E2 detail views remain later work.
 
 One line each, with the sprint task that adds it ([sprints.md](sprints.md)).

@@ -160,7 +160,7 @@ Goal: gate G2. Frontend first finishes the Sprint 1 carry-over (D1 In progress i
 | D2 | D | Frontend | M | "How it works" section: architecture diagram (agent → Guardian → checker → verdict → transfer), allow/hold/block, amount-safety table | Section live; copy approved by a backend owner | D1 | Helena | Not started |
 | D3 | D | Frontend | S | Demo storyboard: shot list for the ~2-minute script ([idea.md Demo script](idea.md#demo-script-about-2-minutes)), numbers slide, 20-second GIF plan | Storyboard approved | — | Helena | In review (storyboard in [demo-storyboard.md](demo-storyboard.md), PR #16 merged; awaiting approval) |
 | E2 | E | Frontend | M | Receipt detail view: verdict, reason codes, input and record hashes, explorer link, hold countdown | Works for paid, held, refused and timed-out receipts | E1 | Ace | Not started |
-| E3 | E | Frontend | S | Results section rendering `results.json` (table plus a simple chart) with the stated caveats (exchangeability, known attack families) | Renders the C1 example | C1 example | Ace | Not started |
+| E3 | E | Frontend | S | Results section rendering `results.json` (table plus a simple chart) with the stated caveats (exchangeability, known attack families) | Renders the C1 example | C1 example | Ace | Implemented, awaiting review on `feat/e3-results-section` (from `origin/main` after PR #14 merged): C1 sample table/chart, format guard; `npm test` 14 passed, `npm run build` passed (2026-11-13); browser mobile check pending |
 | G2 | All | — | — | **Gate:** on testnet through the real checker, one benign payment pays and one attack is blocked | Receipts show both | C3, A1 or A0 | Jim (signs) | Not started |
 
 ## Sprint 3 — due Thu 12 Nov, 23:59 PHT (15:59Z)
