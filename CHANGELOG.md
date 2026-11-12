@@ -15,6 +15,7 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 - **Config:** new optional `JEV_REFERENCE_EXAMPLES_JSON` (opt-in reference cases in the Jev state) and `FUSION_AGENT_HOLD_THRESHOLD` (applies only when the profile has `payments_last_90d >= 99`) (`c816c20`, P4).
 - **Component:** an agent profile JSON containing `typical_amount_units` now parses (`1d289e7`). Kaggle-derived builders `build_bec_examples.py` and `build_paysim_set.py` write only under the gitignored `data/` (`bc76e18`, P5); Jim's decision 2026-11-13: PaySim merchants are collapsed to 12 ids by hash, because PaySim has no repeat payees.
 - **Component:** `agent/tools/export_hf_dataset.py` writes the labelled scenarios as a Hugging Face dataset folder in `data/hf-dataset/` and prints the upload command; it uploads nothing (`beb8939`, P6).
+- **Sign-off:** Jim signed off D3, the demo storyboard ([demo-storyboard.md](docs/build/demo-storyboard.md), PR #26): shot list, numbers slide read from `docs/results/results.json`, 20-second GIF plan; shot 4 records attempts until one blocks, with the run-variance disclosure; shot 5 releases after the hold window with no re-check. [sprints.md](docs/build/sprints.md) marks D3 Done.
 - **Component:** E2 inline receipt details in `site/`: keyboard opening, Escape/close with focus restoration, all receipt fields and labelled reason codes, hash copy controls and NearBlocks account links. Held entries are paginated at the receipt snapshot block; countdowns use integer nanoseconds and show `releasing` at expiry.
 
 ## 2026-11-12
