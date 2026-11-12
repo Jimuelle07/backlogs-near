@@ -4,6 +4,7 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-13
 
+- **Component:** guardian-v2 back in OutLayer checker mode with checker version 1b62f280afc1b2dcf60d3c0e11bf3adb8e93325763a783b216c78e8d425b1d21 and `secrets_ref` {default, jimuelle-firewall.testnet}; benign allow/paid, attack block/refused ([sdd.md §6](docs/build/sdd.md#outlayer-run-with-jev-2026-11-13)).
 - **Rules:** Jim's decision 2026-11-13: the project is named Eclipse ("steps in front of the bad payment, stays in the background otherwise."); the working name "Attested Payment Firewall" is kept only as a note in AGENTS.md §1, prd.md, sdd.md, system-design.md and idea.md. Code identifiers, wire formats and testnet account ids keep "firewall". The submission form's name field stays human-only (AGENTS.md §4).
 - **Rules:** OutLayer runbook ([sdd.md §6](docs/build/sdd.md#outlayer-checker-mode)): the secrets row must whitelist the agent account, because OutLayer judges access against the transaction signer; `set_checker_mode` passes `secrets_ref` `{"profile":"default","account_id":"<owner>"}`.
 - **Component:** E3 results section in `site/` renders the C1 JSON example as a labelled sample-data table and grouped inline SVG chart, with cost/latency units and exchangeability/known-family caveats. Build and renderer validate `firewall.results.v1`; Node tests cover mapping, format rejection and rendered output.

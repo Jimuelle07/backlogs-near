@@ -143,7 +143,7 @@ Verified with `cargo test --workspace` (112 passed) and `uv run pytest` (134 pas
 Follow-ups, not scheduled:
 
 - Done in PR #2 (2026-11-10): full setup saves `GUARDIAN_PRIVATE_KEY` and `.env.example` lists it; both setup paths write every key (and the agent's function-call key) to `.env.testnet.pending` before using it, and a leftover pending file stops the next run.
-- Runbook updated 2026-11-13 (sdd §6 steps 4 and 7: agent whitelist, secrets_ref); live run pending. `TYPESAFE_API_KEY` is already set. guardian-v2's mode still has `secrets_ref: null`, so once `decide()` calls Jev (C3), call `set_checker_mode` with `secrets_ref` `{profile, account_id}` so the checker receives the key.
+- Done 2026-11-13: guardian-v2 back in OutLayer mode, checker version 1b62f280afc1b2dcf60d3c0e11bf3adb8e93325763a783b216c78e8d425b1d21, `secrets_ref` {default, jimuelle-firewall.testnet}, row whitelists the owner and agent-v2; receipts in [sdd.md §6](sdd.md#outlayer-run-with-jev-2026-11-13).
 
 ## Sprint 2 — due Wed 11 Nov, 23:59 PHT (15:59Z)
 
