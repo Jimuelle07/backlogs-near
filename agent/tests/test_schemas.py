@@ -88,7 +88,7 @@ def test_redteam_set_is_attack_only():
 
 
 def test_unknown_scenario_set_rejected():
-    with pytest.raises(ValueError, match=r"unknown scenario set 'nope'; expected main\|redteam"):
+    with pytest.raises(ValueError, match=r"unknown scenario set 'nope'; expected main\|redteam\|external\|paysim"):
         list_scenarios("nope")
-    with pytest.raises(ValueError, match="expected main\\|redteam"):
+    with pytest.raises(ValueError, match="expected main\\|redteam\\|external\\|paysim"):
         load_scenario("x", "demo.testnet", "nope")

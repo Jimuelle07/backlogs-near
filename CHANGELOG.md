@@ -4,6 +4,8 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-12
 
+- **Plan:** Sprint 4b (P1–P6, owner Jim, due Sat 14 Nov) added to [sprints.md](docs/build/sprints.md#sprint-4b--public-datasets-due-sat-14-nov): public Hugging Face and Kaggle data for the classifier benchmark, an external held-out scenario set, lookalike detection, BEC reference examples and a per-agent threshold. CC BY-SA sources are never committed.
+- **Component:** `firewall-classifier` now fails when the model cannot load instead of silently scoring with keywords; `--heuristic` selects the keyword heuristic and reports `"model": "keyword-heuristic"`. `firewall-eval` gains `--preset NAME` and the scenario sets `external` and `paysim` (P1).
 - **Sign-off:** Jim signed off A4, A6, A7, B3, B5, B6, B7, C4, C5 and C6 (PR #21); [sprints.md](docs/build/sprints.md#progress-updated-2026-11-12) marks them Done.
 - **Rules:** Jim's decision 2026-11-12: any non-Jev attack flag (policy, classifier, MELON, counterparty) holds the payment even when Jev `unusual` is at or below q̂; block still needs Jev `unusual` > q̂ and at least 2 distinct detectors (Jev counts once). Recorded in [AGENTS.md §7](AGENTS.md) and [sdd.md §5](docs/build/sdd.md); `docs/build/idea.md` (human-authored) still says hold only above the threshold (`cc15b79`).
 - **Rules:** Jim's decision 2026-11-12: a qualified account id never matches a bare profile name exactly; new optional `COUNTERPARTY_NAMESPACE` adds `<base>.<ns>` for the default payees (`a40f7d6`, B3).

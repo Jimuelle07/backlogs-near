@@ -199,6 +199,19 @@ Goal: numbers frozen for the demo and site (sync point at the end of this sprint
 | E5 | E | Frontend | S | Hosting check: uptime through 2026-11-25; receipts panel points at the final Guardian | Uptime check in place | D6 | |
 | E6 | E | Frontend | S | Visuals for the X demo post (cover frame, screenshots) | Ready for the human to post | A8 | |
 
+## Sprint 4b — public datasets (due Sat 14 Nov)
+
+Added by Jim on 2026-11-12: improve the tool with public data from huggingface.co and kaggle.com. CC BY-SA sources (Kaggle PaySim, Kaggle adversarial BEC) are read from `KAGGLE_DATA_DIR` and never committed; attribution for committed data is in `agent/scenarios/external/ATTRIBUTION.md`.
+
+| ID | Lane | Track | Size | Task | Done when | Starts from | Owner |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P1 | C | Backend | S | Classifier fails loudly instead of silently using keywords (`--heuristic` opt-in, model reported truthfully); `firewall-eval --preset`, scenario sets `external` and `paysim` | `uv run pytest` passes; a model load failure exits non-zero | C2, C4 | Jim |
+| P2 | B | Backend | S | Lookalike detection with an ASCII confusable skeleton (`checker/src/counterparty.rs`), benchmarked on the Kaggle homoglyph domain data | `cargo test --workspace` passes; `docs/results/lookalike-bench.json` committed | B3 | Jim |
+| P3 | C | Backend | M | Injection classifier benchmark on public corpora it was not trained on (`agent/tools/bench_classifier.py`) | `docs/results/classifier-bench.json` has 5 corpora × 2 backends | P1 | Jim |
+| P4 | A | Backend | M | External held-out payment scenario set from public benchmarks (`agent/scenarios/external/`); checker: opt-in Jev reference examples (`JEV_REFERENCE_EXAMPLES_JSON`) and per-agent hold threshold (`FUSION_AGENT_HOLD_THRESHOLD`) | External set loads with benign = attack; checker tests pass | A6, C3 | Jim |
+| P5 | A | Backend | M | Kaggle-derived builders, outputs gitignored: BEC reference examples and a PaySim agent with 120 prior payments (`agent/tools/build_bec_examples.py`, `agent/tools/build_paysim_set.py`) | `firewall-eval --scenario-set paysim` runs 200 benign + 20 attack | P1 | Jim |
+| P6 | C | Backend | M | Live runs with a Jev budget ledger (≤2,500 calls), README Results and Limits, Hugging Face dataset export folder (Jim uploads) | Every new README number cites a committed `docs/results/*` file | P1–P5 | Jim |
+
 ## Sprint 5 — submit
 
 | ID | Lane | Track | Size | Task | Done when | Starts from | Owner |
