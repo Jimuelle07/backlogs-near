@@ -11,8 +11,9 @@ use std::time::Duration;
 pub const TYPESAFE_JEV_URL: &str = "https://api.typesafe.ai/v1/systemone";
 pub const TYPESAFE_JEV_MODEL: &str = "jev-latest";
 pub const NEAR_AI_JEV_MODEL: &str = "typesafe/jev-1.13";
-const JEV_TIMEOUT: Duration = Duration::from_secs(20);
-const LLM_TIMEOUT: Duration = Duration::from_secs(25);
+pub const JEV_TIMEOUT: Duration = Duration::from_secs(8);
+pub const LLM_TIMEOUT: Duration = Duration::from_secs(8);
+pub const OUTLAYER_EXECUTION_BUDGET: Duration = Duration::from_secs(30);
 const DEFAULT_NEAR_AI_BASE_URL: &str = "https://cloud-api.near.ai/v1";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -138,7 +139,8 @@ fn check_probs(
     Ok(())
 }
 
-/// Shared by both clients: every asked question answered, in its own shape.
+/// Shared by both clients: every asked question answered, in its own shape, with
+/// finite in-range `confidence` / `score` and `choice` matching `argmax(probabilities)`.
 fn check_answers(
     questions: &BTreeMap<String, Question>,
     answers: &BTreeMap<String, Answer>,
@@ -146,16 +148,43 @@ fn check_answers(
     for (name, q) in questions {
         let a = answers.get(name).ok_or_else(|| off(name, "missing answer"))?;
         match (q, a) {
-            (Question::Choice { criteria, .. }, Answer::Choice { choice, probabilities, .. }) => {
+            (
+                Question::Choice { criteria, .. },
+                Answer::Choice { choice, probabilities, confidence },
+            ) => {
                 if !criteria.contains_key(choice) {
                     return Err(off(name, "choice is not a criteria key"));
                 }
                 let keys: Vec<String> = criteria.keys().cloned().collect();
                 check_probs(name, probabilities, &keys)?;
+                if !in_unit(*confidence) {
+                    return Err(off(name, "confidence outside [0, 1]"));
+                }
+                let chosen_p = probabilities
+                    .get(choice)
+                    .copied()
+                    .ok_or_else(|| off(name, "choice missing from probabilities"))?;
+                let max_p = probabilities
+                    .values()
+                    .copied()
+                    .fold(f64::NEG_INFINITY, f64::max);
+                if max_p - chosen_p > 1e-9 {
+                    return Err(off(name, "choice does not match argmax of probabilities"));
+                }
             }
-            (Question::Score { criteria, .. }, Answer::Score { probabilities, .. }) => {
+            (
+                Question::Score { criteria, .. },
+                Answer::Score { score, probabilities, confidence },
+            ) => {
                 let keys: Vec<String> = (0..criteria.len()).map(|i| i.to_string()).collect();
                 check_probs(name, probabilities, &keys)?;
+                if !in_unit(*confidence) {
+                    return Err(off(name, "confidence outside [0, 1]"));
+                }
+                let max_score = criteria.len().saturating_sub(1) as f64;
+                if !score.is_finite() || !(0.0..=max_score).contains(score) {
+                    return Err(off(name, "score outside criteria range"));
+                }
             }
             (Question::Noul { .. }, Answer::Noul { noul }) => {
                 if !in_unit(*noul) {
@@ -166,6 +195,26 @@ fn check_answers(
         }
     }
     Ok(())
+}
+
+fn validate_https_base_url(raw: &str) -> Result<String, DecisionError> {
+    let trimmed = raw.trim().trim_end_matches('/');
+    let Some(rest) = trimmed.strip_prefix("https://") else {
+        return Err(DecisionError::Config(
+            "NEAR_AI_BASE_URL must start with https://".into(),
+        ));
+    };
+    let host = rest.split('/').next().unwrap_or("");
+    if host.is_empty()
+        || host.starts_with(':')
+        || host.contains('@')
+        || trimmed.chars().any(char::is_whitespace)
+    {
+        return Err(DecisionError::Config(
+            "NEAR_AI_BASE_URL must have a valid https:// host".into(),
+        ));
+    }
+    Ok(trimmed.to_string())
 }
 
 fn truncate_body(body: &str) -> String {
@@ -183,10 +232,6 @@ fn post_checked(
         return Err(DecisionError::Status { status: resp.status, body: truncate_body(&resp.body) });
     }
     Ok(resp.body)
-}
-
-fn env_nonempty(key: &str) -> Option<String> {
-    std::env::var(key).ok().filter(|v| !v.is_empty())
 }
 
 // ---------------------------------------------------------------- Jev
@@ -210,8 +255,10 @@ impl JevDecisionClient {
         let (url, key_name, default_model) = match get("JEV_PROVIDER").as_deref() {
             None | Some("typesafe") => (TYPESAFE_JEV_URL.to_string(), "TYPESAFE_API_KEY", TYPESAFE_JEV_MODEL),
             Some("nearai") => {
-                let base = get("NEAR_AI_BASE_URL").unwrap_or_else(|| DEFAULT_NEAR_AI_BASE_URL.to_string());
-                (format!("{}/systemone", base.trim_end_matches('/')), "NEAR_AI_API_KEY", NEAR_AI_JEV_MODEL)
+                let raw_base =
+                    get("NEAR_AI_BASE_URL").unwrap_or_else(|| DEFAULT_NEAR_AI_BASE_URL.to_string());
+                let base = validate_https_base_url(&raw_base)?;
+                (format!("{base}/systemone"), "NEAR_AI_API_KEY", NEAR_AI_JEV_MODEL)
             }
             Some(_) => return Err(DecisionError::Config("JEV_PROVIDER must be nearai or typesafe".into())),
         };
@@ -276,12 +323,19 @@ pub struct LlmDecisionClient {
 
 impl LlmDecisionClient {
     pub fn from_env() -> Result<Self, DecisionError> {
-        let api_key = env_nonempty("NEAR_AI_API_KEY")
+        Self::from_vars(|k| std::env::var(k).ok())
+    }
+
+    /// Same as `from_env` with an injectable variable lookup; empty values count as unset.
+    pub fn from_vars(get: impl Fn(&str) -> Option<String>) -> Result<Self, DecisionError> {
+        let get = |k: &str| get(k).filter(|v| !v.is_empty());
+        let api_key = get("NEAR_AI_API_KEY")
             .ok_or_else(|| DecisionError::Config("NEAR_AI_API_KEY not set".into()))?;
-        let model = env_nonempty("CHECKER_LLM_MODEL")
+        let model = get("CHECKER_LLM_MODEL")
             .ok_or_else(|| DecisionError::Config("CHECKER_LLM_MODEL not set".into()))?;
-        let base_url =
-            env_nonempty("NEAR_AI_BASE_URL").unwrap_or_else(|| DEFAULT_NEAR_AI_BASE_URL.to_string());
+        let raw_base =
+            get("NEAR_AI_BASE_URL").unwrap_or_else(|| DEFAULT_NEAR_AI_BASE_URL.to_string());
+        let base_url = validate_https_base_url(&raw_base)?;
         Ok(Self { api_key, base_url, model, timeout: LLM_TIMEOUT })
     }
 
@@ -678,5 +732,128 @@ mod tests {
         .err()
         .unwrap();
         assert!(matches!(&e, DecisionError::Config(m) if m.contains("NEAR_AI_API_KEY")), "{e:?}");
+    }
+
+    #[test]
+    fn parse_jev_choice_confidence_out_of_range() {
+        for bad_conf in [json!(-0.01), json!(1.01)] {
+            let mut v: serde_json::Value = serde_json::from_str(JEV_OK).unwrap();
+            v["answers"]["verdict"]["confidence"] = bad_conf.clone();
+            let r = parse_jev_response(&v.to_string(), &firewall_questions());
+            assert!(
+                matches!(&r, Err(DecisionError::OffSchema(m)) if m.contains("confidence outside [0, 1]")),
+                "expected confidence error for {bad_conf}: {r:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_jev_score_confidence_and_score_range() {
+        for bad_conf in [json!(-0.1), json!(1.5)] {
+            let mut v: serde_json::Value = serde_json::from_str(JEV_OK).unwrap();
+            v["answers"]["receiver_risk"]["confidence"] = bad_conf.clone();
+            let r = parse_jev_response(&v.to_string(), &firewall_questions());
+            assert!(
+                matches!(&r, Err(DecisionError::OffSchema(m)) if m.contains("confidence outside [0, 1]")),
+                "expected confidence error for {bad_conf}: {r:?}"
+            );
+        }
+        // receiver_risk has 3 criteria (levels 0, 1, 2), so valid score range is [0.0, 2.0].
+        for ok_score in [json!(0.0), json!(2.0), json!(1.25)] {
+            let mut v: serde_json::Value = serde_json::from_str(JEV_OK).unwrap();
+            v["answers"]["receiver_risk"]["score"] = ok_score;
+            assert!(parse_jev_response(&v.to_string(), &firewall_questions()).is_ok());
+        }
+        for bad_score in [json!(-0.01), json!(2.01), json!(3.0), json!(99.0)] {
+            let mut v: serde_json::Value = serde_json::from_str(JEV_OK).unwrap();
+            v["answers"]["receiver_risk"]["score"] = bad_score.clone();
+            let r = parse_jev_response(&v.to_string(), &firewall_questions());
+            assert!(
+                matches!(&r, Err(DecisionError::OffSchema(m)) if m.contains("score outside criteria range")),
+                "expected score range error for {bad_score}: {r:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_jev_choice_must_match_argmax() {
+        let mut v: serde_json::Value = serde_json::from_str(JEV_OK).unwrap();
+        // Probabilities have A=0.8, B=0.15, C=0.05; claiming choice="C" or "B" must fail.
+        for wrong_choice in ["B", "C"] {
+            v["answers"]["verdict"]["choice"] = json!(wrong_choice);
+            let r = parse_jev_response(&v.to_string(), &firewall_questions());
+            assert!(
+                matches!(&r, Err(DecisionError::OffSchema(m)) if m.contains("argmax")),
+                "expected argmax mismatch for choice={wrong_choice}: {r:?}"
+            );
+        }
+        // Tied top probabilities allow either tied label.
+        v["answers"]["verdict"]["probabilities"] = json!({"A": 0.45, "B": 0.45, "C": 0.10});
+        v["answers"]["verdict"]["confidence"] = json!(0.45);
+        for tied in ["A", "B"] {
+            v["answers"]["verdict"]["choice"] = json!(tied);
+            assert!(parse_jev_response(&v.to_string(), &firewall_questions()).is_ok());
+        }
+    }
+
+    #[test]
+    fn https_only_base_url_enforced() {
+        for bad_url in [
+            "http://cloud-api.near.ai/v1",
+            "http://localhost:8080/v1",
+            "ftp://cloud-api.near.ai/v1",
+            "https://",
+            "https:///v1",
+            "https://user@evil.example/v1",
+            "https://evil.example/v1 with space",
+        ] {
+            let e = JevDecisionClient::from_vars(vars(&[
+                ("JEV_PROVIDER", "nearai"),
+                ("NEAR_AI_API_KEY", "fake-near"),
+                ("NEAR_AI_BASE_URL", bad_url),
+            ]))
+            .err()
+            .unwrap();
+            assert!(
+                matches!(&e, DecisionError::Config(m) if m.contains("https://")),
+                "Jev nearai should reject {bad_url:?}: {e:?}"
+            );
+
+            let e_llm = LlmDecisionClient::from_vars(vars(&[
+                ("NEAR_AI_API_KEY", "fake-near"),
+                ("CHECKER_LLM_MODEL", "model-x"),
+                ("NEAR_AI_BASE_URL", bad_url),
+            ]))
+            .err()
+            .unwrap();
+            assert!(
+                matches!(&e_llm, DecisionError::Config(m) if m.contains("https://")),
+                "LLM client should reject {bad_url:?}: {e_llm:?}"
+            );
+        }
+
+        let ok_llm = LlmDecisionClient::from_vars(vars(&[
+            ("NEAR_AI_API_KEY", "fake-near"),
+            ("CHECKER_LLM_MODEL", "model-x"),
+            ("NEAR_AI_BASE_URL", "https://cloud-api.near.ai/v1/"),
+        ]))
+        .unwrap();
+        assert_eq!(ok_llm.base_url, "https://cloud-api.near.ai/v1");
+    }
+
+    #[test]
+    fn timeout_budget_fits_outlayer_limit() {
+        let decision_worst_case = JEV_TIMEOUT + 2 * LLM_TIMEOUT;
+        let classifier_timeout = Duration::from_millis(crate::injection::DEFAULT_TIMEOUT_MS);
+        let sink_timeout = crate::sink::SINK_TIMEOUT;
+        let total_worst_case = classifier_timeout + decision_worst_case + sink_timeout;
+        assert!(
+            decision_worst_case <= OUTLAYER_EXECUTION_BUDGET,
+            "decision budget {decision_worst_case:?} exceeds {OUTLAYER_EXECUTION_BUDGET:?}"
+        );
+        assert!(
+            total_worst_case <= OUTLAYER_EXECUTION_BUDGET,
+            "total HTTP timeout budget {total_worst_case:?} exceeds OutLayer limit {OUTLAYER_EXECUTION_BUDGET:?}"
+        );
     }
 }

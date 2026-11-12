@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 pub const DEFAULT_MODEL_ID: &str = "protectai/deberta-v3-base-prompt-injection-v2";
-pub const DEFAULT_TIMEOUT_MS: u64 = 5000;
+pub const DEFAULT_TIMEOUT_MS: u64 = 3000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InjectionConfig {
@@ -17,7 +17,7 @@ pub struct InjectionConfig {
     pub classifier_url: Option<String>,
     /// `HF_TOKEN` or `CLASSIFIER_BEARER_TOKEN` (optional bearer auth).
     pub bearer_token: Option<String>,
-    /// `INJECTION_TIMEOUT_MS`, default 5000 ms.
+    /// `INJECTION_TIMEOUT_MS`, default 3000 ms.
     pub timeout: Duration,
 }
 

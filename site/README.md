@@ -30,6 +30,7 @@ From `site/`:
 ```
 npm ci
 npm test              # node --test src/*.test.js
+npm install
 npm run dev       # http://localhost:5173
 npm run build         # build to site/dist
 npm run build:single  # one self-contained dist/index.html

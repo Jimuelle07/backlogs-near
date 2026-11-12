@@ -359,7 +359,7 @@ export default function App() {
             </p>
           </section>
 
-          {/* Live receipts (E1) */}
+          {/* Receipts (E1 slot) */}
           <section className="sec" id="receipts" aria-labelledby="receipts-title">
             <div className="head2">
               <div className="l">
