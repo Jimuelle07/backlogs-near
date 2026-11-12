@@ -282,6 +282,7 @@ def test_preset_removes_exported_hold_threshold(tmp_path, monkeypatch):
 
 def test_cascade_skipped_classifier_is_reported(monkeypatch):
     monkeypatch.setenv("CASCADE_ENABLED", "true")
+    monkeypatch.setenv("INJECTION_ENABLED", "true")
     res = evaluate_scenarios(
         Settings.load(),
         scenario_names=["benign-hosting", "attack-morse-lookalike"],
@@ -293,6 +294,41 @@ def test_cascade_skipped_classifier_is_reported(monkeypatch):
     assert row["classifier_calls_per_payment"] == 0
     assert row["latency_by_path"]["classifier_skipped"]["count"] == 2
     assert "classifier_run" not in row["latency_by_path"]
+
+
+def test_cascade_path_null_when_classifier_disabled(monkeypatch):
+    monkeypatch.setenv("CASCADE_ENABLED", "true")
+    monkeypatch.setenv("INJECTION_ENABLED", "false")
+    res = evaluate_scenarios(
+        Settings.load(),
+        scenario_names=["benign-hosting", "attack-morse-lookalike"],
+        checker_fn=_make_stub_runner(),
+    )
+    assert [c["cascade_path"] for c in res["cases"]] == [None, None]
+    assert "latency_by_path" not in res["configurations"][0]
+
+
+def test_failed_jev_call_counts_as_attempted(monkeypatch):
+    monkeypatch.setenv("FUSION_MODE", "jev")
+    monkeypatch.delenv("CASCADE_ENABLED", raising=False)
+    stub = _make_stub_runner(lambda _ci: ("hold", ["check_unavailable"]))
+    res = evaluate_scenarios(
+        Settings.load(),
+        scenario_names=["benign-hosting", "attack-morse-lookalike"],
+        checker_fn=stub,
+    )
+    assert all(c["jev_called"] is True for c in res["cases"])
+    assert res["configurations"][0]["jev_calls_per_payment"] == 1.0
+    assert eval_mod.JEV_FAILED_CAVEAT in res["caveats"]
+    assert eval_mod.JEV_FAILED_CAVEAT == "Jev calls that failed (check_unavailable) count as attempted calls."
+
+
+def test_check_unavailable_in_code_rules_mode_is_not_a_jev_call(monkeypatch):
+    monkeypatch.setenv("FUSION_MODE", "code_rules")
+    stub = _make_stub_runner(lambda _ci: ("hold", ["check_unavailable"]))
+    res = evaluate_scenarios(Settings.load(), scenario_names=["benign-hosting"], checker_fn=stub)
+    assert res["cases"][0]["jev_called"] is False
+    assert eval_mod.JEV_FAILED_CAVEAT not in res["caveats"]
 
 
 def test_no_cascade_path_and_unpriced_cost_caveat(monkeypatch):

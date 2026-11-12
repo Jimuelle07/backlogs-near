@@ -57,6 +57,7 @@ pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerEr
     let fusion_cfg = FusionConfig::from_env().map_err(CheckerError::Config)?;
     let sink_cfg = SinkConfig::from_env();
     let client = if fusion_cfg.mode == FusionMode::CodeRules {
+        eprintln!("checker warning: FUSION_MODE=code_rules: Jev is not consulted (evaluation mode)");
         None
     } else {
         decision::client_from_env()
@@ -169,7 +170,7 @@ mod tests {
     fn counterparty_on() -> CounterpartyConfig {
         CounterpartyConfig {
             enabled: true,
-            profile: AgentProfile::with_default_payees(),
+            profile: AgentProfile::with_default_payees_in(None),
             ..CounterpartyConfig::default()
         }
     }

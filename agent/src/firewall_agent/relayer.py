@@ -50,7 +50,9 @@ async def _loop(s: Settings) -> None:
                     continue
                 raw = item["checker_input"].encode("utf-8")
 
-                verdict = run_checker(s.checker_bin, raw, s.checker_record_dir / s.guardian_id)
+                verdict = run_checker(
+                    s.checker_bin, raw, s.checker_record_dir / s.guardian_id, counterparty_namespace=s.ns
+                )
                 bad = binds(json.loads(item["checker_input"]), verdict)
                 if bad:
                     print(f"request {rid}: checker verdict does not bind ({bad}); skipping", file=sys.stderr)

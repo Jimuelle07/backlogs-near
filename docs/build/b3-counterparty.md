@@ -36,8 +36,9 @@ Standard Levenshtein treats adjacent transpositions as two operations (one delet
 NEAR accounts use hierarchical dot notation (e.g., `hostco.demo.testnet`, `hostco.testnet`, `hostco`). The distance calculation accounts for network namespaces:
 1. Exact match (`candidate == payee`) returns `0`.
 2. Matching domain suffixes (e.g. `hostc0.demo.testnet` vs `hostco.demo.testnet`) compares subaccount prefixes directly (`full_dist == 1`).
-3. Unqualified test inputs (e.g. `hostc0` vs `hostco` or `hostc0` vs `hostco.demo.testnet`) compare base prefixes.
-4. Accounts with distinct suffixes add risk distance, preventing cross-namespace spoofing.
+3. Both qualified, different suffixes: `min(full_dist, prefix_dist + 1)`, preventing cross-namespace spoofing.
+4. Exactly one side qualified (contains a dot), e.g. bare `hostco` vs `hostco.evil.testnet`: `prefix_dist + 1`, never 0. A qualified account id never matches a bare profile name exactly, so `hostco.evil.testnet` is a lookalike (distance 1) of bare `hostco`, not a known payee (Jim, 2026-11-12). Both bare: plain distance (`hostc0` vs `hostco` is 1).
+5. `COUNTERPARTY_NAMESPACE` (optional, an account suffix such as `jimuelle-firewall.testnet`, no leading dot): when set, the built-in default profile also contains `<base>.<ns>` for every default payee base name (first label, de-duplicated) with the same history fields, so `hostco.<ns>` is an exact known payee and `hostc0.<ns>` a lookalike. Without it, `hostco.jimuelle-firewall.testnet` is a lookalike of bare `hostco`. Ignored when an explicit profile (`AGENT_PROFILE_JSON`, `AGENT_PROFILE_PATH`, `COUNTERPARTY_KNOWN_PAYEES`) is set. The agent's own checker runs (dry-run `LocalGuardian`, `firewall-relayer`) set it to the scenario namespace; `firewall-eval` does not (it evaluates in `demo.testnet`, whose names are default members).
 
 ### 2.3 Lookalike Match Logic & Thresholds
 
@@ -57,7 +58,7 @@ The parser supports:
 1. `AGENT_PROFILE_JSON`: Raw JSON string with `known_payees`, map shapes, or bare lists.
 2. `AGENT_PROFILE_PATH`: Path to a JSON profile file on disk.
 3. `COUNTERPARTY_KNOWN_PAYEES`: Comma-separated list of known payee account names.
-4. `AgentProfile::with_default_payees()`: Pre-populated benchmark payees from the 30 benign scenarios (`hostco`, `cloudco`, `supplier-acme`, `designer-ana`, `domainreg`, etc.).
+4. `AgentProfile::with_default_payees_in(ns)`: Pre-populated benchmark payees from the benign scenarios (`hostco`, `cloudco`, `supplier-acme`, `designer-ana`, `domainreg`, etc.), plus the `<base>.<ns>` names when `COUNTERPARTY_NAMESPACE` is set.
 
 ### 2.5 NEAR JSON-RPC Querying
 
@@ -76,9 +77,10 @@ When `COUNTERPARTY_RPC_URL` is configured (the checker does not read `NEAR_RPC_U
 | --- | --- | --- | --- |
 | `COUNTERPARTY_ENABLED` | bool | `true` | Enables or disables counterparty check |
 | `COUNTERPARTY_RPC_URL` | string | unset | NEAR JSON-RPC URL (HTTPS only); unset = no RPC query |
-| `COUNTERPARTY_TIMEOUT_MS` | integer | `2000` | HTTP timeout for RPC calls in milliseconds (fits the 30 s OutLayer budget) |
+| `COUNTERPARTY_TIMEOUT_MS` | integer | `2000` | HTTP timeout for RPC calls in milliseconds; maximum 2000 (30 s OutLayer budget), a larger value is a config error |
 | `COUNTERPARTY_MAX_LOOKALIKE_DISTANCE` | integer | `2` | Maximum edit distance to flag as a lookalike |
 | `COUNTERPARTY_KNOWN_PAYEES` | string | unset | Comma-separated list of known payee account IDs |
+| `COUNTERPARTY_NAMESPACE` | string | unset | Account suffix (no leading dot) that adds `<base>.<ns>` for each default payee; default profile only |
 | `AGENT_PROFILE_JSON` | string | unset | Inlined JSON string of agent behavioral profile |
 | `AGENT_PROFILE_PATH` | string | unset | Path to JSON file containing agent profile |
 

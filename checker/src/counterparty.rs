@@ -8,6 +8,8 @@ use std::time::Duration;
 
 pub const DEFAULT_MAX_LOOKALIKE_DISTANCE: u32 = 2;
 pub const DEFAULT_TIMEOUT_MS: u64 = 2000;
+/// Largest accepted `COUNTERPARTY_TIMEOUT_MS`; the 30 s OutLayer budget is fitted to it (sdd §4).
+pub const MAX_TIMEOUT_MS: u64 = 2000;
 pub const NEAR_NO_CODE_HASH: &str = "11111111111111111111111111111111";
 
 /// History entry for a known payee in the agent's behavior profile.
@@ -41,8 +43,11 @@ pub struct AgentProfile {
 }
 
 impl AgentProfile {
-    /// Populate default benign payees used across scenarios and benchmarks.
-    pub fn with_default_payees() -> Self {
+    /// Populate default benign payees used across scenarios and benchmarks. With `namespace`
+    /// (`COUNTERPARTY_NAMESPACE`, e.g. `jimuelle-firewall.testnet`) the profile also contains
+    /// `<base>.<namespace>` for every default base name (first label, de-duplicated), with the same
+    /// history fields as the default entries.
+    pub fn with_default_payees_in(namespace: Option<&str>) -> Self {
         let default_names = [
             "hostco",
             "hostco.demo.testnet",
@@ -68,10 +73,20 @@ impl AgentProfile {
             "devops-pro.demo.testnet",
             "translator-lee.demo.testnet",
         ];
-        let known_payees = default_names
-            .iter()
-            .map(|name| PayeeHistory {
-                account_id: (*name).to_string(),
+        let mut names: Vec<String> = default_names.iter().map(|n| (*n).to_string()).collect();
+        if let Some(ns) = namespace {
+            for name in default_names {
+                let base = name.split('.').next().unwrap_or(name);
+                let qualified = format!("{base}.{ns}");
+                if !names.contains(&qualified) {
+                    names.push(qualified);
+                }
+            }
+        }
+        let known_payees = names
+            .into_iter()
+            .map(|account_id| PayeeHistory {
+                account_id,
                 prior_payments: 5,
                 is_contract: Some(false),
                 account_age_days: Some(180.0),
@@ -251,6 +266,11 @@ impl CounterpartyConfig {
             let ms: u64 = v
                 .parse()
                 .map_err(|e| format!("COUNTERPARTY_TIMEOUT_MS: {e}"))?;
+            if ms > MAX_TIMEOUT_MS {
+                return Err(format!(
+                    "COUNTERPARTY_TIMEOUT_MS: max {MAX_TIMEOUT_MS} (30 s OutLayer budget), got {ms}"
+                ));
+            }
             Duration::from_millis(ms)
         } else {
             Duration::from_millis(DEFAULT_TIMEOUT_MS)
@@ -288,7 +308,15 @@ impl CounterpartyConfig {
                 ..AgentProfile::default()
             }
         } else {
-            AgentProfile::with_default_payees()
+            let namespace = var("COUNTERPARTY_NAMESPACE");
+            if let Some(ns) = &namespace {
+                if ns.starts_with('.') || ns.ends_with('.') || ns.chars().any(char::is_whitespace) {
+                    return Err(format!(
+                        "COUNTERPARTY_NAMESPACE: expected an account suffix like jimuelle-firewall.testnet (no leading dot), got {ns:?}"
+                    ));
+                }
+            }
+            AgentProfile::with_default_payees_in(namespace.as_deref())
         };
 
         Ok(Self {
@@ -354,9 +382,12 @@ pub fn damerau_levenshtein(s: &str, t: &str) -> u32 {
 
 /// Compute effective distance between a candidate receiver and a known payee account.
 /// Accommodates NEAR subaccount scoping (`prefix.suffix`) so that:
-/// - Exact matches return 0
-/// - Suffixes match -> full string distance
-/// - Unqualified candidate `hostc0` vs `hostco.demo.testnet` compares prefixes
+/// - Exact (case-insensitive) matches return 0
+/// - Both qualified with the same suffix -> full string distance
+/// - Both qualified, different suffixes -> `min(full, prefix + 1)`
+/// - Exactly one side qualified (e.g. `hostc0` vs `hostco.demo.testnet`, or `hostco.evil.testnet`
+///   vs bare `hostco`) -> prefix distance + 1, never 0: a qualified account id never matches a
+///   bare profile name exactly (Jim, 2026-11-12)
 pub fn payee_distance(candidate: &str, payee: &str) -> u32 {
     if candidate.eq_ignore_ascii_case(payee) {
         return 0;
@@ -386,8 +417,8 @@ pub fn payee_distance(candidate: &str, payee: &str) -> u32 {
             full_dist.min(prefix_dist + 1)
         }
     } else {
-        // One has a dot and the other is a base name (e.g. hostc0 vs hostco.demo.testnet)
-        prefix_dist
+        // Exactly one side is qualified: never an exact match.
+        prefix_dist + 1
     }
 }
 
@@ -649,7 +680,7 @@ mod tests {
 
     #[test]
     fn test_benign_exact_match() {
-        let profile = AgentProfile::with_default_payees();
+        let profile = AgentProfile::with_default_payees_in(None);
         let m = find_lookalike("hostco.demo.testnet", &profile.known_payees, 2);
         match m {
             LookalikeMatch::Exact(p) => {
@@ -662,9 +693,127 @@ mod tests {
 
     #[test]
     fn test_novel_payee_not_lookalike() {
-        let profile = AgentProfile::with_default_payees();
+        let profile = AgentProfile::with_default_payees_in(None);
         let m = find_lookalike("brand-new-contractor-999.testnet", &profile.known_payees, 2);
         assert_eq!(m, LookalikeMatch::Novel);
+    }
+
+    fn lookalike_distance_of(receiver: &str, profile: &AgentProfile) -> Option<(String, u32)> {
+        match find_lookalike(receiver, &profile.known_payees, 2) {
+            LookalikeMatch::Lookalike { payee, distance } => Some((payee.account_id.clone(), distance)),
+            LookalikeMatch::Exact(_) => panic!("{receiver} unexpectedly exact"),
+            LookalikeMatch::Novel => None,
+        }
+    }
+
+    #[test]
+    fn test_qualified_candidate_never_exact_vs_bare_payee() {
+        assert_eq!(payee_distance("hostco.evil.testnet", "hostco"), 1);
+        assert_eq!(payee_distance("hostco", "hostco.evil.testnet"), 1);
+        let bare = vec![PayeeHistory {
+            account_id: "hostco".to_string(),
+            prior_payments: 5,
+            is_contract: None,
+            account_age_days: None,
+            code_hash: None,
+        }];
+        match find_lookalike("hostco.evil.testnet", &bare, 2) {
+            LookalikeMatch::Lookalike { payee, distance } => {
+                assert_eq!(payee.account_id, "hostco");
+                assert_eq!(distance, 1);
+            }
+            other => panic!("expected lookalike, got {other:?}"),
+        }
+        // Bare vs bare is unchanged.
+        assert_eq!(payee_distance("hostc0", "hostco"), 1);
+    }
+
+    #[test]
+    fn test_default_profile_qualified_receiver_without_namespace() {
+        let profile = AgentProfile::with_default_payees_in(None);
+        // Not a default member: lookalike of the bare name (distance 1).
+        assert_eq!(
+            lookalike_distance_of("hostco.evil.testnet", &profile),
+            Some(("hostco".to_string(), 1))
+        );
+        assert_eq!(lookalike_distance_of("hostc0", &profile), Some(("hostco".to_string(), 1)));
+        // Without COUNTERPARTY_NAMESPACE the live receiver is a lookalike of bare `hostco`.
+        assert_eq!(
+            lookalike_distance_of("hostco.jimuelle-firewall.testnet", &profile),
+            Some(("hostco".to_string(), 1))
+        );
+    }
+
+    #[test]
+    fn test_counterparty_namespace_adds_qualified_default_payees() {
+        let ns = "jimuelle-firewall.testnet";
+        let profile = AgentProfile::with_default_payees_in(Some(ns));
+        match find_lookalike("hostco.jimuelle-firewall.testnet", &profile.known_payees, 2) {
+            LookalikeMatch::Exact(p) => {
+                assert_eq!(p.prior_payments, 5);
+                assert_eq!(p.account_age_days, Some(180.0));
+            }
+            other => panic!("expected exact, got {other:?}"),
+        }
+        let (payee, distance) = lookalike_distance_of("hostc0.jimuelle-firewall.testnet", &profile).unwrap();
+        assert_eq!(payee, "hostco.jimuelle-firewall.testnet");
+        assert_eq!(distance, 1);
+        // The qualified attacker name is still not a member.
+        assert!(lookalike_distance_of("hostco.evil.testnet", &profile).is_some());
+        // De-duplicated: demo.testnet adds no repeated `hostco.demo.testnet`.
+        let demo = AgentProfile::with_default_payees_in(Some("demo.testnet"));
+        let count = demo.known_payees.iter().filter(|p| p.account_id == "hostco.demo.testnet").count();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_counterparty_namespace_from_vars() {
+        let with_ns = |k: &str| match k {
+            "COUNTERPARTY_NAMESPACE" => Some("jimuelle-firewall.testnet".to_string()),
+            _ => None,
+        };
+        let cfg = CounterpartyConfig::from_vars(with_ns).unwrap();
+        assert!(cfg
+            .profile
+            .known_payees
+            .iter()
+            .any(|p| p.account_id == "hostco.jimuelle-firewall.testnet"));
+        let empty = |k: &str| match k {
+            "COUNTERPARTY_NAMESPACE" => Some("  ".to_string()),
+            _ => None,
+        };
+        let cfg = CounterpartyConfig::from_vars(empty).unwrap();
+        assert_eq!(cfg.profile, AgentProfile::with_default_payees_in(None));
+        let bad = |k: &str| match k {
+            "COUNTERPARTY_NAMESPACE" => Some(".testnet".to_string()),
+            _ => None,
+        };
+        assert!(CounterpartyConfig::from_vars(bad).is_err());
+        // An explicit profile wins; the namespace is ignored.
+        let explicit = |k: &str| match k {
+            "COUNTERPARTY_NAMESPACE" => Some("jimuelle-firewall.testnet".to_string()),
+            "COUNTERPARTY_KNOWN_PAYEES" => Some("payee1.near".to_string()),
+            _ => None,
+        };
+        assert_eq!(CounterpartyConfig::from_vars(explicit).unwrap().profile.known_payees.len(), 1);
+    }
+
+    #[test]
+    fn test_counterparty_timeout_maximum() {
+        let with = |ms: &'static str| {
+            move |k: &str| match k {
+                "COUNTERPARTY_TIMEOUT_MS" => Some(ms.to_string()),
+                _ => None,
+            }
+        };
+        assert_eq!(
+            CounterpartyConfig::from_vars(with("2001")).unwrap_err(),
+            "COUNTERPARTY_TIMEOUT_MS: max 2000 (30 s OutLayer budget), got 2001"
+        );
+        assert_eq!(
+            CounterpartyConfig::from_vars(with("2000")).unwrap().timeout,
+            Duration::from_millis(2000)
+        );
     }
 
     #[test]
@@ -672,7 +821,7 @@ mod tests {
         let vars = |k: &str| match k {
             "COUNTERPARTY_ENABLED" => Some("1".to_string()),
             "COUNTERPARTY_MAX_LOOKALIKE_DISTANCE" => Some("3".to_string()),
-            "COUNTERPARTY_TIMEOUT_MS" => Some("2500".to_string()),
+            "COUNTERPARTY_TIMEOUT_MS" => Some("1500".to_string()),
             "COUNTERPARTY_KNOWN_PAYEES" => Some("payee1.near,payee2.near".to_string()),
             _ => None,
         };
@@ -680,7 +829,7 @@ mod tests {
         let cfg = CounterpartyConfig::from_vars(vars).unwrap();
         assert!(cfg.enabled);
         assert_eq!(cfg.max_lookalike_distance, 3);
-        assert_eq!(cfg.timeout, Duration::from_millis(2500));
+        assert_eq!(cfg.timeout, Duration::from_millis(1500));
         assert_eq!(cfg.profile.known_payees.len(), 2);
         assert_eq!(cfg.profile.known_payees[0].account_id, "payee1.near");
         assert_eq!(cfg.profile.known_payees[1].account_id, "payee2.near");

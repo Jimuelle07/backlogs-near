@@ -34,7 +34,7 @@ def _req(s, amount, ref="ref-1"):
 
 
 def _fake_checker(monkeypatch, outcome):
-    def fake(checker_bin, input_bytes, record_dir):
+    def fake(checker_bin, input_bytes, record_dir, counterparty_namespace=None):
         ci = json.loads(input_bytes)
         record_dir.mkdir(parents=True, exist_ok=True)
         (record_dir / f"{ci['request_id']}.json").write_text("{}")
@@ -357,3 +357,49 @@ def test_replayed_verdict_does_not_bind_larger_amount(settings):
     }
     assert guardian_mod.binds(small, verdict) is None
     assert guardian_mod.binds(large, verdict) == "amount"
+
+
+def _capture_env(monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, input, capture_output, env):
+        seen["env"] = env
+        return type("P", (), {"returncode": 0, "stdout": b"{}", "stderr": b""})()
+
+    monkeypatch.setattr(guardian_mod.subprocess, "run", fake_run)
+    return seen
+
+
+def test_run_checker_sets_namespace_env(tmp_path, monkeypatch):
+    exe = tmp_path / "checker"
+    exe.write_text("")
+    monkeypatch.setenv("COUNTERPARTY_NAMESPACE", "inherited.testnet")
+    seen = _capture_env(monkeypatch)
+    guardian_mod.run_checker(exe, b"{}", tmp_path, counterparty_namespace="ns.testnet")
+    assert seen["env"]["COUNTERPARTY_NAMESPACE"] == "ns.testnet"
+
+
+def test_run_checker_none_leaves_inherited_env(tmp_path, monkeypatch):
+    exe = tmp_path / "checker"
+    exe.write_text("")
+    seen = _capture_env(monkeypatch)
+    monkeypatch.delenv("COUNTERPARTY_NAMESPACE", raising=False)
+    guardian_mod.run_checker(exe, b"{}", tmp_path)
+    assert "COUNTERPARTY_NAMESPACE" not in seen["env"]
+    monkeypatch.setenv("COUNTERPARTY_NAMESPACE", "inherited.testnet")
+    guardian_mod.run_checker(exe, b"{}", tmp_path, counterparty_namespace=None)
+    assert seen["env"]["COUNTERPARTY_NAMESPACE"] == "inherited.testnet"
+
+
+def test_local_guardian_passes_scenario_namespace(settings, monkeypatch):
+    _fake_checker(monkeypatch, "allow")
+    inner = guardian_mod.run_checker
+    calls = []
+
+    def spy(*a, **kw):
+        calls.append(kw.get("counterparty_namespace"))
+        return inner(*a, **kw)
+
+    monkeypatch.setattr(guardian_mod, "run_checker", spy)
+    _guardian(settings, [T0]).request_payment(_req(settings, 10 * UNIT))
+    assert calls == [settings.ns]

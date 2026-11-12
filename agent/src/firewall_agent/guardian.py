@@ -112,14 +112,23 @@ def binds(checker_input: dict, verdict: dict) -> str | None:
     return None
 
 
-def run_checker(checker_bin, input_bytes: bytes, record_dir) -> dict:
-    """Run the native checker on exact stdin bytes; return the parsed verdict."""
+def run_checker(
+    checker_bin, input_bytes: bytes, record_dir, counterparty_namespace: str | None = None
+) -> dict:
+    """Run the native checker on exact stdin bytes; return the parsed verdict.
+
+    When `counterparty_namespace` is not None it is exported to the subprocess as
+    COUNTERPARTY_NAMESPACE (overriding any inherited value); when None the inherited
+    environment is left untouched.
+    """
     if not checker_bin.is_file():
         raise SystemExit(
             f"checker binary not found at {checker_bin}; run: cargo build -p checker --release"
         )
     env = dict(os.environ)
     env["CHECKER_RECORD_DIR"] = str(record_dir)
+    if counterparty_namespace is not None:
+        env["COUNTERPARTY_NAMESPACE"] = counterparty_namespace
     proc = subprocess.run([str(checker_bin)], input=input_bytes, capture_output=True, env=env)
     if proc.returncode != 0:
         err = proc.stderr.decode("utf-8", "replace").strip()
@@ -227,7 +236,10 @@ class LocalGuardian:
             request_id = self.next_request_id()
             checker_input = self.build_checker_input(req, request_id)
             verdict = run_checker(
-                self.s.checker_bin, compact_json(checker_input), self.record_dir
+                self.s.checker_bin,
+                compact_json(checker_input),
+                self.record_dir,
+                counterparty_namespace=self.s.ns,
             )
             bad = binds(checker_input, verdict)
             if bad:

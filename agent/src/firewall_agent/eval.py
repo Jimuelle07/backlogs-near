@@ -17,7 +17,9 @@ removed from the environment, so the checker's frozen default (the C5 q̂) appli
 MELON ("masked re-run") was cut (idea.md cut list) and has no preset.
 
 Per case the eval records whether Jev and the classifier were called (read back from the
-DecisionRecord signals) and, when CASCADE_ENABLED is true, the cascade path taken. Per row it
+DecisionRecord signals; a null Jev signal with `check_unavailable` in jev mode counts as an attempted
+Jev call) and, when CASCADE_ENABLED is true and the classifier is enabled (INJECTION_ENABLED, or
+CLASSIFIER_URL set when unset), the cascade path taken. Per row it
 reports mean Jev/classifier calls per payment and a cost per payment priced from
 EVAL_JEV_USD_PER_CALL / EVAL_CLASSIFIER_USD_PER_CALL (default 0.0 = unpriced).
 
@@ -64,6 +66,7 @@ UNPRICED_CAVEAT = (
     "call counts per payment are reported instead."
 )
 MELON_CAVEAT = "MELON masked re-run was not built (cut list, idea.md); its row is omitted."
+JEV_FAILED_CAVEAT = "Jev calls that failed (check_unavailable) count as attempted calls."
 
 CAVEATS = [
     "The conformal false-hold bound (epsilon = 5%) assumes exchangeability between calibration and live traffic.",
@@ -73,6 +76,18 @@ CAVEATS = [
 CheckerRunner = Callable[[bytes, Path], dict]
 
 _TRUE = {"1", "true", "on", "yes"}
+
+
+def _injection_enabled() -> bool:
+    """Same rule as checker InjectionConfig::from_vars (unset: enabled iff CLASSIFIER_URL is set)."""
+    raw = os.environ.get("INJECTION_ENABLED", "").strip().lower()
+    if raw:
+        if raw in _TRUE:
+            return True
+        if raw in ("0", "false", "off", "no"):
+            return False
+        raise ValueError(f"INJECTION_ENABLED: expected 1/0/true/false/on/off/yes/no, got {raw!r}")
+    return bool(os.environ.get("CLASSIFIER_URL", "").strip())
 
 
 def _percentile(sorted_vals: list[float], q: float) -> float:
@@ -122,13 +137,18 @@ def evaluate_scenarios(
         lambda input_bytes, rec_dir: run_checker(settings.checker_bin, input_bytes, rec_dir)
     )
     local_guardian = LocalGuardian(settings)
-    cascade_on = os.environ.get("CASCADE_ENABLED", "").strip().lower() in _TRUE
+    # Mirrors checker InjectionConfig::from_vars: explicit INJECTION_ENABLED wins, else enabled iff
+    # CLASSIFIER_URL is set. With the classifier off there is no cascade path to report.
+    classifier_on = _injection_enabled()
+    cascade_on = classifier_on and os.environ.get("CASCADE_ENABLED", "").strip().lower() in _TRUE
+    jev_mode = os.environ.get("FUSION_MODE", "").strip().lower() in ("", "jev")
 
     with tempfile.TemporaryDirectory() as tmp:
         active_record_dir = record_dir if record_dir is not None else Path(tmp) / "records"
         active_record_dir.mkdir(parents=True, exist_ok=True)
 
         cases: list[dict] = []
+        jev_failed = 0
         latencies_ms: list[float] = []
         checker_version = "0.1.0"
 
@@ -156,18 +176,24 @@ def evaluate_scenarios(
             jev_unusual: float | None = None
             jev_called = False
             classifier_called = False
+            reasons_rec: list = []
             if rec_file.is_file():
                 raw_rec = rec_file.read_bytes()
                 if hashlib.sha256(raw_rec).hexdigest() != verdict["record_sha256"]:
                     raise ValueError(f"scenario {name!r}: record_sha256 mismatch")
                 rec_json = json.loads(raw_rec)
                 signals = rec_json.get("signals") or {}
+                reasons_rec = rec_json.get("reasons") or []
                 policy_sig = signals.get("policy")
                 if isinstance(policy_sig, dict) and "ok" in policy_sig:
                     policy_ok = bool(policy_sig["ok"])
                 # C5 calibration reads this back from results.json.
                 jev_sig = signals.get("jev")
                 jev_called = jev_sig is not None
+                if jev_sig is None and jev_mode and "check_unavailable" in reasons_rec:
+                    # Jev was queried but failed: an attempted call costs the same.
+                    jev_called = True
+                    jev_failed += 1
                 if isinstance(jev_sig, dict) and isinstance(jev_sig.get("unusual"), (int, float)):
                     jev_unusual = float(jev_sig["unusual"])
                 classifier_called = signals.get("injection") is not None
@@ -289,6 +315,8 @@ def evaluate_scenarios(
         summary_row["latency_by_path"] = latency_by_path
 
     caveats = list(CAVEATS)
+    if jev_failed:
+        caveats.append(JEV_FAILED_CAVEAT)
     if jev_price == 0.0 and classifier_price == 0.0:
         caveats.append(UNPRICED_CAVEAT)
     caveats.append(MELON_CAVEAT)
