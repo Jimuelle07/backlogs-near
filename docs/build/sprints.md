@@ -131,7 +131,7 @@ Follow-ups, not scheduled:
 
 ## Sprint 2 — due Wed 11 Nov, 23:59 PHT (15:59Z)
 
-Goal: gate G2. Frontend first finishes the Sprint 1 carry-over (D1, E1, both Not started), since D2 and E2 build on them.
+Goal: gate G2. Frontend first finishes the Sprint 1 carry-over (D1 In progress in PR #14, E1 Not started), since D2 and E2 build on them.
 
 | Who | Role this sprint |
 | --- | --- |

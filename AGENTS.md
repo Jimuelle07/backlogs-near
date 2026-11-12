@@ -88,7 +88,7 @@ One submission per repository. Mistakes are fixed by the human at https://nearha
 | Agent / relayer / eval | Python 3.12 managed by uv |
 | NEAR Python client | py-near |
 | Injection classifier | protectai/deberta-v3-base-prompt-injection-v2 default; Llama-Prompt-Guard-2-86M when HF access is granted |
-| Receipt page | Landing page with a read-only receipts panel ([sprints.md](docs/build/sprints.md) D1, E1, E2) |
+| Landing page | Vite 5 + React 18 (JSX) static site in `site/` (three.js / r3f / drei, GSAP + ScrollTrigger, Lenis, lucide-react, plain CSS), hosted on Cloudflare Pages; read-only receipts panel over public testnet RPC, no wallet ([site/README.md](site/README.md); [sprints.md](docs/build/sprints.md) D1, E1, E2) |
 
 Rationale and module boundaries: [docs/build/sdd.md](docs/build/sdd.md).
 
@@ -104,6 +104,7 @@ agent/             uv project firewall-agent, package firewall_agent
                    scripts: firewall-demo, firewall-relayer, firewall-setup-testnet, firewall-jev-ping
 data/decisions/    DecisionRecord output (gitignored)
 docs/              see docs/index.md
+site/              landing page (Vite + React); see site/README.md
 ```
 
 Run from the repo root unless noted.
@@ -135,6 +136,13 @@ Python (offline, no keys needed):
 cd agent && uv sync && uv run pytest
 cd agent && uv run firewall-demo --scenario benign-hosting       # dry-run, scripted LLM
 cd agent && uv run firewall-demo --scenario attack-morse-lookalike
+```
+
+Landing page (Node 20+):
+
+```
+cd site && npm install && npm run build      # site/dist
+cd site && npm run dev                       # local preview
 ```
 
 The demo needs the native checker built first. `firewall-jev-ping` needs `TYPESAFE_API_KEY`.
