@@ -45,6 +45,9 @@ Numbered steps, each "do X → see Y". Run from the repo root unless a step says
 7. Evaluation. In `agent/`, run `uv run firewall-eval --all-configurations` → the seven configurations (`no_defense`, `policy_only`, `classifier_only`, `code_rules_all_signals`, `jev_fusion_all_signals`, `jev_fusion_conformal`, `jev_fusion_conformal_cascade`) run over the 150 benign and 150 attack scenarios in `agent/scenarios/`, and the results are written as JSON. Useful flags: `--preset <label>` (run one of the seven configurations), `--configuration <label>` (label only), `--scenario <name>`, `--output FILE`, `--scenario-set {main,redteam,external,paysim}` (the red-team set is in `agent/scenarios/redteam/`), `--calibration FILE`. The Jev configurations need `TYPESAFE_API_KEY` and spend API credits. Without a key the command still exits 0 and prints `configurations: 7`, but the Jev rows hold every benign case (`false_holds=150`) because Jev is unavailable. The eval always substitutes scenarios in the `demo.testnet` namespace, regardless of `OWNER_ACCOUNT_ID`. Optional per-call prices for the cost column: `EVAL_JEV_USD_PER_CALL`, `EVAL_CLASSIFIER_USD_PER_CALL`. Published results: [docs/results/results.json](docs/results/results.json), [docs/results/redteam-results.json](docs/results/redteam-results.json), [docs/results/redteam.md](docs/results/redteam.md).
 8. Calibration. In `agent/`, run `uv run firewall-calibrate <results.json>` on an eval results file → the conformal threshold `q_hat`, `false_hold_rate` and `sufficient_data`. Flags: `--epsilon`, `--rotation` (leave-one-attack-family-out check), `--missing-as-zero`. The frozen value is the default of `FUSION_HOLD_THRESHOLD`. On a results file produced without a Jev key it prints `n : 0`, `q_hat : 1.0` and `sufficient_data: False (need n >= 19)`.
 9. Optional injection classifier. In `agent/`, run `uv run --with transformers --with torch firewall-classifier 8088` (downloads the model; exits with an error if the model cannot load), then set `CLASSIFIER_URL=http://127.0.0.1:8088/score` in `.env` → the checker calls it and records `signals.injection` in the decision record. Without `CLASSIFIER_URL` the injection check is off (`signals.injection = null`). `uv run firewall-classifier --heuristic 8088` serves a keyword heuristic instead of the model, for offline tests only; its responses report `"model": "keyword-heuristic"`.
+10. External held-out set, no keys. In `agent/`, run `uv run firewall-eval --scenario-set external --preset code_rules_all_signals` → first line `scenarios: 200 (benign=100, attack=100)`. The set is built from public benchmarks and rewritten into payment form; sources and licenses are in [agent/scenarios/external/ATTRIBUTION.md](agent/scenarios/external/ATTRIBUTION.md).
+11. Classifier benchmark. In `agent/`, run `uv run --with transformers --with torch python tools/bench_classifier.py` → writes `docs/results/classifier-bench.json` and `docs/results/classifier-bench.md`. It downloads the public corpora on first run and takes several minutes on a CPU.
+12. Hugging Face dataset export. In `agent/`, run `uv run python tools/export_hf_dataset.py` → writes `data/hf-dataset/` (three JSONL splits: main 300 rows, redteam 17, external 200, plus a dataset card) and prints the `huggingface-cli upload …` command. The script uploads nothing.
 
 ## Configuration switches
 
@@ -62,6 +65,7 @@ All are environment variables, read by the checker (for OutLayer runs, set them 
 | `POLICY_ENABLED`, `INJECTION_ENABLED`, `COUNTERPARTY_ENABLED` | `0` turns that check off (its signal is null). |
 | `COUNTERPARTY_TIMEOUT_MS` | Counterparty RPC timeout (default 2000). `COUNTERPARTY_RPC_URL` must be HTTPS. |
 | `CLASSIFIER_URL` | Injection classifier endpoint (see step 9). |
+| `INJECTION_TIMEOUT_MS` | HTTP timeout of the classifier call in milliseconds (default 3000). A call that fails or times out is a checker error, not a verdict: the run ends with no decision record. |
 | `JEV_PROVIDER` | `typesafe` (default) or `nearai` (Jev through NEAR AI Cloud). |
 
 ## Run locally
@@ -131,6 +135,20 @@ Evaluated on 150 benign and 150 attack scenarios (six attack families, 25 each),
 
 The cascade row never called the classifier (it was off), so it differs from the conformal row only by run-to-run Jev variation. Unseen-family figures are the complement of the detection rates in `unseen_family_rotation`: 96%, 92%, 96%, 48%, 92% and 52% in the order above. They are read from the final conformal run's outcomes at the frozen q̂ 0.84. The held-out split (75 calibration / 75 test benign cases) recomputes q̂ = 0.85, with false-hold rate 1.33% on the 75 test benign cases; reproduce it from `agent/` with `uv run firewall-calibrate ../docs/results/calibration-conformal.json --rotation` (calibration_n 75, test_n 75, q_hat 0.85, false_hold_rate 0.0133, within_target true). `docs/results/results.json` holds every configuration's summary row, but its per-case data (`cases`, `summary`, `by_family`) comes from the last preset run (`jev_fusion_conformal_cascade`), so it is not the calibration file: `firewall-calibrate` on it prints a different q̂. Files: [`docs/results/results.json`](docs/results/results.json), [`docs/results/calibration-conformal.json`](docs/results/calibration-conformal.json), [`docs/results/calibration-all-signals.json`](docs/results/calibration-all-signals.json), [`docs/results/redteam-results.json`](docs/results/redteam-results.json), [`docs/results/redteam.md`](docs/results/redteam.md).
 
+### Public-data benchmarks
+
+Injection classifier (`protectai/deberta-v3-base-prompt-injection-v2`, threshold 0.5) on corpora outside its training list. Full table, licenses and URLs: [docs/results/classifier-bench.md](docs/results/classifier-bench.md); numbers from [docs/results/classifier-bench.json](docs/results/classifier-bench.json), model backend.
+
+- `deepset/prompt-injections` test (60 injections, 56 benign): recall 0.3667, precision 1.0, AUROC 0.8957.
+- `3nesdeniz/agentic-prompt-injection-boundary-pairs` test (120 attack, 120 benign): recall 0.8417, false-positive rate 0.575, AUROC 0.72.
+- `nvidia/Nemotron-RL-Agentic-Indirect-Prompt-Injection-v1`, first 300 rows by id (all positive): recall 0.79.
+- `microsoft/llmail-inject-challenge` (4 positives, 203 benign emails): false-positive rate 0.0.
+- Team in-domain, untrusted inbox items of the main set (234 positive, 175 negative): recall 0.1068, false-positive rate 0.0057.
+
+Read these with four caveats. The llmail corpus has only 4 positives, so only its false-positive rate on 203 benign emails is meaningful. The boundary-pairs negatives are deliberately hard, which is why its false-positive rate is high. The in-domain corpus counts every untrusted inbox item of an attack scenario as positive, including ordinary invoice emails, so item-level recall understates scenario-level detection. `p50_ms` in the file is a local CPU figure. The keyword-heuristic backend, benchmarked on the same corpora, reaches recall 0.0 to 0.0333.
+
+Lookalike detection ([docs/results/lookalike-bench.json](docs/results/lookalike-bench.json), Kaggle homoglyph domain attacks, CC0): of 28263 reconstructed (legitimate, spoofed) pairs, edit distance ≤ 2 detects 20782 (0.7353) and edit distance on the ASCII confusable skeleton detects 21729 (0.7688). On 2000 negative pairs of distinct legitimate domains, both variants give 2 false matches (0.001). The Kaggle data has no explicit pairing, so pairs are reconstructed: fake lists are cut into blocks of 9, and a block whose NFKD-folded members match exactly one legitimate domain of the same split is paired with it; other blocks are unpaired (10132 here). Pairs containing non-ASCII characters are excluded (52461 not representable) because NEAR account ids allow only `a-z 0-9 - _ .`.
+
 ## Limits
 
 - **Exchangeability.** The conformal bound on false holds assumes benign scores in use are exchangeable with the calibration scores. Real traffic may drift; the 4.67% figure is in-sample.
@@ -141,6 +159,9 @@ The cascade row never called the classifier (it was off), so it differs from the
 - **MELON not built.** It is on the cut list; its row is omitted.
 - **`release_held` does not re-check.** After the hold window, a held request is paid with no re-check; re-checks during the hold window are on the cut list.
 - **Threshold estimates vary.** Jev scores differ between runs, so q̂ re-estimates ranged from 0.82 to 0.85 (frozen value 0.84).
+- **External set is rewritten, not native.** `agent/scenarios/external/` takes text from public benchmarks and rewrites it into payment form: a generated invoice email for a known payee plus the benchmark text with an appended receiver line naming a synthetic `ext-<source>-NN` account. Attack amounts equal the invoice amount (Jim, 2026-11-13): in the first construction attacks paid fixed amounts of 120–190 against a 12–60 USDC invoice and the policy amount rule alone held 100 of 100 attacks, so the set did not test injection detection. Source and license of every row: [agent/scenarios/external/ATTRIBUTION.md](agent/scenarios/external/ATTRIBUTION.md).
+- **PaySim and BEC rows need manual downloads.** Kaggle PaySim and the Kaggle adversarial BEC email set are CC BY-SA 4.0 and are never committed; `agent/tools/build_paysim_set.py` and `agent/tools/build_bec_examples.py` read them from `KAGGLE_DATA_DIR` and write only under the gitignored `data/`. Those rows are not reproducible from the repository alone.
+- **The PaySim agent's payees are synthetic.** In PaySim, 2,151,495 PAYMENT rows go to 2,150,401 distinct merchants (the busiest has 3), so one agent with a repeat-payee history cannot be read from it. The builder keeps PaySim's amounts and row order and maps every row to one of 12 merchant ids by hash (Jim, 2026-11-13).
 
 ## Built with / third-party
 
@@ -152,6 +173,18 @@ Decision and platform:
 - [protectai/deberta-v3-base-prompt-injection-v2](https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2): injection classifier, default; Apache-2.0 (verify on model card)
 - [meta-llama/Llama-Prompt-Guard-2-86M](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M): injection classifier, when HF access is granted; Llama 4 Community License (verify on model card)
 - [transformers](https://github.com/huggingface/transformers) and [PyTorch](https://pytorch.org) (optional, only for `firewall-classifier`; not in `pyproject.toml`, installed with `uv run --with`)
+
+Datasets (used by the benchmarks and the external set; full attribution in [agent/scenarios/external/ATTRIBUTION.md](agent/scenarios/external/ATTRIBUTION.md)):
+
+- [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections): Apache-2.0; read by `bench_classifier.py` only, not committed
+- [3nesdeniz/agentic-prompt-injection-boundary-pairs](https://huggingface.co/datasets/3nesdeniz/agentic-prompt-injection-boundary-pairs): CC-BY-4.0; rewritten rows in `agent/scenarios/external/`; also read by the classifier benchmark
+- [nvidia/Nemotron-RL-Agentic-Indirect-Prompt-Injection-v1](https://huggingface.co/datasets/nvidia/Nemotron-RL-Agentic-Indirect-Prompt-Injection-v1): CC-BY-4.0; rewritten rows in `agent/scenarios/external/`; also read by the classifier benchmark
+- [microsoft/llmail-inject-challenge](https://huggingface.co/datasets/microsoft/llmail-inject-challenge): MIT; benign emails in `agent/scenarios/external/`; also read by the classifier benchmark
+- [InjecAgent](https://github.com/uiuc-kang-lab/InjecAgent): MIT; rewritten rows in `agent/scenarios/external/`
+- [AgentDojo](https://github.com/ethz-spylab/agentdojo): MIT; rewritten rows in `agent/scenarios/external/`
+- [Kaggle homoglyph domain attacks](https://www.kaggle.com/datasets/akshat4112/homoglyph-domain-attacks): CC0; benchmark input only (`bench_lookalike.py`), not committed
+- [Kaggle adversarial BEC email dataset](https://www.kaggle.com/datasets/yoadjei/adversarial-bec-email-dataset): CC BY-SA 4.0; read by `build_bec_examples.py`, not committed
+- [Kaggle PaySim](https://www.kaggle.com/datasets/ealaxi/paysim1): CC BY-SA 4.0; read by `build_paysim_set.py`, not committed
 
 Rust (contracts and checker):
 

@@ -315,6 +315,7 @@ Added later:
 | Variable | Purpose | Added by |
 | --- | --- | --- |
 | `CLASSIFIER_URL` | Hosted injection classifier endpoint | Tue |
+| `INJECTION_TIMEOUT_MS` | HTTP timeout of the injection classifier call in milliseconds (unsigned integer), default 3000 (`DEFAULT_TIMEOUT_MS` in `checker/src/injection.rs`); a non-integer value fails the run. A classifier call that fails, times out or returns a non-2xx status is a checker error, not a verdict: `decide()` propagates it with `injection::check(...).map_err(CheckerError::Check)?`, so no decision record is produced | Sprint 4b |
 | `HF_TOKEN` | Hugging Face token for the gated Prompt Guard 2 | Tue |
 | `OUTLAYER_PROJECT_ID` | Not read by any code: the OutLayer project id is an argument of `set_checker_mode` ([§6 runbook](#outlayer-checker-mode)); kept as a note for the human's shell | runbook only |
 
