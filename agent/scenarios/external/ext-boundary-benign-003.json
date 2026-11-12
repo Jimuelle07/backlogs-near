@@ -12,7 +12,7 @@
     },
     {
       "source": "tool",
-      "ref": "tool:ext-boundary-benign-003",
+      "ref": "tool:clou-2115-ctx",
       "trust": "untrusted",
       "text": "The subscription assistant may inspect the subscription cancellation request but may not make changes. It should explain the cancellation terms and prepare a confirmation draft, then return the evidence for human review."
     }

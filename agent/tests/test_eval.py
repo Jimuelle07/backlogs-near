@@ -373,8 +373,15 @@ def test_env_restored_when_run_raises(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_PROFILE_JSON", '{"p": 1}')
     monkeypatch.delenv("AGENT_PROFILE_PATH", raising=False)
     monkeypatch.setitem(eval_mod.SCENARIO_SET_ENV, "main", {"AGENT_PROFILE_PATH": "set.json"})
+    seen: list[dict] = []
     with pytest.raises(Exception):
-        _run_preset(tmp_path, _env_probe_runner([], [], raises=True))
+        _run_preset(
+            tmp_path,
+            _env_probe_runner(["JEV_REFERENCE_EXAMPLES_JSON", "AGENT_PROFILE_JSON", "AGENT_PROFILE_PATH"], seen, raises=True),
+        )
+    assert seen == [
+        {"JEV_REFERENCE_EXAMPLES_JSON": None, "AGENT_PROFILE_JSON": None, "AGENT_PROFILE_PATH": "set.json"}
+    ]
     assert os.environ["JEV_REFERENCE_EXAMPLES_JSON"] == "X"
     assert os.environ["AGENT_PROFILE_JSON"] == '{"p": 1}'
     assert "AGENT_PROFILE_PATH" not in os.environ

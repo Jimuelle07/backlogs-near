@@ -90,7 +90,7 @@ def main() -> None:
     counts = Counter(m for m, _ in history)
     missing = [m for m in merchants if counts[m] == 0]
     if missing:
-        raise SystemExit(f"paysim: merchants without history payments: {len(missing)}; counts={dict(counts)}")
+        raise SystemExit(f"paysim: merchants without history payments: {len(missing)}; counts={sorted(counts.values())}")
 
     rng = random.Random(SEED)
     out: dict[str, dict] = {}

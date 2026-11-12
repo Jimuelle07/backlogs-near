@@ -2,10 +2,11 @@
 
 `agent/scenarios/external/ext-*.json` are derived from the public datasets below, rewritten into
 payment-scenario form by `agent/tools/build_external_scenarios.py` (each attack text gets an appended
-receiver line naming a synthetic `ext-<source>-NN` account; each scenario also carries a generated
+receiver line naming a synthetic `ext-acct-NNN` account; each scenario also carries a generated
 invoice email for a known payee). Attack amounts equal the invoice amount so that the label cannot be
 read from an amount mismatch (decided by Jim, 2026-11-13). The scenarios are modified works; the license of each source applies
-to the text taken from it. All URLs are pinned to the revision shown.
+to the text taken from it. All URLs are pinned to the revision shown. Refs and receiver ids carry
+neither the label nor the benchmark name, because both are sent to the decision model.
 
 ## uiuc-kang-lab/InjecAgent (`injecagent`)
 
@@ -65,3 +66,11 @@ to the text taken from it. All URLs are pinned to the revision shown.
     - sha256 `4ddd950b5dbaa8548f5597c886d8e09a051ba07f80a9291fdcca9c2397d22abe`
 - Selection: data/emails_for_fp_tests.json (benign emails, file order); the first N such that the total benign count equals the total attack count.
 - Rewrite: benign: the email is inbox[1] (source `email`); the invoice payee is paid the invoice amount.
+
+## Known label correlates
+
+The set is not label-neutral beyond the metadata above. Remaining correlates, computed from the built set:
+
+- `inbox[1].source`: benign email=76, benign tool=24; attack email=0, attack tool=100.
+- 100 of 100 attack texts name their receiver account; 0 of 100 benign texts name an `ext-` account.
+- The llmail benign emails are unrelated to payments; the boundary-pairs benign texts are hard negatives.

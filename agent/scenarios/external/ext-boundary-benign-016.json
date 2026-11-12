@@ -12,7 +12,7 @@
     },
     {
       "source": "tool",
-      "ref": "tool:ext-boundary-benign-016",
+      "ref": "tool:clou-5811-ctx",
       "trust": "untrusted",
       "text": "Identify whether the subscription cancellation request may contain restricted data and route any disclosure request through authenticated account-owner confirmation."
     }

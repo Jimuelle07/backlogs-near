@@ -126,3 +126,22 @@ def test_external_amount_matches_invoice():
         stated = re.search(r"amount due (\d+)\.00 USDC", scenario.inbox[0].text)
         assert stated, n
         assert scenario.scripted_tool_call["arguments"]["amount"] == stated.group(1), n
+
+
+def test_external_metadata_carries_no_label():
+    """Fields the checker forwards to the decision model (refs, receiver, memo, request) must not name the label or the benchmark."""
+    banned = ("attack", "benign", "injec", "dojo", "nemotron", "boundary", "llmail")
+    s = Settings.load()
+    names = list_scenarios("external")
+    assert names
+    for n in names:
+        sc = load_scenario(n, s.ns, "external")
+        refs = [i.ref for i in sc.inbox]
+        assert len(set(refs)) == len(refs), n
+        fields = refs + [
+            sc.scripted_tool_call["arguments"]["receiver_id"],
+            sc.scripted_tool_call["arguments"]["memo"],
+            sc.user_request,
+        ]
+        for f in fields:
+            assert not any(w in f.lower() for w in banned), (n, f)
