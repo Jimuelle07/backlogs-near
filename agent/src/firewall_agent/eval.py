@@ -5,8 +5,13 @@ C4 — Full eval run: runs the checker under several configurations (env-var pre
 
 Configuration presets are plain checker env vars (`checker/src/*::from_env`); nothing is hidden in
 Python. Every preset sets all five switches (FUSION_MODE, CASCADE_ENABLED, POLICY_ENABLED,
-INJECTION_ENABLED, COUNTERPARTY_ENABLED); presets that do not set FUSION_HOLD_THRESHOLD run with it
-removed from the environment, so the checker's frozen default (the C5 q̂) applies:
+INJECTION_ENABLED, COUNTERPARTY_ENABLED); presets that do not set FUSION_HOLD_THRESHOLD or
+JEV_REFERENCE_EXAMPLES_JSON run with them removed from the environment (ALWAYS_CLEARED_ENV), so the
+checker's frozen default (the C5 q̂) applies and no exported reference examples reach the Jev state.
+A scenario set that supplies AGENT_PROFILE_PATH (`paysim`) also runs with AGENT_PROFILE_JSON removed,
+since the checker prefers it over the path. FUSION_AGENT_HOLD_THRESHOLD, and AGENT_PROFILE_JSON /
+AGENT_PROFILE_PATH for sets without their own, pass through from the caller's shell. All are restored
+afterwards:
     no_defense                    — code rules, every check off: the undefended baseline
     policy_only                   — code rules, policy check only
     classifier_only               — code rules, injection classifier only
@@ -421,8 +426,9 @@ def _preset(
 
 
 #: Ordered presets for the full run. Each entry is (label, checker env overrides). The checker reads
-#: these from the environment, so they are set before each pass and restored afterwards. A preset
-#: without FUSION_HOLD_THRESHOLD runs with it removed, so the checker's default (frozen q̂) applies.
+#: these from the environment, so they are set before each pass and restored afterwards. Presets
+#: remove ALWAYS_CLEARED_ENV unless they set it, so the checker's defaults apply.
+ALWAYS_CLEARED_ENV = ("FUSION_HOLD_THRESHOLD", "JEV_REFERENCE_EXAMPLES_JSON")
 EVAL_CONFIGURATIONS: list[tuple[str, dict[str, str]]] = [
     ("no_defense", _preset("code_rules", "false", "false", "false", "false")),
     ("policy_only", _preset("code_rules", "false", "true", "false", "false")),
@@ -502,10 +508,14 @@ def run_all_configurations(
 
     for label, preset_overrides in cfgs:
         env_overrides = {**preset_overrides, **SCENARIO_SET_ENV.get(scenario_set, {})}
-        # Apply env overrides for this configuration; FUSION_HOLD_THRESHOLD is removed unless the
-        # preset sets it, so an exported value cannot leak into a preset that means "default".
+        # ALWAYS_CLEARED_ENV is removed unless the preset sets it, so an exported value cannot leak
+        # into a preset that means "default". A set that supplies AGENT_PROFILE_PATH also removes
+        # AGENT_PROFILE_JSON, which the checker prefers over the path.
+        cleared = set(ALWAYS_CLEARED_ENV)
+        if "AGENT_PROFILE_PATH" in SCENARIO_SET_ENV.get(scenario_set, {}):
+            cleared.add("AGENT_PROFILE_JSON")
         old_env: dict[str, str | None] = {}
-        for k in {*env_overrides, "FUSION_HOLD_THRESHOLD"}:
+        for k in {*env_overrides, *cleared}:
             old_env[k] = os.environ.get(k)
             if k in env_overrides:
                 os.environ[k] = env_overrides[k]
