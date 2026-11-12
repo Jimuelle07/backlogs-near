@@ -24,22 +24,23 @@ Rules for every shot:
 
 ## Numbers slide
 
-One slide, read from the committed [`docs/results/results.json`](../results/results.json) (format `firewall.results.v1`) and the README Results section, which explains each figure. Values as committed on 2026-11-12:
+One slide, read from the committed [`docs/results/results.json`](../results/results.json) (format `firewall.results.v1`) and the README Results section, which explains each figure. Values from the P6 runs of 2026-11-13 (injection classifier on); they replace the 2026-11-12 figures:
 
 | Element | Value | Source |
 | --- | --- | --- |
-| Missed attacks | **20.67%**, vs 100% with no defense | `configurations[]` rows `jev_fusion_conformal` and `no_defense`, `missed_attacks_pct` |
+| Missed attacks | **19.33%**, vs 100% with no defense | `configurations[]` rows `jev_fusion_conformal` and `no_defense`, `missed_attacks_pct` |
 | False blocks | **0%** | same rows, `false_blocks_pct` |
-| False holds | 4.67% against the target ε = 5%, **in-sample** (measured on the same 150 benign cases used to calibrate); 1.33% on the 75-case held-out split | `false_holds_pct`; held-out figure from README Results (`firewall-calibrate --rotation`) |
-| Median latency | about 403 ms per payment | `median_latency_ms` |
-| Jev calls per payment | 1 (cost unpriced) | `jev_calls_per_payment`; `cost_per_payment_usd` is 0.0 only because no price was set, so do not show it |
-| Weakest families | memory poisoning 48% and fake invoice 52% caught; the other four 92–96% | `unseen_family_rotation` |
+| False holds | 5.33% (8 of 150), **in-sample** and **above** the ε = 5% target | `false_holds_pct`; README Limits |
+| Held-out check | external set (100 benign / 100 attack): 17% missed, 18% false holds, 0 false blocks | README Results, `external-results.json` |
+| Median latency | about 1.3 s per payment, mostly the injection classifier on a local CPU | `median_latency_ms`; README Results |
+| Calls per payment | 1 Jev call + 1 classifier call (cost unpriced) | `jev_calls_per_payment`, `classifier_calls_per_payment`; `cost_per_payment_usd` is 0.0 only because no price was set, so do not show it |
+| Weakest families | memory poisoning and fake invoice: 13 of 25 caught each (cascade row); the other four 23–24 of 25 | `by_family` (cascade row, README Results). Not `unseen_family_rotation`: it comes from the threshold-0.5 run |
 | Hard cap line | "Worst case: 200 tUSDC per payment, 500 tUSDC per day, in contract code" | `contract/guardian` |
 | Caveat line | "The false-hold bound assumes live payments look like the calibration set. Detection covers six known attack families." | README Limits |
 
-Do not label any figure "held-out" except the 1.33%. Do not show the classifier or MELON: neither ran in the evaluation.
+Label only the external set "held-out". Do not show MELON: it was not built.
 
-Layout: two big numbers (missed attacks, false blocks) with "no defense" beside missed attacks for contrast; false holds, latency and Jev calls as one small row underneath; the weakest-families line and the caveat in small type. Brand tokens from `site/src/styles.css` (lilac `#EDB1E8` on `#15131D`, Geist). The site's Results section (D4) shows the same numbers.
+Layout: two big numbers (missed attacks, false blocks) with "no defense" beside missed attacks for contrast; false holds, the held-out check, latency and calls as one small row underneath; the weakest-families line and the caveat in small type. Brand tokens from `site/src/styles.css` (lilac `#EDB1E8` on `#15131D`, Geist). The site's Results section (D4) shows the same numbers.
 
 ## 20-second GIF
 
