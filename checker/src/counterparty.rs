@@ -380,6 +380,54 @@ pub fn damerau_levenshtein(s: &str, t: &str) -> u32 {
     d[m][n]
 }
 
+/// ASCII confusable skeleton: lowercases, then one left-to-right pass mapping `rn`→`m`, `vv`→`w`,
+/// `0`→`o`, `1`→`l`, `i`→`l`, `3`→`e`, `4`→`a`, `5`→`s`, `7`→`t`, `8`→`b`, `9`→`g`, `_`→`-`.
+pub fn ascii_skeleton(s: &str) -> String {
+    let chars: Vec<char> = s.chars().map(|c| c.to_ascii_lowercase()).collect();
+    let mut out = String::with_capacity(chars.len());
+    let mut i = 0;
+    while i < chars.len() {
+        match (chars[i], chars.get(i + 1)) {
+            ('r', Some('n')) => {
+                out.push('m');
+                i += 2;
+                continue;
+            }
+            ('v', Some('v')) => {
+                out.push('w');
+                i += 2;
+                continue;
+            }
+            _ => {}
+        }
+        out.push(match chars[i] {
+            '0' => 'o',
+            '1' | 'i' => 'l',
+            '3' => 'e',
+            '4' => 'a',
+            '5' => 's',
+            '7' => 't',
+            '8' => 'b',
+            '9' => 'g',
+            '_' => '-',
+            c => c,
+        });
+        i += 1;
+    }
+    out
+}
+
+/// Distance after ASCII confusable folding: a confusable variant is never an exact match
+/// (distance >= 1) and otherwise counts the smaller of the raw and skeleton distances.
+pub fn payee_distance(candidate: &str, payee: &str) -> u32 {
+    let raw = raw_payee_distance(candidate, payee);
+    if raw == 0 {
+        return 0;
+    }
+    let skel = raw_payee_distance(&ascii_skeleton(candidate), &ascii_skeleton(payee));
+    raw.min(skel.max(1))
+}
+
 /// Compute effective distance between a candidate receiver and a known payee account.
 /// Accommodates NEAR subaccount scoping (`prefix.suffix`) so that:
 /// - Exact (case-insensitive) matches return 0
@@ -388,7 +436,7 @@ pub fn damerau_levenshtein(s: &str, t: &str) -> u32 {
 /// - Exactly one side qualified (e.g. `hostc0` vs `hostco.demo.testnet`, or `hostco.evil.testnet`
 ///   vs bare `hostco`) -> prefix distance + 1, never 0: a qualified account id never matches a
 ///   bare profile name exactly (Jim, 2026-11-12)
-pub fn payee_distance(candidate: &str, payee: &str) -> u32 {
+fn raw_payee_distance(candidate: &str, payee: &str) -> u32 {
     if candidate.eq_ignore_ascii_case(payee) {
         return 0;
     }
@@ -440,7 +488,7 @@ pub fn find_lookalike<'a>(
     max_lookalike_distance: u32,
 ) -> LookalikeMatch<'a> {
     let mut exact: Option<&'a PayeeHistory> = None;
-    let mut closest_lookalike: Option<(&'a PayeeHistory, u32)> = None;
+    let mut closest_lookalike: Option<(&'a PayeeHistory, u32, u32)> = None;
 
     for payee in payees {
         let dist = payee_distance(receiver_id, &payee.account_id);
@@ -450,13 +498,17 @@ pub fn find_lookalike<'a>(
         }
 
         if dist <= max_lookalike_distance {
+            let raw = raw_payee_distance(receiver_id, &payee.account_id);
             match closest_lookalike {
-                None => closest_lookalike = Some((payee, dist)),
-                Some((prev_payee, prev_dist)) => {
+                None => closest_lookalike = Some((payee, dist, raw)),
+                Some((prev_payee, prev_dist, prev_raw)) => {
                     if dist < prev_dist
-                        || (dist == prev_dist && payee.prior_payments > prev_payee.prior_payments)
+                        || (dist == prev_dist && raw < prev_raw)
+                        || (dist == prev_dist
+                            && raw == prev_raw
+                            && payee.prior_payments > prev_payee.prior_payments)
                     {
-                        closest_lookalike = Some((payee, dist));
+                        closest_lookalike = Some((payee, dist, raw));
                     }
                 }
             }
@@ -465,7 +517,7 @@ pub fn find_lookalike<'a>(
 
     if let Some(payee) = exact {
         LookalikeMatch::Exact(payee)
-    } else if let Some((payee, distance)) = closest_lookalike {
+    } else if let Some((payee, distance, _)) = closest_lookalike {
         LookalikeMatch::Lookalike { payee, distance }
     } else {
         LookalikeMatch::Novel
@@ -738,6 +790,27 @@ mod tests {
         }
         // Bare vs bare is unchanged.
         assert_eq!(payee_distance("hostc0", "hostco"), 1);
+    }
+
+    #[test]
+    fn test_lookalike_tie_broken_by_raw_distance() {
+        let profile = AgentProfile::with_default_payees_in(Some("jimuelle-firewall.testnet"));
+        match find_lookalike("hostc0.jimuelle-firewall.testnet", &profile.known_payees, 2) {
+            LookalikeMatch::Lookalike { payee, distance } => {
+                assert_eq!(payee.account_id, "hostco.jimuelle-firewall.testnet");
+                assert_eq!(distance, 1);
+            }
+            other => panic!("expected lookalike, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_ascii_confusable_skeleton() {
+        assert_eq!(payee_distance("cl0udc0x.demo.testnet", "cloudco.demo.testnet"), 1);
+        assert_eq!(payee_distance("d0m4inr3g.demo.testnet", "domainreg.demo.testnet"), 1);
+        assert_eq!(payee_distance("supplier-acrne.demo.testnet", "supplier-acme.demo.testnet"), 1);
+        assert_eq!(payee_distance("hostco.demo.testnet", "hostco.demo.testnet"), 0);
+        assert_eq!(ascii_skeleton("Rn_0"), "m-o");
     }
 
     #[test]
