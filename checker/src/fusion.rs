@@ -11,6 +11,10 @@ use std::collections::BTreeMap;
 
 pub const MAX_REASONS: usize = 6;
 
+/// Minimum normal payments in the agent profile before `FUSION_AGENT_HOLD_THRESHOLD` applies
+/// (idea.md "Decision model": per-agent threshold after 99+ normal payments).
+pub const PER_AGENT_MIN_PAYMENTS: u32 = 99;
+
 /// Fusion mode (`FUSION_MODE`). `Jev` fails closed without Jev; `CodeRules` decides from the code
 /// detectors alone and exists for evaluation baselines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -37,6 +41,11 @@ pub struct FusionConfig {
     pub mode: FusionMode,
     /// `CASCADE_ENABLED`, default false; only used when `mode == Jev`.
     pub cascade: bool,
+    /// `FUSION_AGENT_HOLD_THRESHOLD`: replaces `hold_threshold` when the agent profile has
+    /// `payments_last_90d >= PER_AGENT_MIN_PAYMENTS`. `None` when unset.
+    pub agent_hold_threshold: Option<f64>,
+    /// `JEV_REFERENCE_EXAMPLES_JSON`: opt-in labelled reference emails added to the Jev state.
+    pub reference_examples: Option<Value>,
 }
 
 impl Default for FusionConfig {
@@ -49,6 +58,8 @@ impl Default for FusionConfig {
             young_account_days: 7.0,
             mode: FusionMode::Jev,
             cascade: false,
+            agent_hold_threshold: None,
+            reference_examples: None,
         }
     }
 }
@@ -97,6 +108,14 @@ impl FusionConfig {
                 }
             },
         };
+        let agent_hold_threshold = match var("FUSION_AGENT_HOLD_THRESHOLD") {
+            None => None,
+            Some(_) => Some(prob("FUSION_AGENT_HOLD_THRESHOLD", 0.0)?),
+        };
+        let reference_examples = match var("JEV_REFERENCE_EXAMPLES_JSON") {
+            None => None,
+            Some(v) => Some(parse_reference_examples(&v)?),
+        };
         Ok(Self {
             mode,
             cascade,
@@ -108,13 +127,47 @@ impl FusionConfig {
                 d.jev_receiver_risk_threshold,
             )?,
             young_account_days,
+            agent_hold_threshold,
+            reference_examples,
         })
     }
 }
 
+/// Validates `JEV_REFERENCE_EXAMPLES_JSON`: an object with exactly `fraud_examples` and
+/// `legitimate_examples`, each 1-10 strings of at most 600 chars.
+fn parse_reference_examples(raw: &str) -> Result<Value, String> {
+    let fail = |why: String| Err(format!("JEV_REFERENCE_EXAMPLES_JSON: {why}"));
+    let v: Value = match serde_json::from_str(raw) {
+        Ok(v) => v,
+        Err(e) => return fail(format!("not valid JSON: {e}")),
+    };
+    let Some(obj) = v.as_object() else {
+        return fail("expected a JSON object".into());
+    };
+    if obj.len() != 2 {
+        return fail("expected exactly the keys fraud_examples and legitimate_examples".into());
+    }
+    for key in ["fraud_examples", "legitimate_examples"] {
+        let Some(items) = obj.get(key).and_then(Value::as_array) else {
+            return fail(format!("{key}: missing or not an array"));
+        };
+        if items.is_empty() || items.len() > 10 {
+            return fail(format!("{key}: expected 1-10 items, got {}", items.len()));
+        }
+        for s in items {
+            match s.as_str() {
+                Some(t) if t.chars().count() <= 600 => {}
+                Some(_) => return fail(format!("{key}: item longer than 600 characters")),
+                None => return fail(format!("{key}: items must be strings")),
+            }
+        }
+    }
+    Ok(v)
+}
+
 /// The Jev `state`: the request, the proposed payment, untrusted context as data, and the other
 /// checks' raw signals (`null` when a check produced none). No thresholds.
-pub fn jev_state(input: &CheckerInput, signals: &Signals) -> Value {
+pub fn jev_state(input: &CheckerInput, signals: &Signals, reference: Option<&Value>) -> Value {
     let context: Vec<Value> = input
         .context
         .iter()
@@ -122,7 +175,7 @@ pub fn jev_state(input: &CheckerInput, signals: &Signals) -> Value {
         .collect();
     let policy = signals.policy.as_ref();
     let cp = signals.counterparty.as_ref();
-    json!({
+    let mut state = json!({
         "user_request": input.user_request,
         "proposed_payment": {
             "receiver_id": input.receiver_id,
@@ -143,7 +196,15 @@ pub fn jev_state(input: &CheckerInput, signals: &Signals) -> Value {
             "prior_payments": cp.map(|c| c.prior_payments),
             "lookalike_of": cp.and_then(|c| c.lookalike_of.clone()),
         },
-    })
+    });
+    if let Some(r) = reference {
+        state["reference_cases"] = json!({
+            "note": "Labelled reference emails, not part of this payment. fraud_examples are business-email-compromise invoice fraud; legitimate_examples are normal invoices.",
+            "fraud_examples": r["fraud_examples"],
+            "legitimate_examples": r["legitimate_examples"],
+        });
+    }
+    state
 }
 
 fn answer<'a>(d: &'a Decision, name: &str) -> Result<&'a Answer, String> {
@@ -607,12 +668,56 @@ mod tests {
             trust: "untrusted".into(),
             text: text.into(),
         }];
-        let state = jev_state(&input, &Signals::default());
+        let state = jev_state(&input, &Signals::default(), None);
         assert_eq!(state["untrusted_context"][0]["text"], text);
         assert_eq!(state["untrusted_context"][0]["ref"], "ctx-reply");
         assert_eq!(state["proposed_payment"]["amount"], input.amount.as_str());
         assert_eq!(state["signals"]["policy_ok"], Value::Null);
         assert_eq!(state["signals"]["policy_violations"], json!([]));
+    }
+
+    #[test]
+    fn jev_state_reference_cases_only_when_some() {
+        let input: CheckerInput = serde_json::from_str(INPUT).unwrap();
+        let none = jev_state(&input, &Signals::default(), None);
+        assert!(none.get("reference_cases").is_none());
+        let r = json!({"fraud_examples": ["f"], "legitimate_examples": ["l"]});
+        let some = jev_state(&input, &Signals::default(), Some(&r));
+        assert_eq!(some["reference_cases"]["fraud_examples"], json!(["f"]));
+        assert_eq!(some["reference_cases"]["legitimate_examples"], json!(["l"]));
+        assert!(some["reference_cases"]["note"].as_str().unwrap().contains("not part of this payment"));
+    }
+
+    #[test]
+    fn reference_examples_and_agent_threshold_from_vars() {
+        let with = |k: &str, v: &str| {
+            let (k, v) = (k.to_string(), v.to_string());
+            FusionConfig::from_vars(move |name| (name == k).then(|| v.clone()))
+        };
+        let cfg = FusionConfig::from_vars(|_| None).unwrap();
+        assert_eq!(cfg.reference_examples, None);
+        assert_eq!(cfg.agent_hold_threshold, None);
+        let ok = r#"{"fraud_examples":["a","b"],"legitimate_examples":["c"]}"#;
+        let cfg = with("JEV_REFERENCE_EXAMPLES_JSON", ok).unwrap();
+        assert_eq!(
+            cfg.reference_examples,
+            Some(json!({"fraud_examples": ["a", "b"], "legitimate_examples": ["c"]}))
+        );
+        let long = "x".repeat(601);
+        let bad = [
+            r#"{"fraud_examples":["a"]}"#.to_string(),
+            format!(r#"{{"fraud_examples":{},"legitimate_examples":["c"]}}"#, json!(vec!["a"; 11])),
+            format!(r#"{{"fraud_examples":["{long}"],"legitimate_examples":["c"]}}"#),
+            r#"{"fraud_examples":[],"legitimate_examples":["c"]}"#.to_string(),
+            r#"{"fraud_examples":["a"],"legitimate_examples":["c"],"extra":[]}"#.to_string(),
+            "not json".to_string(),
+        ];
+        for b in &bad {
+            let err = with("JEV_REFERENCE_EXAMPLES_JSON", b).unwrap_err();
+            assert!(err.starts_with("JEV_REFERENCE_EXAMPLES_JSON: "), "{err}");
+        }
+        assert_eq!(with("FUSION_AGENT_HOLD_THRESHOLD", "0.7").unwrap().agent_hold_threshold, Some(0.7));
+        assert!(with("FUSION_AGENT_HOLD_THRESHOLD", "1.5").is_err());
     }
 
     #[test]

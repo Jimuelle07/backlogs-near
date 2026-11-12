@@ -5,8 +5,13 @@ C4 — Full eval run: runs the checker under several configurations (env-var pre
 
 Configuration presets are plain checker env vars (`checker/src/*::from_env`); nothing is hidden in
 Python. Every preset sets all five switches (FUSION_MODE, CASCADE_ENABLED, POLICY_ENABLED,
-INJECTION_ENABLED, COUNTERPARTY_ENABLED); presets that do not set FUSION_HOLD_THRESHOLD run with it
-removed from the environment, so the checker's frozen default (the C5 q̂) applies:
+INJECTION_ENABLED, COUNTERPARTY_ENABLED); presets that do not set FUSION_HOLD_THRESHOLD or
+JEV_REFERENCE_EXAMPLES_JSON run with them removed from the environment (ALWAYS_CLEARED_ENV), so the
+checker's frozen default (the C5 q̂) applies and no exported reference examples reach the Jev state.
+A scenario set that supplies AGENT_PROFILE_PATH (`paysim`) also runs with AGENT_PROFILE_JSON removed,
+since the checker prefers it over the path. FUSION_AGENT_HOLD_THRESHOLD, and AGENT_PROFILE_JSON /
+AGENT_PROFILE_PATH for sets without their own, pass through from the caller's shell. All are restored
+afterwards:
     no_defense                    — code rules, every check off: the undefended baseline
     policy_only                   — code rules, policy check only
     classifier_only               — code rules, injection classifier only
@@ -25,7 +30,12 @@ EVAL_JEV_USD_PER_CALL / EVAL_CLASSIFIER_USD_PER_CALL (default 0.0 = unpriced).
 
 `--configuration NAME` only labels the summary row; pass the checker env vars yourself.
 `--all-configurations` runs every preset above, sequentially, against the real checker binary.
-`--scenario-set redteam` evaluates agent/scenarios/redteam instead of the main set.
+`--preset NAME` runs one preset: any label above, or the opt-in `jev_fusion_conformal_bec`
+(`jev_fusion_conformal` plus JEV_REFERENCE_EXAMPLES_JSON read from the gitignored
+data/external/derived/bec-reference-examples.json; not part of `--all-configurations`).
+`--scenario-set redteam|external|paysim` evaluates that set instead of the main set (`external`:
+agent/scenarios/external, from public benchmarks; `paysim`: built locally under data/, with its
+own AGENT_PROFILE_PATH).
 `--calibration FILE` adds q_hat and unseen_family_rotation computed from FILE's cases.
 
 Scenarios are always evaluated in the `demo.testnet` namespace (EVAL_NAMESPACE), the one the
@@ -52,7 +62,7 @@ from .config import REPO_ROOT, Settings
 from .formats import compact_json
 from .guardian import LocalGuardian, binds, run_checker
 from .llm import ScriptedLLM
-from .scenarios import list_scenarios, load_scenario
+from .scenarios import SCENARIO_SET_ENV, SCENARIO_SETS, list_scenarios, load_scenario
 
 RESULTS_FORMAT = "firewall.results.v1"
 DEFAULT_RESULTS_PATH = REPO_ROOT / "data" / "eval" / "results.json"
@@ -416,8 +426,9 @@ def _preset(
 
 
 #: Ordered presets for the full run. Each entry is (label, checker env overrides). The checker reads
-#: these from the environment, so they are set before each pass and restored afterwards. A preset
-#: without FUSION_HOLD_THRESHOLD runs with it removed, so the checker's default (frozen q̂) applies.
+#: these from the environment, so they are set before each pass and restored afterwards. Presets
+#: remove ALWAYS_CLEARED_ENV unless they set it, so the checker's defaults apply.
+ALWAYS_CLEARED_ENV = ("FUSION_HOLD_THRESHOLD", "JEV_REFERENCE_EXAMPLES_JSON")
 EVAL_CONFIGURATIONS: list[tuple[str, dict[str, str]]] = [
     ("no_defense", _preset("code_rules", "false", "false", "false", "false")),
     ("policy_only", _preset("code_rules", "false", "true", "false", "false")),
@@ -431,6 +442,38 @@ EVAL_CONFIGURATIONS: list[tuple[str, dict[str, str]]] = [
     ("jev_fusion_conformal_cascade", _preset("jev", "true", "true", "true", "true")),
 ]
 
+BEC_REFERENCE_EXAMPLES_PATH = REPO_ROOT / "data" / "external" / "derived" / "bec-reference-examples.json"
+
+
+def _bec_preset() -> dict[str, str]:
+    if not BEC_REFERENCE_EXAMPLES_PATH.is_file():
+        raise SystemExit(
+            "missing data/external/derived/bec-reference-examples.json; "
+            "run: uv run python tools/build_bec_examples.py"
+        )
+    return _preset(
+        "jev",
+        "false",
+        "true",
+        "true",
+        "true",
+        JEV_REFERENCE_EXAMPLES_JSON=BEC_REFERENCE_EXAMPLES_PATH.read_text(encoding="utf-8"),
+    )
+
+
+#: Opt-in presets for `--preset` only (never part of `--all-configurations`). Lazy: they read
+#: gitignored files built from manual downloads.
+EXTRA_PRESETS: dict[str, Callable[[], dict[str, str]]] = {
+    "jev_fusion_conformal_bec": _bec_preset,
+}
+
+
+def preset_env(name: str) -> dict[str, str]:
+    """Checker env overrides for preset `name` (EVAL_CONFIGURATIONS or EXTRA_PRESETS)."""
+    if name in EXTRA_PRESETS:
+        return EXTRA_PRESETS[name]()
+    return dict(EVAL_CONFIGURATIONS)[name]
+
 
 def run_all_configurations(
     settings: Settings,
@@ -439,6 +482,7 @@ def run_all_configurations(
     output_path: Path = DEFAULT_RESULTS_PATH,
     scenario_set: str = "main",
     calibration_file: Path | None = None,
+    scenario_names: list[str] | None = None,
 ) -> dict:
     """Run the checker over all scenarios for each configuration preset.
 
@@ -451,8 +495,9 @@ def run_all_configurations(
         configurations: list of (label, env_overrides) pairs; defaults to EVAL_CONFIGURATIONS.
         checker_fn: optional in-process checker runner (overrides the binary).
         output_path: where to write the final results.json.
-        scenario_set: "main" or "redteam".
+        scenario_set: a key of SCENARIO_SETS; its SCENARIO_SET_ENV is merged into every preset.
         calibration_file: optional results.json whose cases feed `q_hat` / `unseen_family_rotation`.
+        scenario_names: run only these scenarios; defaults to the whole set.
 
     Returns:
         The combined results dict.
@@ -461,11 +506,16 @@ def run_all_configurations(
     all_config_rows: list[dict] = []
     last_result: dict = {}
 
-    for label, env_overrides in cfgs:
-        # Apply env overrides for this configuration; FUSION_HOLD_THRESHOLD is removed unless the
-        # preset sets it, so an exported value cannot leak into a preset that means "default".
+    for label, preset_overrides in cfgs:
+        env_overrides = {**preset_overrides, **SCENARIO_SET_ENV.get(scenario_set, {})}
+        # ALWAYS_CLEARED_ENV is removed unless the preset sets it, so an exported value cannot leak
+        # into a preset that means "default". A set that supplies AGENT_PROFILE_PATH also removes
+        # AGENT_PROFILE_JSON, which the checker prefers over the path.
+        cleared = set(ALWAYS_CLEARED_ENV)
+        if "AGENT_PROFILE_PATH" in SCENARIO_SET_ENV.get(scenario_set, {}):
+            cleared.add("AGENT_PROFILE_JSON")
         old_env: dict[str, str | None] = {}
-        for k in {*env_overrides, "FUSION_HOLD_THRESHOLD"}:
+        for k in {*env_overrides, *cleared}:
             old_env[k] = os.environ.get(k)
             if k in env_overrides:
                 os.environ[k] = env_overrides[k]
@@ -475,6 +525,7 @@ def run_all_configurations(
         try:
             result = evaluate_scenarios(
                 settings,
+                scenario_names=scenario_names,
                 configuration=label,
                 checker_fn=checker_fn,
                 scenario_set=scenario_set,
@@ -524,7 +575,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument(
         "--scenario-set",
-        choices=["main", "redteam"],
+        choices=list(SCENARIO_SETS),
         default="main",
         help="scenario set to evaluate (default: main)",
     )
@@ -534,7 +585,8 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="results.json whose cases feed q_hat and unseen_family_rotation in the output",
     )
-    ap.add_argument(
+    which = ap.add_mutually_exclusive_group()
+    which.add_argument(
         "--all-configurations",
         action="store_true",
         help=(
@@ -542,21 +594,33 @@ def main(argv: list[str] | None = None) -> int:
             "combined results.json (requires the checker binary to be built)"
         ),
     )
+    which.add_argument(
+        "--preset",
+        choices=[label for label, _ in EVAL_CONFIGURATIONS] + list(EXTRA_PRESETS),
+        default=None,
+        help="run one configuration preset (sets its checker env vars)",
+    )
     args = ap.parse_args(argv)
 
     s = Settings.load()
 
-    if args.all_configurations:
+    if args.all_configurations or args.preset:
         combined = run_all_configurations(
             s,
+            configurations=[(args.preset, preset_env(args.preset))] if args.preset else None,
             output_path=args.output,
             scenario_set=args.scenario_set,
             calibration_file=args.calibration,
+            scenario_names=args.scenarios,
         )
         if not combined:
             print("ERROR: no results produced", file=sys.stderr)
             return 1
         lat = combined["latency_ms"]
+        print(
+            f"scenarios: {combined['total']} "
+            f"(benign={combined['benign_total']}, attack={combined['attack_total']})"
+        )
         print(f"configurations: {len(combined['configurations'])}")
         for row in combined["configurations"]:
             print(

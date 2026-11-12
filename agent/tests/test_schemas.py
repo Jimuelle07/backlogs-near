@@ -88,7 +88,60 @@ def test_redteam_set_is_attack_only():
 
 
 def test_unknown_scenario_set_rejected():
-    with pytest.raises(ValueError, match=r"unknown scenario set 'nope'; expected main\|redteam"):
+    with pytest.raises(ValueError, match=r"unknown scenario set 'nope'; expected main\|redteam\|external\|paysim"):
         list_scenarios("nope")
-    with pytest.raises(ValueError, match="expected main\\|redteam"):
+    with pytest.raises(ValueError, match="expected main\\|redteam\\|external\\|paysim"):
         load_scenario("x", "demo.testnet", "nope")
+
+
+def test_external_set_valid(validator):
+    names = list_scenarios("external")
+    assert names
+    s = Settings.load()
+    scenarios = [load_scenario(n, s.ns, "external") for n in names]
+    for scenario in scenarios:
+        req = propose_payment(scenario, ScriptedLLM(scenario), "ref-1")
+        assert req is not None
+        req.validate()
+        validator("payment-request").validate(req.to_args())
+    benign = [x for x in scenarios if x.label == "benign"]
+    attack = [x for x in scenarios if x.label == "attack"]
+    assert len(benign) == len(attack)
+    assert all(x.scripted_tool_call["arguments"]["receiver_id"].startswith("ext-") for x in attack)
+
+
+def test_external_set_not_in_main():
+    assert not [n for n in list_scenarios("main") if n.startswith("ext-")]
+
+
+def test_external_amount_matches_invoice():
+    """Every external scenario pays the invoice amount stated in inbox[0]; the label must not be readable from an amount mismatch."""
+    import re
+
+    s = Settings.load()
+    names = list_scenarios("external")
+    assert names
+    for n in names:
+        scenario = load_scenario(n, s.ns, "external")
+        stated = re.search(r"amount due (\d+)\.00 USDC", scenario.inbox[0].text)
+        assert stated, n
+        assert scenario.scripted_tool_call["arguments"]["amount"] == stated.group(1), n
+
+
+def test_external_metadata_carries_no_label():
+    """Fields the checker forwards to the decision model (refs, receiver, memo, request) must not name the label or the benchmark."""
+    banned = ("attack", "benign", "injec", "dojo", "nemotron", "boundary", "llmail")
+    s = Settings.load()
+    names = list_scenarios("external")
+    assert names
+    for n in names:
+        sc = load_scenario(n, s.ns, "external")
+        refs = [i.ref for i in sc.inbox]
+        assert len(set(refs)) == len(refs), n
+        fields = refs + [
+            sc.scripted_tool_call["arguments"]["receiver_id"],
+            sc.scripted_tool_call["arguments"]["memo"],
+            sc.user_request,
+        ]
+        for f in fields:
+            assert not any(w in f.lower() for w in banned), (n, f)

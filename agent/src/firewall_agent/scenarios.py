@@ -5,11 +5,21 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from .config import AGENT_DIR
+from .config import AGENT_DIR, REPO_ROOT
 from .formats import ContextItem
 
 SCENARIO_DIR = AGENT_DIR / "scenarios"
-SCENARIO_SETS = {"main": SCENARIO_DIR, "redteam": SCENARIO_DIR / "redteam"}
+PAYSIM_DIR = REPO_ROOT / "data" / "external" / "derived" / "paysim"
+SCENARIO_SETS = {
+    "main": SCENARIO_DIR,
+    "redteam": SCENARIO_DIR / "redteam",
+    "external": SCENARIO_DIR / "external",
+    "paysim": PAYSIM_DIR,
+}
+#: Checker env overrides a scenario set needs (merged into every preset by firewall-eval).
+SCENARIO_SET_ENV: dict[str, dict[str, str]] = {
+    "paysim": {"AGENT_PROFILE_PATH": str(PAYSIM_DIR / "profile.json")},
+}
 ATTACK_FAMILIES = (
     "direct_injection",
     "encoded_injection",
@@ -42,13 +52,18 @@ def _subst(value, ns: str):
 
 def _set_dir(scenario_set: str):
     try:
-        return SCENARIO_SETS[scenario_set]
+        d = SCENARIO_SETS[scenario_set]
     except KeyError:
-        raise ValueError(f"unknown scenario set {scenario_set!r}; expected main|redteam") from None
+        raise ValueError(
+            f"unknown scenario set {scenario_set!r}; expected {'|'.join(SCENARIO_SETS)}"
+        ) from None
+    if scenario_set == "paysim" and not d.is_dir():
+        raise SystemExit("paysim set not built; run: uv run python tools/build_paysim_set.py")
+    return d
 
 
 def list_scenarios(scenario_set: str = "main") -> list[str]:
-    return sorted(p.stem for p in _set_dir(scenario_set).glob("*.json"))
+    return sorted(p.stem for p in _set_dir(scenario_set).glob("*.json") if p.stem != "profile")
 
 
 def load_scenario(name: str, ns: str, scenario_set: str = "main") -> Scenario:

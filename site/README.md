@@ -48,6 +48,12 @@ Click a receipt row, or focus its request button and press Enter or Space, to op
 
 Run `npm ci`, `npm test` and `npm run build` to verify. For a mobile check, open `#receipts` at 390px wide and check the controls and table without horizontal page scrolling.
 
+## Results (E3 renderer, D4 data)
+
+Open `/#results`. `src/components/ResultsSection.jsx` imports `../docs/results/results.json` and `redteam-results.json` at build time; `vite.config.js` validates the same `results.json` during builds and rejects any format other than `firewall.results.v1`. Every figure comes from those files; labels and caveats follow the README Results section.
+
+The section shows three headline numbers for the conformal row against no defense, a table of every configuration (false holds, false blocks, missed attacks, median latency, calls per payment, since cost is unpriced), the red-team round and the not-built MELON row, the missed-attacks / false-blocks chart, attacks caught per family (from `by_family`, the cascade row; `unseen_family_rotation` is not a detection rate at q̂), and the caveats (in-sample false holds above the 5% target, known families only, hard caps). `npm test` checks the numbers against the README; `npm run build` checks bundling.
+
 ## Deploy (human, needs a Cloudflare account)
 
 ```
@@ -61,11 +67,10 @@ The first run asks for a Cloudflare login and creates the project. Any static ho
 
 - `src/config.js`: project name, status note, Guardian id, RPC URL, explorer, caps, repo URL. Edit here first.
 - `src/App.jsx`: all sections, in page order.
+- `src/components/ResultsSection.jsx` and `src/results.js`: results table, chart and per-family list from `docs/results/`; `src/results.test.js` checks the format guard on the C1 example and the real numbers against the README.
 - `src/components/ReceiptsPanel.jsx` and `ReceiptDetail.jsx`: live receipts and inline details in `#receipts`.
 - `src/receipt.js`: shared status/reason labels and integer hold countdown formatting.
 - `src/near.js`: read-only RPC reader and exact token amount formatting; `src/near.test.js` tests it against the receipt schema example.
 - `src/styles.css`: brand tokens (`:root`) and components.
-
-- `src/results.js`: Results section rows, read at build time from `../docs/results/results.json` and `redteam-results.json` (the dev server is allowed to read `..` in `vite.config.js`); `src/results.test.js` checks them against the README Results table.
 
 Open items: project name (team lead decides; set `PROJECT_NAME`), repo URL (set `REPO_URL` once public), demo video (D3/D6).

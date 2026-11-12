@@ -121,10 +121,20 @@ pub fn decide_with_configs(
         counterparty: counterparty_signal,
         jev: None,
     };
+    let fusion_cfg = &FusionConfig {
+        hold_threshold: match (fusion_cfg.agent_hold_threshold, counterparty_cfg.profile.payments_last_90d) {
+            (Some(t), Some(n)) if n >= fusion::PER_AGENT_MIN_PAYMENTS => t,
+            _ => fusion_cfg.hold_threshold,
+        },
+        ..fusion_cfg.clone()
+    };
     if fusion_cfg.mode == FusionMode::Jev {
         if let Some(c) = client {
             let jev = c
-                .decide(&fusion::jev_state(&input, &signals), &decision::firewall_questions())
+                .decide(
+                    &fusion::jev_state(&input, &signals, fusion_cfg.reference_examples.as_ref()),
+                    &decision::firewall_questions(),
+                )
                 .map_err(|e| e.to_string())
                 .and_then(|d| fusion::jev_signal(&d));
             match jev {
@@ -479,5 +489,36 @@ mod tests {
         assert_eq!(r.signals.jev, None);
         assert_eq!(v.outcome, Outcome::Allow);
         assert_eq!(v.reasons, vec![ReasonCode::ChecksPassed]);
+    }
+
+    #[test]
+    fn agent_hold_threshold_applies_only_with_enough_payments() {
+        let run = |payments: u32| {
+            let cp = CounterpartyConfig {
+                profile: AgentProfile {
+                    payments_last_90d: Some(payments),
+                    ..AgentProfile::with_default_payees_in(None)
+                },
+                ..CounterpartyConfig::default()
+            };
+            let fusion = FusionConfig {
+                hold_threshold: 0.84,
+                agent_hold_threshold: Some(0.70),
+                ..FusionConfig::default()
+            };
+            decide_with_configs(
+                INPUT.as_bytes(),
+                &PolicyConfig::default(),
+                &InjectionConfig::default(),
+                &cp,
+                &fusion,
+                Some(&client_with_unusual(0.80)),
+            )
+            .unwrap()
+            .0
+            .outcome
+        };
+        assert_eq!(run(120), Outcome::Hold);
+        assert_eq!(run(12), Outcome::Allow);
     }
 }

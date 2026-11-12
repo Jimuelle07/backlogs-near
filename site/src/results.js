@@ -1,26 +1,27 @@
-// Results section data, read from the committed eval output (docs/results/*.json, C4/C5).
-// Labels follow the README Results table, so the site and the README say the same thing.
+// Results section data (E3 renderer, D4 real data). Labels and caveats follow the README
+// Results section, so the site and the README say the same thing.
 
-// q̂ frozen in checker config (FUSION_HOLD_THRESHOLD, sprints.md C5/C6). results.json's own
-// q_hat is recomputed from the last preset run, so it is not the frozen value.
+export function validateResultsFormat(results) {
+  if (results?.format !== "firewall.results.v1") {
+    throw new Error(`Unsupported results format: expected firewall.results.v1, received ${JSON.stringify(results?.format)}`);
+  }
+}
+
+// q̂ frozen in checker config (FUSION_HOLD_THRESHOLD, sprints.md C5/C6). results.json's top-level
+// q_hat comes from the threshold-0.5 calibration run, so it is not the frozen value (README Results).
 export const FROZEN_Q_HAT = 0.84;
 
-const LABELS = {
+export const CONFIG_LABELS = {
   no_defense: "No defense",
   policy_only: "Policy rules only",
+  classifier_only: "Injection classifier only",
   code_rules_all_signals: "All signals, code rules only (no Jev)",
   jev_fusion_all_signals: "Jev fusion, all signals (hold threshold 0.5)",
   jev_fusion_conformal: `Jev fusion + conformal hold threshold (ε = 5%, q̂ ${FROZEN_Q_HAT})`,
   jev_fusion_conformal_cascade: "Same, with cascade",
 };
 
-// Rows the README lists without numbers; shown so the table never implies they ran.
-export const NOT_RUN = [
-  ["Injection classifier only", "Not run: the classifier model could not be downloaded"],
-  ["Masked re-run (MELON) only", "Not built (cut list)"],
-];
-
-const FAMILIES = {
+const FAMILY_LABELS = {
   direct_injection: "Direct injection",
   encoded_injection: "Encoded injection",
   indirect_injection: "Indirect injection",
@@ -29,53 +30,32 @@ const FAMILIES = {
   fake_invoice: "Fake invoice",
 };
 
-export function pct(value) {
-  return `${Number(value.toFixed(2))}%`;
-}
-
-export function ms(value) {
-  return `${value.toFixed(1)} ms`;
-}
-
-export function jevCalls(n) {
-  return n ? `${Number(n.toFixed(2))} Jev call${n === 1 ? "" : "s"}` : "0 calls";
-}
-
-export function resultRows(results) {
-  return results.configurations.map((c) => ({
-    key: c.configuration,
-    label: LABELS[c.configuration] ?? c.configuration,
-    falseHolds: c.false_holds_pct,
-    falseBlocks: c.false_blocks_pct,
-    missed: c.missed_attacks_pct,
-    medianMs: c.median_latency_ms,
-    jevCalls: c.jev_calls_per_payment ?? 0,
+export function mapResultsRows(results) {
+  validateResultsFormat(results);
+  return results.configurations.map((entry) => ({
+    configuration: entry.configuration,
+    label: CONFIG_LABELS[entry.configuration] ?? entry.configuration,
+    description: entry.description ?? "",
+    falseHoldsPct: entry.false_holds_pct,
+    falseBlocksPct: entry.false_blocks_pct,
+    missedAttacksPct: entry.missed_attacks_pct,
+    medianLatencyMs: entry.median_latency_ms,
+    costPerPaymentUsd: entry.cost_per_payment_usd ?? null,
+    jevCalls: entry.jev_calls_per_payment ?? 0,
+    classifierCalls: entry.classifier_calls_per_payment ?? 0,
   }));
 }
 
-export function redteamRow(redteam) {
-  const s = redteam.summary;
-  return {
-    total: redteam.attack_total,
-    missed: s.missed_attacks_pct,
-    allowed: s.missed_attacks,
-    held: s.held_attacks,
-    blocked: s.blocked_attacks,
-    medianMs: redteam.latency_ms.p50_ms,
-  };
+const numberFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 20 });
+export function formatResultNumber(value) {
+  return value == null ? "Not reported" : numberFormat.format(value);
 }
 
-// Detection per attack family at the frozen q̂, from the final conformal run (README Results).
-export function familyRows(results) {
-  return results.unseen_family_rotation
-    .filter((f) => f.family !== "all")
-    .map((f) => ({
-      key: f.family,
-      label: FAMILIES[f.family] ?? f.family,
-      detected: f.detected,
-      total: f.total,
-      detectedPct: Math.round(f.detection_rate * 1000) / 10,
-    }));
+// Cost is unpriced in the committed runs, so the table shows calls per payment (README Results).
+export function formatCalls({ jevCalls, classifierCalls }) {
+  const part = (n, name) => `${numberFormat.format(n)} ${name} call${n === 1 ? "" : "s"}`;
+  const parts = [jevCalls && part(jevCalls, "Jev"), classifierCalls && part(classifierCalls, "classifier")].filter(Boolean);
+  return parts.length ? parts.join(" + ") : "0 calls";
 }
 
 export function headline(results) {
@@ -83,4 +63,31 @@ export function headline(results) {
   const base = find("no_defense");
   const best = find("jev_fusion_conformal");
   return base && best ? { base, best } : null;
+}
+
+export function redteamRow(redteam) {
+  validateResultsFormat(redteam);
+  const s = redteam.summary;
+  return {
+    total: redteam.attack_total,
+    missedPct: s.missed_attacks_pct,
+    missed: s.missed_attacks,
+    held: s.held_attacks,
+    blocked: s.blocked_attacks,
+    medianMs: redteam.latency_ms.p50_ms,
+  };
+}
+
+// Caught per attack family. by_family holds the real outcomes of the last preset run (the cascade
+// row); unseen_family_rotation is not a detection rate at q̂ (README Results).
+export function familyRows(results) {
+  return Object.entries(results.by_family)
+    .filter(([family]) => family !== "none")
+    .map(([family, f]) => ({
+      family,
+      label: FAMILY_LABELS[family] ?? family,
+      caught: f.total - f.missed_attacks,
+      total: f.total,
+      caughtPct: Math.round(((f.total - f.missed_attacks) / f.total) * 1000) / 10,
+    }));
 }
