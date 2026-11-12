@@ -1,6 +1,6 @@
 # Jev call budget ledger (Sprint 4b, P6)
 
-Budget: at most 2,500 Jev calls. Stop line for starting a new run: 2,400. Calls are counted as cases with `jev_called` in each output file; the two aborted runs have no file and are booked at the counts below.
+Budget: at most 3,100 Jev calls (raised from 2,500 by Jim, 2026-11-13). Stop line for starting a new run: 3,000. Calls are counted as cases with `jev_called` in each output file; the two aborted runs have no file and are booked at the counts below.
 
 ## Environment of every live run
 

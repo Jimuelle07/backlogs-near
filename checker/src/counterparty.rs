@@ -537,9 +537,28 @@ pub fn find_lookalike<'a>(
         LookalikeMatch::Exact(payee)
     } else if let Some((payee, distance, _)) = closest_lookalike {
         LookalikeMatch::Lookalike { payee, distance }
+    } else if let Some((payee, distance)) = payees
+        .iter()
+        .filter(|p| affix_impersonates(receiver_id, &p.account_id))
+        .map(|p| (p, payee_distance(receiver_id, &p.account_id)))
+        .min_by_key(|(_, d)| *d)
+    {
+        // Affix impersonation (Jim, 2026-11-13): the distance may exceed `max_lookalike_distance`.
+        LookalikeMatch::Lookalike { payee, distance }
     } else {
         LookalikeMatch::Novel
     }
+}
+
+/// True when `receiver_id` wraps a known payee's name in an extra word or sub-account:
+/// the receiver's first label contains the payee's first label (payee label >= 5 chars, not equal),
+/// or one of the receiver's later labels equals it (`billing.hostco.demo.testnet`).
+fn affix_impersonates(receiver_id: &str, payee_id: &str) -> bool {
+    let receiver = receiver_id.to_ascii_lowercase();
+    let payee = payee_id.to_ascii_lowercase();
+    let rl: Vec<&str> = receiver.split('.').collect();
+    let pl = payee.split('.').next().unwrap_or("");
+    (pl.len() >= 5 && rl[0] != pl && rl[0].contains(pl)) || rl[1..].contains(&pl)
 }
 
 /// The part of a `view_account` response the checker uses.
@@ -778,6 +797,29 @@ mod tests {
         let profile = AgentProfile::with_default_payees_in(None);
         let m = find_lookalike("brand-new-contractor-999.testnet", &profile.known_payees, 2);
         assert_eq!(m, LookalikeMatch::Novel);
+    }
+
+    #[test]
+    fn test_affix_impersonation_is_lookalike() {
+        let profile = AgentProfile::with_default_payees_in(None);
+        for (receiver, prefix) in [
+            ("hostco-remit.demo.testnet", "hostco"),
+            ("fastcdn-co.demo.testnet", "fastcdn"),
+            ("designer-ana-pay.demo.testnet", "designer-ana"),
+            ("billing.hostco.demo.testnet", "hostco"),
+        ] {
+            let (payee, _) = lookalike_distance_of(receiver, &profile)
+                .unwrap_or_else(|| panic!("{receiver} should be a lookalike"));
+            assert!(payee.starts_with(prefix), "{receiver} -> {payee}");
+        }
+    }
+
+    #[test]
+    fn test_affix_does_not_flag_unrelated_receivers() {
+        let profile = AgentProfile::with_default_payees_in(None);
+        for receiver in ["cdnfast.demo.testnet", "brand-new-contractor-999.testnet"] {
+            assert_eq!(find_lookalike(receiver, &profile.known_payees, 2), LookalikeMatch::Novel);
+        }
     }
 
     fn lookalike_distance_of(receiver: &str, profile: &AgentProfile) -> Option<(String, u32)> {

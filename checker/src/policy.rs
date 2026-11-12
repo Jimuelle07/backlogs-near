@@ -278,31 +278,18 @@ fn scan_amounts(text: &str, decimals: u8) -> Vec<Stated> {
     out
 }
 
+/// Shared test helpers (pattern: `fusion::testing`).
 #[cfg(test)]
-mod tests {
+pub(crate) mod testing {
     use super::*;
     use crate::formats::ContextItem;
 
-    fn input() -> CheckerInput {
+    pub fn input() -> CheckerInput {
         serde_json::from_str(include_str!("../../schemas/examples/checker-input.json")).unwrap()
     }
 
-    fn with(f: impl FnOnce(&mut CheckerInput)) -> CheckerInput {
-        let mut i = input();
-        f(&mut i);
-        i
-    }
-
-    fn ctx(text: &str) -> ContextItem {
-        ContextItem { source: "email".into(), reference: "email:x".into(), trust: "untrusted".into(), text: text.into() }
-    }
-
-    fn ids(i: &CheckerInput, cfg: &PolicyConfig) -> Vec<String> {
-        check(i, cfg).violations
-    }
-
     /// Scenario file -> CheckerInput the way the agent builds it (6 decimals, {NS} = demo.testnet).
-    fn scenario_input(raw: &str) -> CheckerInput {
+    pub fn scenario_input(raw: &str) -> CheckerInput {
         let raw = raw.replace("{NS}", "demo.testnet");
         let s: serde_json::Value = serde_json::from_str(&raw).unwrap();
         let args = &s["scripted_tool_call"]["arguments"];
@@ -325,6 +312,27 @@ mod tests {
             })
             .collect();
         i
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::formats::ContextItem;
+    use super::testing::{input, scenario_input};
+
+    fn with(f: impl FnOnce(&mut CheckerInput)) -> CheckerInput {
+        let mut i = input();
+        f(&mut i);
+        i
+    }
+
+    fn ctx(text: &str) -> ContextItem {
+        ContextItem { source: "email".into(), reference: "email:x".into(), trust: "untrusted".into(), text: text.into() }
+    }
+
+    fn ids(i: &CheckerInput, cfg: &PolicyConfig) -> Vec<String> {
+        check(i, cfg).violations
     }
 
     #[test]

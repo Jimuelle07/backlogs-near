@@ -4,6 +4,7 @@ use crate::formats::*;
 use crate::fusion::{self, FusionConfig, FusionMode};
 use crate::injection::{self, InjectionConfig};
 use crate::policy::{self, PolicyConfig};
+use crate::provenance;
 use crate::sink::{self, SinkConfig};
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -115,7 +116,12 @@ pub fn decide_with_configs(
     let (counterparty_signal, _cp_latency_ms) =
         counterparty::check(&input, counterparty_cfg).map_err(CheckerError::Check)?;
     let mut signals = Signals {
-        policy: policy_cfg.enabled.then(|| policy::check(&input, policy_cfg)),
+        policy: policy_cfg.enabled.then(|| {
+            let mut p = policy::check(&input, policy_cfg);
+            p.violations.extend(provenance::check(&input, &counterparty_cfg.profile.known_payees));
+            p.ok = p.violations.is_empty();
+            p
+        }),
         injection: injection_signal,
         melon: None,
         counterparty: counterparty_signal,

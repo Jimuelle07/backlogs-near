@@ -6,4 +6,5 @@ pub mod fusion;
 pub mod http;
 pub mod injection;
 pub mod policy;
+pub mod provenance;
 pub mod sink;
