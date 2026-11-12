@@ -280,6 +280,113 @@ def test_preset_removes_exported_hold_threshold(tmp_path, monkeypatch):
     assert os.environ["FUSION_HOLD_THRESHOLD"] == "0.9"
 
 
+def _env_probe_runner(names, seen, raises=False):
+    """Stub checker that records the named env vars on every call (optionally then raises)."""
+    import os
+
+    stub = _make_stub_runner()
+
+    def runner(input_bytes, record_dir):
+        seen.append({n: os.environ.get(n) for n in names})
+        if raises:
+            raise RuntimeError("boom")
+        return stub(input_bytes, record_dir)
+
+    return runner
+
+
+def _run_preset(tmp_path, runner, label="jev_fusion_conformal", configurations=None, **kw):
+    return run_all_configurations(
+        Settings.load(),
+        configurations=configurations or [c for c in EVAL_CONFIGURATIONS if c[0] == label],
+        checker_fn=runner,
+        output_path=tmp_path / "results.json",
+        scenario_names=["benign-hosting"],
+        **kw,
+    )
+
+
+def test_preset_removes_exported_reference_examples(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setenv("JEV_REFERENCE_EXAMPLES_JSON", '{"x": 1}')
+    seen: list[dict] = []
+    _run_preset(tmp_path, _env_probe_runner(["JEV_REFERENCE_EXAMPLES_JSON"], seen))
+    assert seen and all(s["JEV_REFERENCE_EXAMPLES_JSON"] is None for s in seen)
+    assert os.environ["JEV_REFERENCE_EXAMPLES_JSON"] == '{"x": 1}'
+
+
+def test_preset_reference_examples_override_restored(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setenv("JEV_REFERENCE_EXAMPLES_JSON", "X")
+    base = dict(EVAL_CONFIGURATIONS)["jev_fusion_conformal"]
+    cfgs = [("with_refs", {**base, "JEV_REFERENCE_EXAMPLES_JSON": "Y"})]
+    seen: list[dict] = []
+    _run_preset(tmp_path, _env_probe_runner(["JEV_REFERENCE_EXAMPLES_JSON"], seen), configurations=cfgs)
+    assert seen and all(s["JEV_REFERENCE_EXAMPLES_JSON"] == "Y" for s in seen)
+    assert os.environ["JEV_REFERENCE_EXAMPLES_JSON"] == "X"
+
+
+def test_set_profile_path_clears_exported_profile_json(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setenv("AGENT_PROFILE_JSON", '{"p": 1}')
+    monkeypatch.setenv("AGENT_PROFILE_PATH", "old.json")
+    monkeypatch.setitem(eval_mod.SCENARIO_SET_ENV, "main", {"AGENT_PROFILE_PATH": "set.json"})
+    seen: list[dict] = []
+    _run_preset(tmp_path, _env_probe_runner(["AGENT_PROFILE_JSON", "AGENT_PROFILE_PATH"], seen))
+    assert seen
+    assert all(s == {"AGENT_PROFILE_JSON": None, "AGENT_PROFILE_PATH": "set.json"} for s in seen)
+    assert os.environ["AGENT_PROFILE_JSON"] == '{"p": 1}'
+    assert os.environ["AGENT_PROFILE_PATH"] == "old.json"
+
+
+def test_set_profile_path_restores_unset_profile_path(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.delenv("AGENT_PROFILE_PATH", raising=False)
+    monkeypatch.setitem(eval_mod.SCENARIO_SET_ENV, "main", {"AGENT_PROFILE_PATH": "set.json"})
+    _run_preset(tmp_path, _env_probe_runner([], []))
+    assert "AGENT_PROFILE_PATH" not in os.environ
+
+
+def test_set_without_env_passes_profile_json_through(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_PROFILE_JSON", '{"p": 1}')
+    monkeypatch.delitem(eval_mod.SCENARIO_SET_ENV, "main", raising=False)
+    seen: list[dict] = []
+    _run_preset(tmp_path, _env_probe_runner(["AGENT_PROFILE_JSON"], seen))
+    assert seen and all(s["AGENT_PROFILE_JSON"] == '{"p": 1}' for s in seen)
+
+
+def test_agent_hold_threshold_passes_through(tmp_path, monkeypatch):
+    monkeypatch.setenv("FUSION_AGENT_HOLD_THRESHOLD", "0.7")
+    seen: list[dict] = []
+    _run_preset(tmp_path, _env_probe_runner(["FUSION_AGENT_HOLD_THRESHOLD"], seen))
+    assert seen and all(s["FUSION_AGENT_HOLD_THRESHOLD"] == "0.7" for s in seen)
+
+
+def test_env_restored_when_run_raises(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setenv("JEV_REFERENCE_EXAMPLES_JSON", "X")
+    monkeypatch.setenv("AGENT_PROFILE_JSON", '{"p": 1}')
+    monkeypatch.delenv("AGENT_PROFILE_PATH", raising=False)
+    monkeypatch.setitem(eval_mod.SCENARIO_SET_ENV, "main", {"AGENT_PROFILE_PATH": "set.json"})
+    seen: list[dict] = []
+    with pytest.raises(Exception):
+        _run_preset(
+            tmp_path,
+            _env_probe_runner(["JEV_REFERENCE_EXAMPLES_JSON", "AGENT_PROFILE_JSON", "AGENT_PROFILE_PATH"], seen, raises=True),
+        )
+    assert seen == [
+        {"JEV_REFERENCE_EXAMPLES_JSON": None, "AGENT_PROFILE_JSON": None, "AGENT_PROFILE_PATH": "set.json"}
+    ]
+    assert os.environ["JEV_REFERENCE_EXAMPLES_JSON"] == "X"
+    assert os.environ["AGENT_PROFILE_JSON"] == '{"p": 1}'
+    assert "AGENT_PROFILE_PATH" not in os.environ
+
+
 def test_cascade_skipped_classifier_is_reported(monkeypatch):
     monkeypatch.setenv("CASCADE_ENABLED", "true")
     monkeypatch.setenv("INJECTION_ENABLED", "true")

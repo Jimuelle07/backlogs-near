@@ -31,6 +31,8 @@ Attackers impersonating known payees employ common typographic variations:
 
 Standard Levenshtein treats adjacent transpositions as two operations (one deletion + one insertion = cost 2). We implement **Damerau-Levenshtein distance (optimal string alignment)**, which recognizes adjacent transpositions as a single edit operation (cost 1).
 
+**Confusable skeleton.** NEAR account ids allow only `a-z 0-9 - _ .`, so the lookalike surface is ASCII confusables, not Unicode homoglyphs (e.g. `cl0udc0x` vs `cloudco`, edit distance 3 without the skeleton). `ascii_skeleton` lowercases ASCII, then makes one left-to-right pass: the two-character sequences `rn`→`m` and `vv`→`w`; the single characters `0`→`o`, `1`→`l`, `i`→`l`, `3`→`e`, `4`→`a`, `5`→`s`, `7`→`t`, `8`→`b`, `9`→`g`, `_`→`-`; every other character is kept. `payee_distance` computes `raw` (the distance defined below); if `raw == 0` it returns 0, otherwise it returns `raw.min(skel.max(1))`, where `skel` is the same distance between the two skeletons. A confusable variant is therefore never an exact match, and its distance is at least 1. `find_lookalike` and `COUNTERPARTY_MAX_LOOKALIKE_DISTANCE` are unchanged except for the tie-break: among payees at the same distance, the one with the smaller raw distance wins, then the one with more prior payments.
+
 ### 2.2 NEAR Subaccount & Suffix Scoping
 
 NEAR accounts use hierarchical dot notation (e.g., `hostco.demo.testnet`, `hostco.testnet`, `hostco`). The distance calculation accounts for network namespaces:

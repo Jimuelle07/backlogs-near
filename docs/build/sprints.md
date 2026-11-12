@@ -42,7 +42,7 @@ Rule for every lane: code against the frozen format and a fixture; swap in the r
 
 Sync points (the only moments lanes must meet): **end of Sprint 2** — testnet gate G2; **end of Sprint 3** — numbers frozen for the demo and site.
 
-## Progress (updated 2026-11-12)
+## Progress (updated 2026-11-13)
 
 Status: **Done** (merged and signed off by Jim), **In progress** (work merged or started, sign-off pending), **Not started** (no branch or PR on GitHub as of 2026-11-10); a backend task counts as done only after Jim signs it off.
 
@@ -69,6 +69,12 @@ Status: **Done** (merged and signed off by Jim), **In progress** (work merged or
 | C6 | README results and limits; freeze thresholds | — | **Done** (PR #21; signed off by Jim 2026-11-12) | `README.md` Results and Limits from `docs/results/results.json` (`78e3fcb`); `FUSION_HOLD_THRESHOLD` 0.84 |
 | D1 | Landing page skeleton | Helena | **Not started** | No branch or PR yet |
 | E1 | Live receipts panel | Ace | **In progress** | PR #11 review changes: panel integrated into `site/` using the shared React 18.3.1 / Vite 5.4.21 stack and brand; standalone app removed. 8/8 unit tests, production build and 7 Edge browser checks pass (390px, no horizontal scroll); Helena's re-review pending; see [site/README.md](../../site/README.md) |
+| P1 | Classifier fails loudly; `firewall-eval --preset`, scenario sets `external` and `paysim` | Jim | **Done** (signed off by Jim 2026-11-13) | `805a573`, follow-ups `73cb901`, `457d727`; signed off by Jim 2026-11-13 |
+| P2 | ASCII confusable skeleton for lookalike detection | Jim | **Done** (signed off by Jim 2026-11-13) | `b9ba730`: `checker/src/counterparty.rs`, `docs/results/lookalike-bench.json`; signed off by Jim 2026-11-13 |
+| P3 | Injection classifier benchmark on public corpora | Jim | **Done** (signed off by Jim 2026-11-13) | `90e6fe9`: `agent/tools/bench_classifier.py`, `docs/results/classifier-bench.{json,md}`; signed off by Jim 2026-11-13 |
+| P4 | External held-out scenario set; opt-in Jev reference examples; per-agent hold threshold | Jim | **Done** (signed off by Jim 2026-11-13) | `c816c20`, `3460b50`, `0a6e0fa`: `agent/scenarios/external/` (200 scenarios), `JEV_REFERENCE_EXAMPLES_JSON`, `FUSION_AGENT_HOLD_THRESHOLD`; signed off by Jim 2026-11-13 |
+| P5 | Kaggle-derived builders (BEC reference examples, PaySim agent) | Jim | **Done** (signed off by Jim 2026-11-13) | `1d289e7`, `bc76e18`: `agent/tools/build_bec_examples.py`, `agent/tools/build_paysim_set.py`; signed off by Jim 2026-11-13 |
+| P6 | Live runs, README results, Hugging Face dataset export | Jim | **Done** (signed off by Jim 2026-11-13) | export script `beb8939`; live runs and results `8bb0618`, `docs/results/jev-budget.md`; run 9 not run (budget); signed off by Jim 2026-11-13 |
 | E2 | Receipt detail view | Ace | **In progress** | 2026-11-13: local implementation on `feat/e2-receipt-detail` from `origin/main` after PR #11 merged. Inline details, keyboard opening, Escape/close with focus restoration, hash copy controls, account links and integer hold countdown; `get_held` pages pinned to the receipt snapshot. `cd site && npm test`: 21/21 pass; `npm run build`: pass. Browser interaction checks and Helena's review pending. |
 
 Sign-off checks 2026-11-11 (A2, A3, B1, B2, C1, C2): `cargo test --workspace --no-fail-fast` passed (checker 49, guardian 91, tusdc 3; 2 ignored) after fixing the A2 test server in `checker/src/sink.rs` to read the full request body; `cd agent && uv run pytest` passed (158).
@@ -159,7 +165,7 @@ Goal: gate G2. Frontend first finishes the Sprint 1 carry-over (D1 In progress i
 | B4 | B | Backend | S | Checker hardening: range-check Jev `confidence`/`score` and choice vs argmax, HTTPS-only base URL, no HTTP redirects, timeout budget fitted to OutLayer's limit | Tests; review findings closed | — | Jesus | Not started |
 | C3 | C | Backend | M | Jev fusion in `decide()`: build Jev `state` from signals and profile, ask the four questions, apply hold/block thresholds from checker config; block only when two detectors agree, at most one of them Jev | Stub allow removed; tests on C1 fixtures; real reason codes | C1 fixtures (real B1/C2/B3 outputs swap in as they land) | paticolcol (pairs with Jim) | Done, awaiting sign-off (merged in PR #18, `136224d`; no `agent_profile` in the state until a profile producer exists) |
 | D2 | D | Frontend | M | "How it works" section: architecture diagram (agent → Guardian → checker → verdict → transfer), allow/hold/block, amount-safety table | Section live; copy approved by a backend owner | D1 | Helena | Not started |
-| D3 | D | Frontend | S | Demo storyboard: shot list for the ~2-minute script ([idea.md Demo script](idea.md#demo-script-about-2-minutes)), numbers slide, 20-second GIF plan | Storyboard approved | — | Helena | In review (storyboard in [demo-storyboard.md](demo-storyboard.md), PR #16 merged; awaiting approval) |
+| D3 | D | Frontend | S | Demo storyboard: shot list for the ~2-minute script ([idea.md Demo script](idea.md#demo-script-about-2-minutes)), numbers slide, 20-second GIF plan | Storyboard approved | — | Helena | Done (storyboard in [demo-storyboard.md](demo-storyboard.md), PRs #16, #20 and #26; signed off by Jim 2026-11-13) |
 | E2 | E | Frontend | M | Receipt detail view: verdict, reason codes, input and record hashes, explorer link, hold countdown | Works for paid, held, refused and timed-out receipts | E1 | Ace | In progress (2026-11-13: implemented locally on `feat/e2-receipt-detail`; 21/21 node tests and production build pass; browser interaction checks and Helena's review pending) |
 | E3 | E | Frontend | S | Results section rendering `results.json` (table plus a simple chart) with the stated caveats (exchangeability, known attack families) | Renders the C1 example | C1 example | Ace | Implemented, awaiting review in PR #25 on `feat/e3-results-section`: C1 sample table/chart, format guard; after merging `origin/main`, `npm test` 27 passed and `npm run build` passed (2026-11-13); Chrome at 390 × 844px verified readable chart labels, no page overflow or browser errors, and table scrolling within its container |
 | G2 | All | — | — | **Gate:** on testnet through the real checker, one benign payment pays and one attack is blocked | Receipts show both | C3, A1 or A0 | Jim (signs) | Not started |
@@ -199,6 +205,19 @@ Goal: numbers frozen for the demo and site (sync point at the end of this sprint
 | D6 | D | Frontend | M | Landing page final: embed video and GIF, final copy, mobile and accessibility pass, meta and preview image, link check | Production URL | A8, E4 | |
 | E5 | E | Frontend | S | Hosting check: uptime through 2026-11-25; receipts panel points at the final Guardian | Uptime check in place | D6 | |
 | E6 | E | Frontend | S | Visuals for the X demo post (cover frame, screenshots) | Ready for the human to post | A8 | |
+
+## Sprint 4b — public datasets (due Sat 14 Nov)
+
+Added by Jim on 2026-11-12: improve the tool with public data from huggingface.co and kaggle.com. CC BY-SA sources (Kaggle PaySim, Kaggle adversarial BEC) are read from `KAGGLE_DATA_DIR` and never committed; attribution for committed data is in `agent/scenarios/external/ATTRIBUTION.md`.
+
+| ID | Lane | Track | Size | Task | Done when | Starts from | Owner |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P1 | C | Backend | S | Classifier fails loudly instead of silently using keywords (`--heuristic` opt-in, model reported truthfully); `firewall-eval --preset`, scenario sets `external` and `paysim` | `uv run pytest` passes; a model load failure exits non-zero | C2, C4 | Jim |
+| P2 | B | Backend | S | Lookalike detection with an ASCII confusable skeleton (`checker/src/counterparty.rs`), benchmarked on the Kaggle homoglyph domain data | `cargo test --workspace` passes; `docs/results/lookalike-bench.json` committed | B3 | Jim |
+| P3 | C | Backend | M | Injection classifier benchmark on public corpora it was not trained on (`agent/tools/bench_classifier.py`) | `docs/results/classifier-bench.json` has 5 corpora × 2 backends | P1 | Jim |
+| P4 | A | Backend | M | External held-out payment scenario set from public benchmarks (`agent/scenarios/external/`); checker: opt-in Jev reference examples (`JEV_REFERENCE_EXAMPLES_JSON`) and per-agent hold threshold (`FUSION_AGENT_HOLD_THRESHOLD`) | External set loads with benign = attack; checker tests pass | A6, C3 | Jim |
+| P5 | A | Backend | M | Kaggle-derived builders, outputs gitignored: BEC reference examples and a PaySim agent with 120 prior payments (`agent/tools/build_bec_examples.py`, `agent/tools/build_paysim_set.py`) | `firewall-eval --scenario-set paysim` runs 200 benign + 20 attack | P1 | Jim |
+| P6 | C | Backend | M | Live runs with a Jev budget ledger (≤2,500 calls), README Results and Limits, Hugging Face dataset export folder (Jim uploads) | Every new README number cites a committed `docs/results/*` file | P1–P5 | Jim |
 
 ## Sprint 5 — submit
 
