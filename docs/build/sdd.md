@@ -293,6 +293,8 @@ All configuration comes from environment variables; `.env.example` is the canoni
 | `POLICY_MAX_MEMO_CHARS` | Memo length cap in characters, default 128 | checker |
 | `DECISION_LOG_URL` | Off-chain DecisionRecord sink URL (OutLayer secret); when set, the checker POSTs each DecisionRecord JSON and downgrades `allow` to `hold` on failure | checker (`SinkConfig`) |
 | `FUSION_HOLD_THRESHOLD` | q̂ on Jev `unusual` (§5), in [0, 1]; default 0.84: q̂ calibrated 2026-11-12 on 150 benign cases, ε = 5% (C5) | checker (`FusionConfig`) |
+| `FUSION_AGENT_HOLD_THRESHOLD` | Probability in [0, 1]; optional, unset by default. Replaces `FUSION_HOLD_THRESHOLD` only when the agent profile has `payments_last_90d >= 99` (`PER_AGENT_MIN_PAYMENTS`). Out of range fails the run (exit 2) | checker (`FusionConfig`) |
+| `JEV_REFERENCE_EXAMPLES_JSON` | Optional, opt-in, never set by default. JSON object with exactly the keys `fraud_examples` and `legitimate_examples`, each an array of 1–10 strings of at most 600 characters; added to the Jev state as `reference_cases`. In our evaluation the content comes from CC BY-SA data and is never committed. Any violation fails the run (exit 2) | checker (`FusionConfig`) |
 | `FUSION_INJECTION_THRESHOLD` | `injection_high` fires above this classifier `max_score`, in [0, 1]; default 0.5 | checker (`FusionConfig`) |
 | `FUSION_JEV_INJECTION_THRESHOLD` | `jev_injection_driven` fires above this Jev probability, in [0, 1]; default 0.5 | checker (`FusionConfig`) |
 | `FUSION_JEV_RECEIVER_RISK_THRESHOLD` | `jev_receiver_risk` fires above this P("Suspicious payee"), in [0, 1]; default 0.5 | checker (`FusionConfig`) |

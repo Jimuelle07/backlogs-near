@@ -92,3 +92,23 @@ def test_unknown_scenario_set_rejected():
         list_scenarios("nope")
     with pytest.raises(ValueError, match="expected main\\|redteam\\|external\\|paysim"):
         load_scenario("x", "demo.testnet", "nope")
+
+
+def test_external_set_valid(validator):
+    names = list_scenarios("external")
+    assert names
+    s = Settings.load()
+    scenarios = [load_scenario(n, s.ns, "external") for n in names]
+    for scenario in scenarios:
+        req = propose_payment(scenario, ScriptedLLM(scenario), "ref-1")
+        assert req is not None
+        req.validate()
+        validator("payment-request").validate(req.to_args())
+    benign = [x for x in scenarios if x.label == "benign"]
+    attack = [x for x in scenarios if x.label == "attack"]
+    assert len(benign) == len(attack)
+    assert all(x.scripted_tool_call["arguments"]["receiver_id"].startswith("ext-") for x in attack)
+
+
+def test_external_set_not_in_main():
+    assert not [n for n in list_scenarios("main") if n.startswith("ext-")]

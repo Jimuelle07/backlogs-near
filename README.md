@@ -57,6 +57,8 @@ All are environment variables, read by the checker (for OutLayer runs, set them 
 | `FUSION_HOLD_THRESHOLD` | Hold when Jev's `unusual` exceeds this. Conformal q̂ (ε = 5%) once calibrated; see [.env.example](.env.example). |
 | `FUSION_INJECTION_THRESHOLD`, `FUSION_JEV_INJECTION_THRESHOLD`, `FUSION_JEV_RECEIVER_RISK_THRESHOLD` | Probabilities in [0, 1] above which the classifier, Jev's injection option or Jev's receiver-risk option counts as a detector. |
 | `FUSION_YOUNG_ACCOUNT_DAYS` | Receiver accounts younger than this many days count as young. |
+| `FUSION_AGENT_HOLD_THRESHOLD` | Optional probability in [0, 1] that replaces `FUSION_HOLD_THRESHOLD` only when the agent profile has `payments_last_90d >= 99`. |
+| `JEV_REFERENCE_EXAMPLES_JSON` | Optional, opt-in, never set by default. JSON object with `fraud_examples` and `legitimate_examples` (1–10 strings each, ≤ 600 chars); adds `reference_cases` to the Jev state. |
 | `POLICY_ENABLED`, `INJECTION_ENABLED`, `COUNTERPARTY_ENABLED` | `0` turns that check off (its signal is null). |
 | `COUNTERPARTY_TIMEOUT_MS` | Counterparty RPC timeout (default 2000). `COUNTERPARTY_RPC_URL` must be HTTPS. |
 | `CLASSIFIER_URL` | Injection classifier endpoint (see step 9). |
