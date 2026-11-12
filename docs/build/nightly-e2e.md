@@ -246,6 +246,6 @@ Testnet (Jim confirmed each signing step):
 | Request 5, attack: 180 tUSDC to `hostc0.jimuelle-firewall.testnet` | `hold` → `held`; record `56e7d96d84323f69cead5981974a87d8bcdd6092600f32f59d28d2cab0a1b9a7` |
 | Owner `cancel_held` on request 5 | tx `AhSwfSbaxu1BkbCbywicC9F1fQN81naYnJzZEKbjfNzA`; receipt `refused`, outcome `hold`. Cancelled because `release_held` is a permissionless crank that pays a held request after its window with no re-check |
 
-The relayer was stopped. The Guardian was left in relayer mode. Restoring OutLayer mode needs the new checker wasm uploaded, then `set_checker_mode` with `secrets_ref` and the OutLayer secrets `TYPESAFE_API_KEY` and `FUSION_HOLD_THRESHOLD`.
+The relayer was stopped. The Guardian was left in relayer mode. Restoring OutLayer mode needs the new checker wasm uploaded, then `set_checker_mode` with `secrets_ref` and the OutLayer secrets `TYPESAFE_API_KEY`, `FUSION_HOLD_THRESHOLD` and `COUNTERPARTY_NAMESPACE=jimuelle-firewall.testnet`. The namespace is required because only the agent's `run_checker` sets it; without it the OutLayer run treats `hostco.jimuelle-firewall.testnet` as a lookalike of bare `hostco` and holds benign payments.
 
 Keyless fresh clone (no `.env`): the demo printed `hold` with `check_unavailable`; the dry-run nightly exited 1 with benign `[FAIL]`, as in section 3C.

@@ -310,7 +310,7 @@ impl CounterpartyConfig {
         } else {
             let namespace = var("COUNTERPARTY_NAMESPACE");
             if let Some(ns) = &namespace {
-                if ns.starts_with('.') || ns.ends_with('.') || ns.chars().any(char::is_whitespace) {
+                if !is_valid_account_suffix(ns) {
                     return Err(format!(
                         "COUNTERPARTY_NAMESPACE: expected an account suffix like jimuelle-firewall.testnet (no leading dot), got {ns:?}"
                     ));
@@ -611,6 +611,18 @@ pub fn check(
     Ok((Some(signal), elapsed_ms))
 }
 
+/// NEAR account id rules: 2-64 chars; dot-separated labels, each non-empty `[a-z0-9]` runs
+/// joined by single `-` or `_` (none at label start or end).
+fn is_valid_account_suffix(ns: &str) -> bool {
+    (2..=64).contains(&ns.len())
+        && ns.split('.').all(|label| {
+            !label.is_empty()
+                && label.split(['-', '_']).all(|part| {
+                    !part.is_empty() && part.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+                })
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -796,6 +808,23 @@ mod tests {
             _ => None,
         };
         assert_eq!(CounterpartyConfig::from_vars(explicit).unwrap().profile.known_payees.len(), 1);
+    }
+
+    #[test]
+    fn test_counterparty_namespace_validates_account_suffix() {
+        let ns = |v: &'static str| {
+            move |k: &str| match k {
+                "COUNTERPARTY_NAMESPACE" => Some(v.to_string()),
+                _ => None,
+            }
+        };
+        for bad in ["a..b", "Jimuelle.testnet", "bad$.testnet", "-x.testnet"] {
+            let err = CounterpartyConfig::from_vars(ns(bad)).unwrap_err();
+            assert!(err.starts_with("COUNTERPARTY_NAMESPACE:"), "{bad}: {err}");
+        }
+        for good in ["jimuelle-firewall.testnet", "demo.testnet", "a_b.testnet"] {
+            assert!(CounterpartyConfig::from_vars(ns(good)).is_ok(), "{good}");
+        }
     }
 
     #[test]
