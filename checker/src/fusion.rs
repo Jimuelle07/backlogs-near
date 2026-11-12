@@ -20,10 +20,10 @@ pub enum FusionMode {
     CodeRules,
 }
 
-/// Checker config for fusion. Defaults are uncalibrated until C5 sets `hold_threshold` to q̂.
+/// Checker config for fusion. `hold_threshold` defaults to the frozen q̂ 0.84 (C5); the other probability thresholds are uncalibrated 0.5.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FusionConfig {
-    /// `FUSION_HOLD_THRESHOLD`, q̂ on Jev `unusual`; default 0.5.
+    /// `FUSION_HOLD_THRESHOLD`, q̂ on Jev `unusual`; default 0.84 (q̂ calibrated 2026-11-12 on 150 benign cases, ε = 5%).
     pub hold_threshold: f64,
     /// `FUSION_INJECTION_THRESHOLD`, on the classifier `max_score`; default 0.5.
     pub injection_threshold: f64,
@@ -42,7 +42,7 @@ pub struct FusionConfig {
 impl Default for FusionConfig {
     fn default() -> Self {
         Self {
-            hold_threshold: 0.5,
+            hold_threshold: 0.84,
             injection_threshold: 0.5,
             jev_injection_threshold: 0.5,
             jev_receiver_risk_threshold: 0.5,
@@ -361,7 +361,8 @@ mod tests {
 
     #[test]
     fn fixtures_fuse() {
-        let cfg = FusionConfig::default();
+        // The hold-unusual fixture has unusual = 0.84; pin the pre-C5 threshold it was written for.
+        let cfg = FusionConfig { hold_threshold: 0.5, ..FusionConfig::default() };
         let cases: [(&str, Outcome, Vec<ReasonCode>); 5] = [
             (
                 include_str!("../../schemas/fixtures/decision-record-benign.json"),
@@ -407,9 +408,9 @@ mod tests {
     #[test]
     fn unusual_at_threshold_allows() {
         let cfg = FusionConfig::default();
-        let at = Signals { jev: Some(jev(0.5, 0.0, 0.0)), ..Signals::default() };
+        let at = Signals { jev: Some(jev(0.84, 0.0, 0.0)), ..Signals::default() };
         assert_eq!(fuse(&at, &cfg), (Outcome::Allow, vec![ChecksPassed]));
-        let above = Signals { jev: Some(jev(0.5000001, 0.0, 0.0)), ..Signals::default() };
+        let above = Signals { jev: Some(jev(0.8400001, 0.0, 0.0)), ..Signals::default() };
         assert_eq!(fuse(&above, &cfg), (Outcome::Hold, vec![UnusualForAgent]));
     }
 
