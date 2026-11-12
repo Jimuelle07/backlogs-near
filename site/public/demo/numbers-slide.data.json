@@ -1,0 +1,129 @@
+{
+  "mainSource": "docs/results/results.json",
+  "externalSource": "docs/results/external-results.json",
+  "hashEncoding": "SHA-256 of UTF-8 text with LF line endings; TTF fonts hashed as binary bytes",
+  "sources": {
+    "docs/results/results.json": {
+      "sha256": "33bebfc1628e89b53c97c759fc9ec84d86a8d95167e3c9a852837fc304d2e817"
+    },
+    "docs/results/external-results.json": {
+      "sha256": "69fa96556b303e4bcaab519de5988ccb84fcba344c8561d34ea68a840bb59585"
+    },
+    "contract/guardian/src/lib.rs": {
+      "sha256": "5c9e00615ee721ee867a1a06d6d52fba749297749d9745c4c31755b296858fb7"
+    },
+    "site/src/styles.css": {
+      "sha256": "d33aea70fb7dfe7bbdae97d20d081220ce8b2fd09b0b6aa85ca6bf88ebaaad0a"
+    },
+    "site/scripts/demo-assets/fonts/Geist-Regular.ttf": {
+      "sha256": "ccce59465ae5c61930ada5453834f60500fbd95084d85db63e0e65fad0125455"
+    },
+    "site/scripts/demo-assets/fonts/Geist-Medium.ttf": {
+      "sha256": "a8eefb873ba9c9020665f8a98302697ce1f3b79ab2deef6ee508c0ca6a82e876"
+    },
+    "site/scripts/demo-assets/fonts/OFL.txt": {
+      "sha256": "f12f59163d92084b0473315ae4566cde0c1233d940ae464f5225a69c347cc691"
+    },
+    "site/src/config.js": {
+      "sha256": "daa2b4b51ceccb3d9bf20317bbfdd0caef7dea6b5a5c423bc2a8cd5989ce2a39"
+    },
+    "site/src/results.js": {
+      "sha256": "41d9dbb2c73defb5fa28c15c786deed18998ed1b1a921032244643cd1e18798a"
+    },
+    "site/src/demo-assets.js": {
+      "sha256": "4c6a272ed74a46782f41809de0bebaf7f78e58e56474f78364f588ad708ab707"
+    },
+    "site/scripts/generate-demo-assets.mjs": {
+      "sha256": "6f40b367a6b40a16a413df7553e9a45838c3e63503731630c90ad2ecbfdf63ad"
+    },
+    "site/scripts/demo-assets/numbers-slide.js": {
+      "sha256": "534980f02bf8f0df6a4f2fb5ec34f01d6f53cd62625045cc93d39f61a371fa8b"
+    },
+    "docs/build/demo-storyboard.md": {
+      "sha256": "175e6f7e02b334ddc4f9513958b429b1b2b432e270f793a705ae5861e1ca349e"
+    }
+  },
+  "selections": {
+    "headline": "configurations.jev_fusion_conformal",
+    "baseline": "configurations.no_defense",
+    "families": "by_family (final preset: jev_fusion_conformal_cascade)",
+    "target": "caveats: epsilon percentage (not unseen_family_rotation)",
+    "caps": "Rust PER_PAYMENT_CAP_WHOLE and DAILY_CAP_WHOLE; whole tUSDC limits, not evaluation metrics",
+    "latency": "configurations.jev_fusion_conformal.median_latency_ms / 1000; seconds, rounded to 3 decimals"
+  },
+  "metrics": {
+    "sample": false,
+    "benign": 150,
+    "attack": 150,
+    "mainConfiguration": "jev_fusion_conformal",
+    "baselineConfiguration": "no_defense",
+    "missedPct": 19.33,
+    "missed": 29,
+    "baselineMissedPct": 100,
+    "falseBlocksPct": 0,
+    "baselineFalseBlocksPct": 0,
+    "falseBlocks": 0,
+    "falseHoldsPct": 5.33,
+    "falseHolds": 8,
+    "targetPct": 5,
+    "targetRelation": "above",
+    "medianSeconds": 1.3249469999999999,
+    "jevCalls": 1,
+    "classifierCalls": 1,
+    "heldOut": {
+      "benign": 100,
+      "attack": 100,
+      "missedPct": 17,
+      "falseHoldsPct": 18,
+      "falseBlocksPct": 0
+    },
+    "families": [
+      {
+        "family": "fake_invoice",
+        "label": "Fake invoice",
+        "caught": 13,
+        "total": 25,
+        "caughtPct": 52
+      },
+      {
+        "family": "memory_poisoning",
+        "label": "Memory poisoning",
+        "caught": 13,
+        "total": 25,
+        "caughtPct": 52
+      },
+      {
+        "family": "encoded_injection",
+        "label": "Encoded injection",
+        "caught": 23,
+        "total": 25,
+        "caughtPct": 92
+      },
+      {
+        "family": "lookalike_receiver",
+        "label": "Lookalike receiver",
+        "caught": 23,
+        "total": 25,
+        "caughtPct": 92
+      },
+      {
+        "family": "direct_injection",
+        "label": "Direct injection",
+        "caught": 24,
+        "total": 25,
+        "caughtPct": 96
+      },
+      {
+        "family": "indirect_injection",
+        "label": "Indirect injection",
+        "caught": 24,
+        "total": 25,
+        "caughtPct": 96
+      }
+    ],
+    "caps": {
+      "perPayment": 200,
+      "perDay": 500
+    }
+  }
+}

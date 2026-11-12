@@ -30,6 +30,7 @@ Frontend D1/E1: [site/README.md](../site/README.md) — shared landing page and 
 | [build/nightly-e2e.md](build/nightly-e2e.md) | B2 runbook for firewall-nightly-e2e: one benign and one attack payment on testnet, CLI flags, expected output | Running or signing off the nightly testnet check (human signs) |
 | [results/ledger.md](results/ledger.md) | Ledger of every recorded test and eval run: what ran, keys, result, Jev calls, link to the record; entry template | Adding a run; finding the record of a run |
 | [build/demo-storyboard.md](build/demo-storyboard.md) | D3 demo storyboard: shot list for the 2-minute demo, numbers slide, 20-second GIF plan, open questions | Recording the demo (A8), making the GIF and slide (E4) |
+| [build/e4-demo-assets.md](build/e4-demo-assets.md) | E4 numbers-slide sources, regeneration and verification; actual shot 4 footage needed for the GIF | Regenerating the slide or completing the blocked-attack GIF |
 | [hackathon-context/HACKATHON.md](hackathon-context/HACKATHON.md) | Official agent instructions and rules snapshot; the live https://nearhackathon.com/HACKATHON.md wins | Before any rules question or submission step |
 | [hackathon-context/near_hackathon_web.md](hackathon-context/near_hackathon_web.md) | Full site capture: timeline, prizes, judges, tracks, submission API | Looking up event facts |
 | [hackathon-context/near_hackathon_tracks_ranked.md](hackathon-context/near_hackathon_tracks_ranked.md) | Jev primer, track ranking, the three bets, winning checklist | Choosing the project; designing Jev usage |
