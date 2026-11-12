@@ -1,3 +1,4 @@
+use crate::counterparty::{self, CounterpartyConfig};
 use crate::decision::{self, DecisionClient};
 use crate::formats::*;
 use crate::fusion::{self, FusionConfig};
@@ -39,14 +40,16 @@ pub fn record_bytes(record: &DecisionRecord) -> Result<Vec<u8>, CheckerError> {
     serde_json::to_vec(record).map_err(|e| CheckerError::Serialize(e.to_string()))
 }
 
-/// The checker pipeline: policy and injection checks, the four Jev questions through the
-/// `DecisionClient`, then `fusion::fuse` for outcome and reasons (`sdd.md §5`).
-/// Configs come from the environment (`POLICY_*`, `INJECTION_*`/`CLASSIFIER_URL`, `FUSION_*`); a
-/// missing decision client (no keys) leaves `signals.jev` null, which holds. When `DECISION_LOG_URL`
-/// is set the record is POSTed to the sink (POST failure downgrades `allow` to `hold`).
+/// The checker pipeline: policy, injection and counterparty checks, the four Jev questions through
+/// the `DecisionClient`, then `fusion::fuse` for outcome and reasons (`sdd.md §5`).
+/// Configs come from the environment (`POLICY_*`, `INJECTION_*`/`CLASSIFIER_URL`,
+/// `COUNTERPARTY_*`/`AGENT_PROFILE_*`, `FUSION_*`); a missing decision client (no keys) leaves
+/// `signals.jev` null, which holds. When `DECISION_LOG_URL` is set the record is POSTed to the sink
+/// (POST failure downgrades `allow` to `hold`).
 pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerError> {
     let policy_cfg = PolicyConfig::from_env().map_err(CheckerError::Config)?;
     let injection_cfg = InjectionConfig::from_env().map_err(CheckerError::Config)?;
+    let counterparty_cfg = CounterpartyConfig::from_env().map_err(CheckerError::Config)?;
     let fusion_cfg = FusionConfig::from_env().map_err(CheckerError::Config)?;
     let sink_cfg = SinkConfig::from_env();
     let client = decision::client_from_env()
@@ -56,6 +59,7 @@ pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerEr
         input_bytes,
         &policy_cfg,
         &injection_cfg,
+        &counterparty_cfg,
         &fusion_cfg,
         client.as_deref(),
     )?;
@@ -72,6 +76,7 @@ pub fn decide_with(
         input_bytes,
         policy_cfg,
         &InjectionConfig::default(),
+        &CounterpartyConfig::default(),
         &FusionConfig::default(),
         client,
     )
@@ -81,6 +86,7 @@ pub fn decide_with_configs(
     input_bytes: &[u8],
     policy_cfg: &PolicyConfig,
     injection_cfg: &InjectionConfig,
+    counterparty_cfg: &CounterpartyConfig,
     fusion_cfg: &FusionConfig,
     client: Option<&dyn DecisionClient>,
 ) -> Result<(Verdict, DecisionRecord), CheckerError> {
@@ -92,11 +98,13 @@ pub fn decide_with_configs(
     let version = env!("CARGO_PKG_VERSION").to_string();
     let (injection_signal, _latency_ms) =
         injection::check(&input, injection_cfg).map_err(CheckerError::Check)?;
+    let (counterparty_signal, _cp_latency_ms) =
+        counterparty::check(&input, counterparty_cfg).map_err(CheckerError::Check)?;
     let mut signals = Signals {
         policy: policy_cfg.enabled.then(|| policy::check(&input, policy_cfg)),
         injection: injection_signal,
         melon: None,
-        counterparty: None,
+        counterparty: counterparty_signal,
         jev: None,
     };
     if let Some(c) = client {
@@ -137,7 +145,31 @@ pub fn decide_with_configs(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::counterparty::AgentProfile;
     use crate::fusion::testing::FixedClient;
+
+    fn counterparty_on() -> CounterpartyConfig {
+        CounterpartyConfig {
+            enabled: true,
+            profile: AgentProfile::with_default_payees(),
+            ..CounterpartyConfig::default()
+        }
+    }
+
+    fn decide_counterparty(
+        input: &[u8],
+        cfg: &CounterpartyConfig,
+    ) -> (Verdict, DecisionRecord) {
+        decide_with_configs(
+            input,
+            &PolicyConfig::default(),
+            &InjectionConfig::default(),
+            cfg,
+            &FusionConfig::default(),
+            Some(&FixedClient::benign()),
+        )
+        .unwrap()
+    }
 
     const INPUT: &str = include_str!("../../schemas/examples/checker-input.json");
     const VERDICT: &str = include_str!("../../schemas/examples/verdict.json");
@@ -297,5 +329,45 @@ mod tests {
         let h: DecisionRecord = serde_json::from_str(FIXTURE_HOLD).unwrap();
         assert_eq!(h.outcome, Outcome::Hold);
         assert_eq!(h.reasons, vec![ReasonCode::UnusualForAgent]);
+    }
+
+    #[test]
+    fn decide_populates_counterparty_signal() {
+        let (v, r) = decide_counterparty(INPUT.as_bytes(), &counterparty_on());
+        assert_eq!(v.outcome, Outcome::Allow);
+        let cp = r.signals.counterparty.expect("counterparty signal populated");
+        assert_eq!(cp.lookalike_of, None);
+        assert_eq!(cp.lookalike_distance, None);
+        assert!(cp.prior_payments > 0);
+        assert!(!cp.is_contract);
+    }
+
+    #[test]
+    fn decide_detects_lookalike_receiver() {
+        let mut input_val: serde_json::Value = serde_json::from_str(INPUT).unwrap();
+        input_val["receiver_id"] = "hostc0.demo.testnet".into();
+        let bytes = serde_json::to_vec(&input_val).unwrap();
+
+        let (v, r) = decide_counterparty(&bytes, &counterparty_on());
+        let cp = r.signals.counterparty.expect("counterparty signal populated");
+        assert!(cp.lookalike_of.as_deref().unwrap_or("").contains("hostco"));
+        assert_eq!(cp.lookalike_distance, Some(1));
+        assert_eq!(cp.prior_payments, 0);
+        assert!(v.reasons.contains(&ReasonCode::LookalikeReceiver));
+    }
+
+    #[test]
+    fn decide_with_counterparty_disabled_yields_null() {
+        let cp_cfg = CounterpartyConfig { enabled: false, ..CounterpartyConfig::default() };
+        let (_v, r) = decide_with_configs(
+            INPUT.as_bytes(),
+            &PolicyConfig::default(),
+            &InjectionConfig::default(),
+            &cp_cfg,
+            &FusionConfig::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.signals.counterparty, None);
     }
 }
