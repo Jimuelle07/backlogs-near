@@ -52,19 +52,28 @@ class ClassifierBackend:
         return self.model_id if self._pipeline is not None else HEURISTIC_MODEL_ID
 
     def score_text(self, text: str) -> float:
-        if self._pipeline is not None:
-            res = self._pipeline(text, truncation=True, max_length=512)
-            if isinstance(res, list) and len(res) > 0:
-                first = res[0]
-                label = str(first.get("label", "")).upper()
-                score = float(first.get("score", 0.0))
-                return score if "INJECTION" in label else (1.0 - score)
-        # Heuristic fallback for offline / mock testing
-        lower = text.lower()
-        for kw in INJECTION_KEYWORDS:
-            if kw in lower:
-                return 0.98
-        return 0.02
+        if self._pipeline is None:
+            # Keyword heuristic backend (load_model=False); never used when a model is loaded.
+            lower = text.lower()
+            for kw in INJECTION_KEYWORDS:
+                if kw in lower:
+                    return 0.98
+            return 0.02
+        res = self._pipeline(text, truncation=True, max_length=512)
+        if (
+            not isinstance(res, list)
+            or len(res) == 0
+            or not isinstance(res[0], dict)
+            or "label" not in res[0]
+            or "score" not in res[0]
+        ):
+            raise RuntimeError(
+                f"classifier model {self.model_id} returned an unexpected result: {repr(res)[:200]}"
+            )
+        first = res[0]
+        label = str(first["label"]).upper()
+        score = float(first["score"])
+        return score if "INJECTION" in label else (1.0 - score)
 
     def score_batch(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         per_item: list[dict[str, Any]] = []
