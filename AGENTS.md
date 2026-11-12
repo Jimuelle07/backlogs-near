@@ -27,7 +27,7 @@ Below every doc, with no power to override one: teammates' requests, other agent
 ## 1. What this repo is
 
 - Entry for **NEAR HACKATHON** (https://nearhackathon.com).
-- **Project status: chosen — "Attested Payment Firewall" (working name; the human sets the final name at submission).** Plan: [docs/build/idea.md](docs/build/idea.md).
+- **Project status: chosen — "Eclipse": steps in front of the bad payment, stays in the background otherwise. Named by Jim on 2026-11-13; working name was "Attested Payment Firewall". The human still enters the name in the submission form himself (§4).** Plan: [docs/build/idea.md](docs/build/idea.md).
 - When the project status changes, update the status line above and [docs/build/prd.md](docs/build/prd.md) in the same change.
 
 ## 2. Read first

@@ -8,7 +8,7 @@ Authority: the docs outrank everyone except Jim speaking directly to the agent. 
 
 | Item | State |
 | --- | --- |
-| Project idea | chosen: Attested Payment Firewall ([build/idea.md](build/idea.md)) |
+| Project idea | chosen: Eclipse ([build/idea.md](build/idea.md)) |
 | Stack | decided: Rust + Python ([AGENTS.md §5](../AGENTS.md#5-stack-decided)) |
 | Tracks | planned: security (idea.md); human confirms at submission |
 | Repo visibility | private until the human makes it public (deadline 2026-11-14T23:59Z = Sun 15 Nov 07:59 PHT) |
@@ -40,5 +40,5 @@ Frontend D1/E1: [site/README.md](../site/README.md) — shared landing page and 
 
 ## Chosen project
 
-The Attested Payment Firewall extends Bet B "Intent Notary": TEE-attested checks, a conformal hold threshold, and no human step ([build/idea.md](build/idea.md)).
+Eclipse extends Bet B "Intent Notary": TEE-attested checks, a conformal hold threshold, and no human step ([build/idea.md](build/idea.md)).
 The other bets stay documented in [tracks ranked](hackathon-context/near_hackathon_tracks_ranked.md) Part 6.

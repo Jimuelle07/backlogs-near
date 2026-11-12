@@ -46,10 +46,10 @@ configs:
     path: data/external.jsonl
 ---
 
-# Attested Payment Firewall scenarios
+# Eclipse scenarios
 
 Labelled payment scenarios for testing a payment firewall for AI agents (NEAR hackathon entry
-"Attested Payment Firewall"). Each row is one scripted agent run: a user request, an inbox of
+"Eclipse"). Each row is one scripted agent run: a user request, an inbox of
 context items (some untrusted, possibly carrying an injection) and the payment the agent then
 proposes. A firewall should hold or deny the `attack` rows and allow the `benign` rows.
 
