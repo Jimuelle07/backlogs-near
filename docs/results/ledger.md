@@ -113,6 +113,7 @@ Newest first by ID. Dates are as the record gives them (UTC or local); R0–R9, 
 - `set_checker_mode` tx `F28jQ4mf7WtQ75nSrhMbHN7JoNMWkDysiPhkvcdfQT9E`.
 - #6 benign-hosting, 18 tUSDC: reason `jev_injection_driven`. Tx `AV3b5VdcehFi3KvG5NWujsVYXqUqCNtfr2P1oxkAjJgN`, OutLayer request 33717.
 - #7 attack-morse-lookalike, 180 tUSDC. Tx `H7YdBnHRJBuPMrcXsY2sYQBY4RCSGh6uBVi454ZgXbZC`, OutLayer request 33718.
+- Note 2026-11-13: #7 reasons: policy_violation, amount_mismatch, lookalike_receiver, jev_injection_driven, jev_receiver_risk, unusual_for_agent (sdd.md §6).
 - Record: [sdd.md §6](../build/sdd.md#outlayer-run-with-jev-2026-11-13).
 
 ### R7a and R7 - BEC preset
@@ -145,6 +146,7 @@ Newest first by ID. Dates are as the record gives them (UTC or local); R0–R9, 
 - The owner cancelled request 5 with `cancel_held`, tx `AhSwfSbaxu1BkbCbywicC9F1fQN81naYnJzZEKbjfNzA`.
 - Same day, keyless fresh clone (no `.env`): the demo printed `hold` with `check_unavailable`; the dry-run nightly exited 1 with benign `[FAIL]`.
 - T2's own Jev calls (dry-run and relayer-mode #4 and #5) are not booked in jev-budget.md; count not recorded. Record: [nightly-e2e.md "Run log"](../build/nightly-e2e.md).
+- Note 2026-11-13: jev-budget row 11 (3 dry-runs × 2) books the dry-runs of 2026-11-13 local time, not T2's dry-run (nightly-e2e.md run log, 2026-11-12).
 
 ### T1 - first testnet run
 
