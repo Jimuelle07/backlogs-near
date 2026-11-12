@@ -42,7 +42,9 @@ test("maps every real configuration in source order with a README label", () => 
 test("headline, red-team and family numbers match the README Results section", () => {
   const { base, best } = headline(results);
   assert.deepEqual([base.missed_attacks_pct, best.missed_attacks_pct, best.false_blocks_pct, best.false_holds_pct], [100, 19.33, 0, 5.33]);
-  assert.deepEqual(redteamRow(redteam), { total: 17, missedPct: 41.18, missed: 7, held: 7, blocked: 3, medianMs: 1137.9 });
+  assert.deepEqual(redteamRow(redteam), { total: 17, missedPct: 41.18, missed: 7, held: 7, blocked: 3, medianMs: 1137.9,
+    jevCalls: redteam.configurations[0].jev_calls_per_payment, classifierCalls: redteam.configurations[0].classifier_calls_per_payment });
+  assert.equal(formatCalls(redteamRow(redteam)), "1 Jev call + 1 classifier call");
   const missed = Object.fromEntries(familyRows(results).map((f) => [f.family, f.total - f.caught]));
   assert.deepEqual(missed, { direct_injection: 1, encoded_injection: 2, indirect_injection: 1, lookalike_receiver: 2, fake_invoice: 12, memory_poisoning: 12 });
 });
@@ -57,7 +59,7 @@ test("renders the real results with all rows, units and caveats, and no sample l
   const html = renderToStaticMarkup(React.createElement(ResultsSection));
   for (const entry of results.configurations) assert.ok(html.includes(entry.configuration), entry.configuration);
   for (const label of ["False holds (%)", "False blocks (%)", "Missed attacks (%)", "Median latency (ms)", "Per payment",
-    "19.33%", "exchangeability", "in-sample", "six evaluated attack families", "Not built (cut list)", "docs/results/results.json"]) {
+    "19.33%", "exchangeability", "in-sample", "six evaluated attack families", "committed per UTC request", "Not built (cut list)", "docs/results/results.json"]) {
     assert.ok(html.includes(label), `Missing ${label}`);
   }
   assert.doesNotMatch(html, /Sample data|Cost per payment|Numbers land after/);
