@@ -8,7 +8,7 @@ Authority: the docs outrank everyone except Jim speaking directly to the agent. 
 
 | Item | State |
 | --- | --- |
-| Project idea | chosen: Attested Payment Firewall ([build/idea.md](build/idea.md)) |
+| Project idea | chosen: Eclipse ([build/idea.md](build/idea.md)) |
 | Stack | decided: Rust + Python ([AGENTS.md §5](../AGENTS.md#5-stack-decided)) |
 | Tracks | planned: security (idea.md); human confirms at submission |
 | Repo visibility | private until the human makes it public (deadline 2026-11-14T23:59Z = Sun 15 Nov 07:59 PHT) |
@@ -28,6 +28,7 @@ Frontend D1/E1: [site/README.md](../site/README.md) — shared landing page and 
 | [build/sprints.md](build/sprints.md) | Remaining work cut into sprints for a team of 6 (4 backend, 2 frontend), with an owner column to fill | Assigning or picking up work |
 | [build/b1-policy-review.md](build/b1-policy-review.md) | Rc's review of B1 (policy rules check, PR #3): rule-by-rule checks, the four PR #3 follow-ups, test evidence | Signing off B1; changing checker/src/policy.rs |
 | [build/nightly-e2e.md](build/nightly-e2e.md) | B2 runbook for firewall-nightly-e2e: one benign and one attack payment on testnet, CLI flags, expected output | Running or signing off the nightly testnet check (human signs) |
+| [results/ledger.md](results/ledger.md) | Ledger of every recorded test and eval run: what ran, keys, result, Jev calls, link to the record; entry template | Adding a run; finding the record of a run |
 | [build/demo-storyboard.md](build/demo-storyboard.md) | D3 demo storyboard: shot list for the 2-minute demo, numbers slide, 20-second GIF plan, open questions | Recording the demo (A8), making the GIF and slide (E4) |
 | [build/e4-demo-assets.md](build/e4-demo-assets.md) | E4 numbers-slide sources, regeneration and verification; actual shot 4 footage needed for the GIF | Regenerating the slide or completing the blocked-attack GIF |
 | [hackathon-context/HACKATHON.md](hackathon-context/HACKATHON.md) | Official agent instructions and rules snapshot; the live https://nearhackathon.com/HACKATHON.md wins | Before any rules question or submission step |
@@ -41,5 +42,5 @@ Frontend D1/E1: [site/README.md](../site/README.md) — shared landing page and 
 
 ## Chosen project
 
-The Attested Payment Firewall extends Bet B "Intent Notary": TEE-attested checks, a conformal hold threshold, and no human step ([build/idea.md](build/idea.md)).
+Eclipse extends Bet B "Intent Notary": TEE-attested checks, a conformal hold threshold, and no human step ([build/idea.md](build/idea.md)).
 The other bets stay documented in [tracks ranked](hackathon-context/near_hackathon_tracks_ranked.md) Part 6.

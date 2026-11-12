@@ -22,8 +22,15 @@ Runs of 2026-11-13, 01:04 to 02:34 local. The checker was built from this branch
 | 7 | BEC preset (retry) | `bec-results.json` | 200 | 2,019 |
 | 8 | PaySim agent, `jev_fusion_conformal` | `paysim-pooled.json` | 220 | 2,239 |
 | 9 | PaySim agent with `FUSION_AGENT_HOLD_THRESHOLD` = q̂ₐ | not run: 2,239 + 220 = 2,459 is above the 2,400 stop line, and the plan's cut rule drops run 9 first | 0 | 2,239 |
+| 10 | OutLayer testnet payments #6–#9 (2026-11-13; the checker in the TEE calls Jev with the same key, so these count) | none | 4 | 2,243 |
+| 11 | nightly dry-runs, 3 runs × 2 scenarios | none | 6 | 2,249 |
+| 12 | redteam eval, `jev_fusion_conformal` | `e2e-2026-11-13-redteam.json` | 17 | 2,266 |
+| 13 | main-set stratified sample (48), `jev_fusion_conformal` | `e2e-2026-11-13-main-sample.json` | 48 | 2,314 |
+| 14 | live testnet run #10–#22 | `e2e-2026-11-13-testnet.json` | 13 | 2,327 |
 
-Total booked: 2,239 calls, of which 400 are booked for the two aborted runs 6a and 7a.
+Total booked: 2,327 calls, of which 400 are booked for the two aborted runs 6a and 7a. This is below the 2,400 stop line. Runs 10–14 total 88 calls on 2026-11-13 (prior cumulative 2,239).
+
+Runs 10–14 (offline evals 2026-11-12T20:19Z–20:20Z UTC): native checker from origin/main `38aeaf0`, classifier `protectai/deberta-v3-base-prompt-injection-v2` on local CPU (`firewall-classifier`, port 8088, `INJECTION_TIMEOUT_MS=20000`), `TYPESAFE_API_KEY` set, no NEAR AI key, preset `jev_fusion_conformal`. Runs 10 and 14 ran on testnet with `guardian-v2` in OutLayer mode. Results: [e2e-2026-11-13.md](e2e-2026-11-13.md).
 
 ## Notes
 

@@ -135,7 +135,7 @@ export function ResultsSection({ rows = resultRows }) {
               <td className="num">n/a</td>
               <td className="num">{formatResultNumber(redteamResult.missedPct)} <small>({redteamResult.held} held, {redteamResult.blocked} blocked)</small></td>
               <td className="num">{formatResultNumber(redteamResult.medianMs)}</td>
-              <td className="num">1 Jev call + 1 classifier call</td>
+              <td className="num">{formatCalls(redteamResult)}</td>
             </tr>
             <tr className="results-extra">
               <th scope="row"><span className="results-config">melon</span><span className="results-description">Masked re-run (MELON) only</span></th>
@@ -165,7 +165,8 @@ export function ResultsSection({ rows = resultRows }) {
         </li>
         <li>
           Detection covers the six evaluated attack families. Against new or adaptive attacks, the loss is bounded by the
-          hard caps in contract code: {PER_PAYMENT_CAP} tUSDC per payment, {DAILY_CAP} tUSDC per day.
+          hard caps in contract code: {PER_PAYMENT_CAP} tUSDC per payment, and {DAILY_CAP} tUSDC committed per UTC request
+          day. Payouts on one day can also include holds committed the day before.
         </li>
         <li>
           Latency includes the injection classifier running on a local CPU. Cost is unpriced, so the table shows calls per

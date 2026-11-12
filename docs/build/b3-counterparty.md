@@ -11,7 +11,7 @@ Status: **Complete — Ready for Review & Sign-off**
 
 ## 1. Executive Summary
 
-Task B3 delivers the counterparty signals detector for the Attested Payment Firewall checker (`checker/src/counterparty.rs`).
+Task B3 delivers the counterparty signals detector for the Eclipse checker (`checker/src/counterparty.rs`).
 
 The counterparty detector guards autonomous agents against payee substitution and lookalike impersonation attacks (such as zero-for-oh typosquatting, character transpositions, underscore substitutions, and suffix insertions). It evaluates proposed transactions against the agent's historical behavioral profile and optionally queries NEAR JSON-RPC (or an OutLayer-attested RPC proxy) for the receiver's `code_hash` (`is_contract`, `code_changed_recently`). `account_age_days` comes only from the agent profile.
 

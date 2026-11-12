@@ -22,7 +22,7 @@ import { Logo } from "./components/Logo";
 import { ReceiptsPanel } from "./components/ReceiptsPanel";
 import { ResultsSection } from "./components/ResultsSection";
 import { VerdictExplorer } from "./components/VerdictExplorer";
-import { DAILY_CAP, GUARDIAN_ID, NEAR_RPC_URL, PER_PAYMENT_CAP, PROJECT_NAME, REPO_URL, STATUS_NOTE } from "./config.js";
+import { DAILY_CAP, GUARDIAN_ID, NEAR_RPC_URL, PER_PAYMENT_CAP, PROJECT_NAME, PROJECT_TAGLINE, REPO_URL, STATUS_NOTE } from "./config.js";
 import { createReader } from "./near.js";
 
 const receiptsReader = createReader({ guardian: GUARDIAN_ID, rpc: NEAR_RPC_URL });
@@ -405,6 +405,7 @@ export default function App() {
             </div>
           </div>
           <div className="fine">
+            <span>{PROJECT_TAGLINE}</span>
             <span>Built for NEAR HACKATHON 2026 · MIT licence</span>
             <span className="mono">rust · near-sdk · outlayer · jev · python</span>
           </div>

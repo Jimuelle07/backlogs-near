@@ -56,9 +56,11 @@ The section shows three headline numbers for the conformal row against no defens
 
 ## Deploy (human, needs a Cloudflare account)
 
+Live at https://eclipse-20v.pages.dev/ (Cloudflare Pages project `eclipse`, first deployed 2026-11-13 from main `38aeaf0`). The project is not connected to GitHub: redeploy from `site/` on an up-to-date `main` after each merge that touches the site.
+
 ```
 npm run build
-npx wrangler pages deploy dist --project-name <name>
+npx wrangler pages deploy dist --project-name eclipse --branch main
 ```
 
 The first run asks for a Cloudflare login and creates the project. Any static host works: `dist/` uses relative paths.
@@ -73,4 +75,4 @@ The first run asks for a Cloudflare login and creates the project. Any static ho
 - `src/near.js`: read-only RPC reader and exact token amount formatting; `src/near.test.js` tests it against the receipt schema example.
 - `src/styles.css`: brand tokens (`:root`) and components.
 
-Open items: project name (team lead decides; set `PROJECT_NAME`), repo URL (set `REPO_URL` once public), demo video (D3/D6).
+Open items: repo URL (set `REPO_URL` once public), demo video (D3/D6).

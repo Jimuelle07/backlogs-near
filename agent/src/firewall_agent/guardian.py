@@ -48,6 +48,10 @@ class ContractRefusal(Exception):
     """The Guardian contract rejected request_payment (panic); no receipt exists for it."""
 
 
+class PollTimeout(SystemExit):
+    """No verdict within TIMEOUT_SECONDS. A SystemExit(1) so CLI callers behave as before; runners may catch it."""
+
+
 def _failure_message(status: dict) -> str:
     """Message for a `{"Failure": ...}` status; never empty, never raises."""
     try:
@@ -285,9 +289,58 @@ class TestnetGuardian:
 
     def __init__(self, settings: Settings):
         self.s = settings
+        self.last_tx_hash: str | None = None
         for name in ("guardian_id", "agent_account_id", "agent_private_key"):
             if not getattr(self.s, name):
                 raise SystemExit(f"{name.upper()} not set (run firewall-setup-testnet first)")
+
+    def view(self, method: str, args: dict | None = None, contract: str | None = None):
+        """Read-only view call (default contract: the Guardian), as the agent account. Returns the parsed result."""
+        return asyncio.run(self._view(method, args or {}, contract or self.s.guardian_id))
+
+    async def _view(self, method: str, args: dict, contract: str):
+        try:
+            from py_near.account import Account
+        except ImportError:
+            raise SystemExit("py-near not installed; run: uv sync --extra testnet")
+        acc = Account(
+            self.s.agent_account_id,
+            self.s.agent_private_key,
+            rpc_addr=self.s.near_rpc_url or DEFAULT_TESTNET_RPC,
+        )
+        await acc.startup()
+        try:
+            return (await acc.view_function(contract, method, args)).result
+        finally:
+            await acc.shutdown()
+
+    def cancel_held(self, request_id) -> str:
+        """Owner-only `cancel_held`, signed with OWNER_ACCOUNT_ID/OWNER_PRIVATE_KEY. Returns the tx hash; raises on failure."""
+        if not (self.s.owner_account_id and self.s.owner_private_key):
+            raise RuntimeError("OWNER_ACCOUNT_ID/OWNER_PRIVATE_KEY not set")
+        return asyncio.run(self._cancel_held(str(request_id)))
+
+    async def _cancel_held(self, request_id: str) -> str:
+        try:
+            from py_near.account import Account
+        except ImportError:
+            raise SystemExit("py-near not installed; run: uv sync --extra testnet")
+        acc = Account(
+            self.s.owner_account_id,
+            self.s.owner_private_key,
+            rpc_addr=self.s.near_rpc_url or DEFAULT_TESTNET_RPC,
+        )
+        await acc.startup()
+        try:
+            tx_res = await acc.function_call(
+                self.s.guardian_id, "cancel_held", {"request_id": request_id}, gas=30 * TGAS
+            )
+            status = getattr(tx_res, "status", None)
+            if isinstance(status, dict) and "Failure" in status:
+                raise RuntimeError(_failure_message(status))
+            return _extract_tx_hash(tx_res)
+        finally:
+            await acc.shutdown()
 
     def request_payment(self, req: PaymentRequest) -> Decision:
         req.validate()
@@ -329,6 +382,7 @@ class TestnetGuardian:
             tx_hash = await acc.function_call(
                 self.s.guardian_id, "request_payment", req.to_args(), gas=200 * TGAS, included=True
             )
+            self.last_tx_hash = str(tx_hash)
             accepted = False
             deadline = time.monotonic() + self.TIMEOUT_SECONDS
             while time.monotonic() < deadline:
@@ -355,7 +409,7 @@ class TestnetGuardian:
                 f"timed out after {self.TIMEOUT_SECONDS}s waiting for {req.client_ref}: {what} (tx {tx_hash})",
                 file=sys.stderr,
             )
-            raise SystemExit(1)
+            raise PollTimeout(1)
         finally:
             await acc.shutdown()
 
