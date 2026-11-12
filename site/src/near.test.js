@@ -87,10 +87,55 @@ test('all frozen statuses and nullable verdicts are accepted', async () => {
   const receipts = ['paid', 'held', 'refused', 'timed_out', 'transfer_failed', 'paying'].map((status, index) => ({
     ...example, request_id: String(index + 1), status, outcome: status === 'timed_out' ? null : 'allow',
   }));
-  const reader = createReader({ fetcher: async (_, options) => reply(
-    JSON.parse(options.body).params.method_name === 'get_config' ? config : receipts,
-  ) });
+  const reader = createReader({ fetcher: async (_, options) => {
+    const method = JSON.parse(options.body).params.method_name;
+    return reply(method === 'get_config' ? config : method === 'get_held' ? [] : receipts);
+  } });
   assert.equal((await reader.snapshot()).receipts.length, 6);
+});
+
+test('get_held pages and list_receipts are pinned to the same finalized snapshot block', async () => {
+  const calls = [];
+  const heldReceipt = { ...example, status: 'held', outcome: 'allow' };
+  const held = { request_id: example.request_id, receiver_id: example.receiver_id,
+    amount: example.amount, release_at_ns: '1794528000000000001' };
+  const firstHeldPage = Array.from({ length: 50 }, (_, index) => ({ ...held, request_id: String(index + 2) }));
+  const reader = createReader({ fetcher: async (_, options) => {
+    const { params } = JSON.parse(options.body);
+    calls.push(params);
+    const args = JSON.parse(atob(params.args_base64));
+    if (params.method_name === 'get_config') return reply(config);
+    assert.equal(params.block_id, 'snapshot-block');
+    assert.equal('finality' in params, false);
+    if (params.method_name === 'list_receipts') return reply([heldReceipt]);
+    assert.equal(params.method_name, 'get_held');
+    assert.equal(args.limit, 50);
+    return reply(args.from_index === 0 ? firstHeldPage : [held]);
+  } });
+  const snapshot = await reader.snapshot();
+  assert.equal(snapshot.blockId, 'snapshot-block');
+  assert.equal(snapshot.held.length, 51);
+  assert.deepEqual(snapshot.held.find((entry) => entry.request_id === example.request_id), held);
+  assert.deepEqual(calls.map((call) => call.method_name), ['get_config', 'list_receipts', 'get_held', 'get_held']);
+  assert.deepEqual(JSON.parse(atob(calls[3].args_base64)), { from_index: 50, limit: 50 });
+  await assert.rejects(reader.getHeld(), /snapshot block hash/);
+});
+
+test('held payment RPC errors, malformed pages and non-string timestamps reject the snapshot', async () => {
+  const heldReceipt = { ...example, status: 'held' };
+  for (const response of [
+    () => new Response('', { status: 503 }),
+    () => reply({ release_at_ns: '1794528000000000000' }),
+    () => reply([{ request_id: '1', receiver_id: example.receiver_id, amount: example.amount,
+      release_at_ns: 1794528000000000000 }]),
+  ]) {
+    const reader = createReader({ fetcher: async (_, options) => {
+      const method = JSON.parse(options.body).params.method_name;
+      if (method === 'get_held') return response();
+      return reply(method === 'get_config' ? config : [heldReceipt]);
+    } });
+    await assert.rejects(reader.snapshot());
+  }
 });
 
 test('caller cancellation reaches fetch', async () => {

@@ -30,20 +30,21 @@ From `site/`:
 ```
 npm ci
 npm test              # node --test src/*.test.js
-npm install
 npm run dev       # http://localhost:5173
 npm run build         # build to site/dist
 npm run build:single  # one self-contained dist/index.html
 npm run preview   # serve site/dist
 ```
 
-## Live receipts (E1)
+## Live receipts (E1/E2)
 
 Open `/#receipts` to read `guardian-v2.jimuelle-firewall.testnet`. Public settings live in `src/config.js`: `GUARDIAN_ID` and `NEAR_RPC_URL` (FastNEAR testnet by default). The app creates one reader and passes it to the panel; no wallet, keys or backend environment files are used.
 
-Each refresh reads `get_config` and pins all `list_receipts` pages to the same finalized block. Amounts use `get_config.token_decimals` without floating-point conversion. Filters and search apply to loaded receipts; load more to extend them. Auto-refresh runs every 30 seconds while the page is visible and can be disabled.
+Each refresh reads `get_config` and pins all `list_receipts` pages to the same finalized block. When loaded receipts include holds, all `get_held` pages use that block hash too. Amounts use `get_config.token_decimals` without floating-point conversion. Filters and search apply to loaded receipts; load more to extend them. Auto-refresh runs every 30 seconds while the page is visible and can be disabled.
 
-An RPC failure shows an error and retry button, retaining the last successful read when available. It never substitutes sample receipts. `stub_allow` is labelled as a hard-coded scaffold decision. Explorer links point to account activity; receipts contain no transaction hash. E2 adds receipt details later.
+An RPC failure shows an error and retry button, retaining the last successful read when available. It never substitutes sample receipts. `stub_allow` is labelled as a hard-coded scaffold decision. Explorer links point to account activity; receipts contain no transaction hash.
+
+Click a receipt row, or focus its request button and press Enter or Space, to open its inline details. Close with Escape or Close details; focus returns to the request button. Details show every receipt field, labelled reason codes, copy buttons for recorded hashes, and receiver and Guardian account links. Nullable fields are labelled explicitly, including “No verdict”. Held receipts count down from the snapshot's `release_at_ns` using integer nanoseconds and the device clock; at or past release they show “releasing”. Refresh reads the settlement status; the site does not release funds.
 
 Run `npm ci`, `npm test` and `npm run build` to verify. For a mobile check, open `#receipts` at 390px wide and check the controls and table without horizontal page scrolling.
 
@@ -60,7 +61,8 @@ The first run asks for a Cloudflare login and creates the project. Any static ho
 
 - `src/config.js`: project name, status note, Guardian id, RPC URL, explorer, caps, repo URL. Edit here first.
 - `src/App.jsx`: all sections, in page order.
-- `src/components/ReceiptsPanel.jsx`: E1 live receipts panel in `#receipts`.
+- `src/components/ReceiptsPanel.jsx` and `ReceiptDetail.jsx`: live receipts and inline details in `#receipts`.
+- `src/receipt.js`: shared status/reason labels and integer hold countdown formatting.
 - `src/near.js`: read-only RPC reader and exact token amount formatting; `src/near.test.js` tests it against the receipt schema example.
 - `src/styles.css`: brand tokens (`:root`) and components.
 
