@@ -2,7 +2,7 @@
 
 Author: **Rc** (Backend Lane B, Sprint 2)  
 Lead: **Jim** (Backend Lead)  
-Task: **B3** (Counterparty signals over RPC: account age, is-contract, code-hash change, prior payments, lookalike distance; agent behaviour profile; output `signals.counterparty`)  
+Task: **B3** (Counterparty signals: is-contract and code-hash change over RPC, account age and prior payments from the agent profile, lookalike distance; output `signals.counterparty`)  
 Implementation: `checker/src/counterparty.rs`, `checker/src/decide.rs`, `checker/src/lib.rs`  
 Done When: `hostc0` flagged as lookalike of `hostco`; frozen `signals.counterparty` in `schemas/decision-record.schema.json` populated; unit tests  
 Status: **Complete — Ready for Review & Sign-off**
@@ -13,7 +13,7 @@ Status: **Complete — Ready for Review & Sign-off**
 
 Task B3 delivers the counterparty signals detector for the Attested Payment Firewall checker (`checker/src/counterparty.rs`).
 
-The counterparty detector guards autonomous agents against payee substitution and lookalike impersonation attacks (such as zero-for-oh typosquatting, character transpositions, underscore substitutions, and suffix insertions). It evaluates proposed transactions against the agent's historical behavioral profile and queries NEAR JSON-RPC (or an OutLayer-attested RPC proxy) for on-chain counterparty metadata (`is_contract`, `account_age_days`, and `code_changed_recently`).
+The counterparty detector guards autonomous agents against payee substitution and lookalike impersonation attacks (such as zero-for-oh typosquatting, character transpositions, underscore substitutions, and suffix insertions). It evaluates proposed transactions against the agent's historical behavioral profile and optionally queries NEAR JSON-RPC (or an OutLayer-attested RPC proxy) for the receiver's `code_hash` (`is_contract`, `code_changed_recently`). `account_age_days` comes only from the agent profile.
 
 The output conforms strictly to the frozen `signals.counterparty` schema in `schemas/decision-record.schema.json` and `checker/src/formats.rs::CounterpartySignal`.
 
@@ -49,7 +49,7 @@ For candidate `receiver_id` tested against `known_payees` with threshold `max_lo
 ### 2.4 Agent Behavioral Profile
 
 The agent profile (`AgentProfile`) tracks:
-- `known_payees: Vec<PayeeHistory>`: List of known accounts and historical interaction counts (`prior_payments`).
+- `known_payees: Vec<PayeeHistory>`: List of known accounts with historical interaction counts (`prior_payments`) and optional `is_contract`, `account_age_days` and `code_hash` (the code hash recorded for that payee).
 - `payments_last_90d`: Count of recent successful payments (for fusion scoring in C3).
 - `typical_amount_units`: Distribution of past payment sizes in base units.
 
@@ -61,11 +61,12 @@ The parser supports:
 
 ### 2.5 NEAR JSON-RPC Querying
 
-When `COUNTERPARTY_RPC_URL` is configured (the checker does not read `NEAR_RPC_URL`):
+When `COUNTERPARTY_RPC_URL` is configured (the checker does not read `NEAR_RPC_URL`; the URL must be HTTPS, otherwise config parsing fails):
 - Performs an HTTP `POST` to the RPC endpoint with `{"jsonrpc": "2.0", "method": "query", "params": {"request_type": "view_account", "finality": "optimistic", "account_id": receiver_id}}`.
-- Determines contract status via `code_hash`: Plain user accounts (EOAs) have `code_hash == "11111111111111111111111111111111"`. Any other non-empty code hash indicates an active smart contract (`is_contract: true`).
-- Computes `account_age_days` from block height differences if present.
-- If RPC is disabled or unreachable, the check falls back gracefully without crashing, preserving local profile lookalike signals.
+- Only `result.code_hash` is read from the response. Plain user accounts (EOAs) have `code_hash == "11111111111111111111111111111111"`; any other code hash sets `is_contract: true`.
+- `code_changed_recently` is `true` only when the receiver exactly matches a profile payee whose `code_hash` is set and the RPC `code_hash` differs from it. Lookalikes, unknown receivers and payees without a profile `code_hash` stay `false`.
+- `account_age_days` is never derived from RPC (`view_account` carries no creation block). It is the matched profile payee's `account_age_days`, else `null`.
+- If RPC is disabled, the check skips it. If the RPC call fails, the checker prints `checker warning: counterparty RPC failed: …` to stderr and keeps the profile-derived signals; the run does not fail.
 
 ---
 
@@ -74,8 +75,8 @@ When `COUNTERPARTY_RPC_URL` is configured (the checker does not read `NEAR_RPC_U
 | Variable | Type | Default | Description |
 | --- | --- | --- | --- |
 | `COUNTERPARTY_ENABLED` | bool | `true` | Enables or disables counterparty check |
-| `COUNTERPARTY_RPC_URL` | string | unset | NEAR JSON-RPC URL; unset = no RPC query |
-| `COUNTERPARTY_TIMEOUT_MS` | integer | `5000` | HTTP timeout for RPC calls in milliseconds |
+| `COUNTERPARTY_RPC_URL` | string | unset | NEAR JSON-RPC URL (HTTPS only); unset = no RPC query |
+| `COUNTERPARTY_TIMEOUT_MS` | integer | `2000` | HTTP timeout for RPC calls in milliseconds (fits the 30 s OutLayer budget) |
 | `COUNTERPARTY_MAX_LOOKALIKE_DISTANCE` | integer | `2` | Maximum edit distance to flag as a lookalike |
 | `COUNTERPARTY_KNOWN_PAYEES` | string | unset | Comma-separated list of known payee account IDs |
 | `AGENT_PROFILE_JSON` | string | unset | Inlined JSON string of agent behavioral profile |
