@@ -1,19 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { accountUrl, formatAmount, STATUSES } from '../near.js';
-
-const labels = { paid: 'Paid', held: 'Held', refused: 'Refused', timed_out: 'Timed out', transfer_failed: 'Transfer failed', paying: 'Paying' };
-const statusTones = { paid: 'allow', held: 'hold', refused: 'block', timed_out: 'hold', transfer_failed: 'block', paying: 'hold' };
-const reasonLabels = {
-  stub_allow: 'Scaffold decision', policy_violation: 'Policy violation', injection_high: 'Injection detected',
-  melon_match: 'Masked re-run match', lookalike_receiver: 'Lookalike receiver', new_receiver: 'New receiver',
-  young_account: 'Young account', contract_code_changed: 'Contract changed', unusual_for_agent: 'Unusual payment',
-  jev_injection_driven: 'Jev: injection driven', jev_receiver_risk: 'Jev: receiver risk',
-  amount_mismatch: 'Amount mismatch', check_unavailable: 'Check unavailable',
-};
-
-function ExternalLink({ account, children, ...props }) {
-  return <a href={accountUrl(account)} target="_blank" rel="noopener noreferrer" {...props}>{children}<span aria-hidden="true"> ↗</span><span className="sr-only"> (opens in a new tab)</span></a>;
-}
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { formatAmount, STATUSES } from '../near.js';
+import { reasonLabel, statusLabels as labels, statusTones } from '../receipt.js';
+import { ExternalLink, ReceiptDetail } from './ReceiptDetail.jsx';
 
 export function ReceiptsPanel({ reader }) {
   const [snapshot, setSnapshot] = useState(null);
@@ -23,7 +11,28 @@ export function ReceiptsPanel({ reader }) {
   const [search, setSearch] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [request, setRequest] = useState({ pages: 1, revision: 0 });
+  const [selectedId, setSelectedId] = useState(null);
   const active = useRef(false);
+  const detailTrigger = useRef(null);
+  const tableRegion = useRef(null);
+
+  const closeDetail = useCallback(() => {
+    setSelectedId(null);
+    const target = detailTrigger.current?.isConnected ? detailTrigger.current : tableRegion.current;
+    target?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (selectedId === null) return;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeDetail();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [selectedId, closeDetail]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -58,6 +67,17 @@ export function ReceiptsPanel({ reader }) {
     const query = search.trim().toLowerCase();
     return matchesStatus && `${receipt.request_id} ${receipt.client_ref} ${receipt.receiver_id}`.toLowerCase().includes(query);
   }), [receipts, filter, search]);
+  useEffect(() => {
+    if (selectedId !== null && !visible.some((receipt) => receipt.request_id === selectedId)) {
+      closeDetail();
+    }
+  }, [visible, selectedId, closeDetail]);
+
+  function toggleDetail(receipt, event) {
+    if (selectedId === receipt.request_id) return closeDetail();
+    detailTrigger.current = event.currentTarget.closest('tr').querySelector('.receipt-trigger');
+    setSelectedId(receipt.request_id);
+  }
   const counts = Object.fromEntries(STATUSES.map((status) => [status, receipts.filter((r) => r.status === status).length]));
   const refresh = () => setRequest((previous) => ({ ...previous, revision: previous.revision + 1 }));
 
@@ -84,17 +104,24 @@ export function ReceiptsPanel({ reader }) {
       </div>
 
       {error && <div role="alert" className="error"><strong>{snapshot ? 'Live refresh unavailable.' : 'Unable to load receipts.'}</strong> {error} {snapshot && 'Showing the last successful read.'}<button onClick={refresh} disabled={busy}>Try again</button></div>}
-      <div className="table-wrap" tabIndex="0" role="region" aria-label="Payment receipts table" aria-busy={busy}>
+      <div className="table-wrap" ref={tableRegion} tabIndex="0" role="region" aria-label="Payment receipts table" aria-busy={busy}>
         <table><caption className="sr-only">Public Guardian receipts. Amounts use the token decimals configured on the Guardian. Explorer links open account activity.</caption>
           <thead><tr><th scope="col">Request / reference</th><th scope="col">Receiver</th><th scope="col" className="amount">Amount</th><th scope="col">Status / verdict</th><th scope="col">Reason</th><th scope="col"><span className="sr-only">Explorer</span></th></tr></thead>
-          <tbody>{visible.map((receipt) => <tr key={receipt.request_id}>
-            <td data-label="Request / reference"><span className="request-id">#{receipt.request_id}</span><span className="secondary reference">{receipt.client_ref}</span></td>
+          <tbody>{visible.map((receipt) => <React.Fragment key={receipt.request_id}><tr className="receipt-row" onClick={(event) => {
+            if (!event.target.closest('a, button')) toggleDetail(receipt, event);
+          }}>
+            <td data-label="Request / reference"><button className="request-id receipt-trigger" aria-expanded={selectedId === receipt.request_id}
+              aria-controls={selectedId === receipt.request_id ? `receipt-detail-${receipt.request_id}` : undefined}
+              aria-label={`Details for request ${receipt.request_id}`} onClick={(event) => toggleDetail(receipt, event)}>#{receipt.request_id}</button><span className="secondary reference">{receipt.client_ref}</span></td>
             <td data-label="Receiver"><ExternalLink account={receipt.receiver_id} className="receiver">{receipt.receiver_id}</ExternalLink><span className="secondary">Block {receipt.decided_block}</span></td>
             <td data-label="Amount" className="amount"><strong>{formatAmount(receipt.amount, snapshot.config.token_decimals)}</strong><span className="secondary" title={snapshot.config.token_id}>tokens</span></td>
             <td data-label="Status / verdict"><span className={`vchip ${statusTones[receipt.status]}`}>{labels[receipt.status]}</span><span className="secondary verdict">{receipt.outcome ?? 'No verdict'}</span></td>
-            <td data-label="Reason" className="reasons">{receipt.reasons.length ? receipt.reasons.map((reason) => <span key={reason} title={reason} className={reason === 'stub_allow' ? 'stub-reason' : ''}>{reasonLabels[reason] ?? reason.replaceAll('_', ' ')}</span>) : <span className="secondary">No reason recorded</span>}</td>
+            <td data-label="Reason" className="reasons">{receipt.reasons.length ? receipt.reasons.map((reason, index) => <span key={`${reason}-${index}`} title={reason} className={reason === 'stub_allow' ? 'stub-reason' : ''}>{reasonLabel(reason)}</span>) : <span className="secondary">No reason recorded</span>}</td>
             <td data-label="Explorer"><ExternalLink account={reader.guardian} aria-label={`View Guardian activity for request ${receipt.request_id}`}><span className="explorer-label">Explorer</span></ExternalLink></td>
-          </tr>)}</tbody>
+          </tr>{selectedId === receipt.request_id && <tr className="receipt-detail-row"><td colSpan={6}>
+            <ReceiptDetail receipt={receipt} config={snapshot.config} guardian={reader.guardian}
+              held={snapshot.held.find((entry) => entry.request_id === receipt.request_id)} onClose={closeDetail} />
+          </td></tr>}</React.Fragment>)}</tbody>
         </table>
         {!snapshot && !error && <div className="empty" role="status"><span className="loading-mark" aria-hidden="true">◌</span><h4>Reading the Guardian…</h4><p>Fetching public payment receipts from testnet.</p></div>}
         {snapshot && visible.length === 0 && <div className="empty"><span aria-hidden="true">≡</span><h4>{receipts.length ? 'No matching receipts' : 'No receipts yet'}</h4><p>{receipts.length ? 'Try another status or search term. Filters apply to loaded receipts.' : 'Receipts will appear here after the Guardian records a payment request.'}</p>{receipts.length > 0 && <button onClick={() => { setFilter('all'); setSearch(''); }}>Clear filters</button>}</div>}

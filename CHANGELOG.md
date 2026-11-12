@@ -2,6 +2,10 @@
 
 Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §10](AGENTS.md#10-docs-upkeep).
 
+## 2026-11-13
+
+- **Component:** E2 inline receipt details in `site/`: keyboard opening, Escape/close with focus restoration, all receipt fields and labelled reason codes, hash copy controls and NearBlocks account links. Held entries are paginated at the receipt snapshot block; countdowns use integer nanoseconds and show `releasing` at expiry.
+
 ## 2026-11-12
 
 - **Sign-off:** Jim signed off A4, A6, A7, B3, B5, B6, B7, C4, C5 and C6 (PR #21); [sprints.md](docs/build/sprints.md#progress-updated-2026-11-12) marks them Done.
