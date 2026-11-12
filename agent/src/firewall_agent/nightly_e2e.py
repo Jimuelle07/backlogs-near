@@ -218,7 +218,7 @@ def run_nightly_e2e(
     agent_id = settings.agent_account_id if mode == "testnet" else f"agent.{settings.ns}"
 
     print("=" * 72)
-    print("  ATTESTED PAYMENT FIREWALL - NIGHTLY END-TO-END TEST (B2)")
+    print("  ECLIPSE - NIGHTLY END-TO-END TEST (B2)")
     print(f"  Time (UTC): {now_utc}")
     print(f"  Mode:       {mode.upper()}")
     print(f"  Guardian:   {guardian_id}")

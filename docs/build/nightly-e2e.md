@@ -69,7 +69,7 @@ The blocks below show the output format. Timestamps, durations, record hashes an
 
 ```text
 ========================================================================
-  ATTESTED PAYMENT FIREWALL - NIGHTLY END-TO-END TEST (B2)
+  ECLIPSE - NIGHTLY END-TO-END TEST (B2)
   Time (UTC): <UTC time>
   Mode:       TESTNET
   Guardian:   guardian-v2.jimuelle-firewall.testnet

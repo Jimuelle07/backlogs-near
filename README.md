@@ -1,6 +1,6 @@
-# backlogs-near
+# Eclipse
 
-> Working repository name. The final project name is decided by the human team lead. Working project title: "Attested Payment Firewall".
+> Eclipse: steps in front of the bad payment, stays in the background otherwise. Repository: backlogs-near.
 
 ## What it is
 
