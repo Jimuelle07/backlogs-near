@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 pub const DEFAULT_MAX_LOOKALIKE_DISTANCE: u32 = 2;
-pub const DEFAULT_TIMEOUT_MS: u64 = 5000;
+pub const DEFAULT_TIMEOUT_MS: u64 = 2000;
 pub const NEAR_NO_CODE_HASH: &str = "11111111111111111111111111111111";
 
 /// History entry for a known payee in the agent's behavior profile.
@@ -20,6 +20,9 @@ pub struct PayeeHistory {
     pub is_contract: Option<bool>,
     #[serde(default)]
     pub account_age_days: Option<f64>,
+    /// NEAR code hash recorded for this payee; an RPC hash that differs sets `code_changed_recently`.
+    #[serde(default)]
+    pub code_hash: Option<String>,
 }
 
 fn default_prior_payments() -> u64 {
@@ -72,6 +75,7 @@ impl AgentProfile {
                 prior_payments: 5,
                 is_contract: Some(false),
                 account_age_days: Some(180.0),
+                code_hash: None,
             })
             .collect();
 
@@ -132,6 +136,7 @@ impl AgentProfile {
                             prior_payments: 1,
                             is_contract: None,
                             account_age_days: None,
+                            code_hash: None,
                         },
                         PayeeItem::Detailed(d) => d,
                     })
@@ -154,6 +159,7 @@ impl AgentProfile {
                         prior_payments,
                         is_contract: None,
                         account_age_days: None,
+                        code_hash: None,
                     })
                     .collect();
                 Ok(Self {
@@ -171,6 +177,7 @@ impl AgentProfile {
                             prior_payments: 1,
                             is_contract: None,
                             account_age_days: None,
+                            code_hash: None,
                         },
                         PayeeItem::Detailed(d) => d,
                     })
@@ -192,7 +199,7 @@ pub struct CounterpartyConfig {
     pub enabled: bool,
     /// `COUNTERPARTY_RPC_URL` (NEAR JSON-RPC endpoint); unset = no RPC query.
     pub rpc_url: Option<String>,
-    /// `COUNTERPARTY_TIMEOUT_MS`, default 5000 ms.
+    /// `COUNTERPARTY_TIMEOUT_MS`, default 2000 ms (fits the 30 s OutLayer budget).
     pub timeout: Duration,
     /// `COUNTERPARTY_MAX_LOOKALIKE_DISTANCE`, default 2.
     pub max_lookalike_distance: u32,
@@ -233,7 +240,12 @@ impl CounterpartyConfig {
         // When not explicitly configured, enabled defaults to true in from_vars/from_env
         let enabled = enabled_explicit.unwrap_or(true);
 
-        let rpc_url = var("COUNTERPARTY_RPC_URL");
+        let rpc_url = match var("COUNTERPARTY_RPC_URL") {
+            None => None,
+            Some(u) => Some(crate::decision::validate_https_base_url(&u).map_err(|_| {
+                format!("COUNTERPARTY_RPC_URL: expected an https:// URL with a host, got {u:?}")
+            })?),
+        };
 
         let timeout = if let Some(v) = var("COUNTERPARTY_TIMEOUT_MS") {
             let ms: u64 = v
@@ -268,6 +280,7 @@ impl CounterpartyConfig {
                     prior_payments: 1,
                     is_contract: None,
                     account_age_days: None,
+                    code_hash: None,
                 })
                 .collect();
             AgentProfile {
@@ -428,32 +441,35 @@ pub fn find_lookalike<'a>(
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct NearRpcResponse {
-    result: Option<NearAccountView>,
-    #[allow(dead_code)]
-    error: Option<serde_json::Value>,
+/// The part of a `view_account` response the checker uses.
+#[derive(Debug, PartialEq, Eq)]
+pub struct RpcAccountView {
+    pub code_hash: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct NearAccountView {
-    #[serde(default)]
-    pub code_hash: Option<String>,
-    #[serde(default)]
-    pub block_height: Option<u64>,
-    #[serde(default)]
-    pub account_age_days: Option<f64>,
-    #[serde(default)]
-    pub code_changed_recently: Option<bool>,
-    #[serde(default)]
-    pub is_contract: Option<bool>,
+/// Parse a JSON-RPC `query`/`view_account` response body. An RPC error (top-level `error`, or a
+/// `result.error` string such as an unknown account) or a missing `code_hash` is an `Err`.
+fn parse_view_account(body: &serde_json::Value) -> Result<RpcAccountView, String> {
+    if let Some(err) = body.get("error").filter(|e| !e.is_null()) {
+        return Err(format!("RPC error response: {err}"));
+    }
+    let result = body.get("result").ok_or("RPC response has no result")?;
+    if let Some(err) = result.get("error").filter(|e| !e.is_null()) {
+        return Err(format!("RPC query error: {err}"));
+    }
+    let code_hash = result
+        .get("code_hash")
+        .and_then(|v| v.as_str())
+        .filter(|h| !h.is_empty())
+        .ok_or("view_account result has no code_hash")?;
+    Ok(RpcAccountView { code_hash: code_hash.to_string() })
 }
 
 fn query_rpc_account(
     rpc_url: &str,
     account_id: &str,
     timeout: Duration,
-) -> Result<NearAccountView, String> {
+) -> Result<RpcAccountView, String> {
     let req = serde_json::json!({
         "jsonrpc": "2.0",
         "id": "checker-counterparty",
@@ -473,14 +489,9 @@ fn query_rpc_account(
         return Err(format!("RPC HTTP status {}: {}", resp.status, resp.body));
     }
 
-    let parsed: NearRpcResponse = serde_json::from_str(&resp.body)
+    let parsed: serde_json::Value = serde_json::from_str(&resp.body)
         .map_err(|e| format!("failed to parse RPC response: {e}"))?;
-
-    if let Some(view) = parsed.result {
-        Ok(view)
-    } else {
-        Err(format!("RPC error response: {:?}", parsed.error))
-    }
+    parse_view_account(&parsed)
 }
 
 /// Helper function to classify counterparty reasons from the signal.
@@ -529,47 +540,29 @@ pub fn check(
         LookalikeMatch::Novel => (0, None, None),
     };
 
-    // 2. Account metadata defaults
+    // 2. Account metadata defaults from the profile entry (age comes from the profile only:
+    // `view_account` carries no creation block).
     let mut is_contract = false;
     let mut code_changed_recently = false;
     let mut account_age_days = None;
+    let mut profile_code_hash: Option<&str> = None;
 
     if let LookalikeMatch::Exact(payee) = &lookalike_match {
         if let Some(ic) = payee.is_contract {
             is_contract = ic;
         }
-        if let Some(age) = payee.account_age_days {
-            account_age_days = Some(age);
-        }
+        account_age_days = payee.account_age_days;
+        profile_code_hash = payee.code_hash.as_deref();
     }
 
     // 3. NEAR RPC query if configured
-    if let Some(ref rpc_url) = config.rpc_url {
+    if let Some(rpc_url) = &config.rpc_url {
         match query_rpc_account(rpc_url, &input.receiver_id, config.timeout) {
             Ok(view) => {
-                if let Some(ic) = view.is_contract {
-                    is_contract = ic;
-                } else if let Some(ref code_hash) = view.code_hash {
-                    is_contract = code_hash != NEAR_NO_CODE_HASH && !code_hash.is_empty();
-                }
-
-                if let Some(cc) = view.code_changed_recently {
-                    code_changed_recently = cc;
-                }
-
-                if let Some(age) = view.account_age_days {
-                    account_age_days = Some(age);
-                } else if let Some(bh) = view.block_height {
-                    if let Ok(curr) = input.block_height.parse::<u64>() {
-                        if curr > bh {
-                            account_age_days = Some((curr - bh) as f64 / 86400.0);
-                        }
-                    }
-                }
+                is_contract = view.code_hash != NEAR_NO_CODE_HASH;
+                code_changed_recently = profile_code_hash.is_some_and(|h| h != view.code_hash);
             }
-            Err(_e) => {
-                // RPC query failure falls back gracefully without failing closed
-            }
+            Err(e) => eprintln!("checker warning: counterparty RPC failed: {e}"),
         }
     }
 
@@ -611,6 +604,7 @@ mod tests {
             prior_payments: 5,
             is_contract: Some(false),
             account_age_days: Some(120.0),
+            code_hash: None,
         }];
 
         let match_res = find_lookalike("hostc0", &payees, 2);
@@ -640,6 +634,7 @@ mod tests {
                 prior_payments: 3,
                 is_contract: None,
                 account_age_days: None,
+                code_hash: None,
             }];
             let m = find_lookalike(attacker, &payees, 2);
             match m {
@@ -733,6 +728,7 @@ mod tests {
                 prior_payments: 10,
                 is_contract: Some(false),
                 account_age_days: Some(300.0),
+                code_hash: None,
             }],
             ..AgentProfile::default()
         };
@@ -772,6 +768,7 @@ mod tests {
                 prior_payments: 7,
                 is_contract: Some(false),
                 account_age_days: Some(90.0),
+                code_hash: None,
             }],
             ..AgentProfile::default()
         };
@@ -821,5 +818,165 @@ mod tests {
         assert!(json.contains(r#""prior_payments":0"#));
         assert!(json.contains(r#""lookalike_of":"hostco.testnet""#));
         assert!(json.contains(r#""lookalike_distance":1"#));
+    }
+
+    fn input_for(receiver: &str) -> CheckerInput {
+        CheckerInput {
+            format: crate::formats::INPUT_FORMAT.to_string(),
+            request_id: "req-rpc".to_string(),
+            guardian_id: "guardian.testnet".to_string(),
+            agent_id: "agent.testnet".to_string(),
+            token_id: "tusdc.testnet".to_string(),
+            token_decimals: 6,
+            receiver_id: receiver.to_string(),
+            amount: "18000000".to_string(),
+            memo: "INV-1".to_string(),
+            user_request: "pay hostco".to_string(),
+            context: vec![],
+            block_height: "100000".to_string(),
+        }
+    }
+
+    /// Serve one HTTP response with a JSON body on a local port; returns the URL.
+    fn serve_once(body: String) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 1024];
+            loop {
+                let n = s.read(&mut chunk).unwrap();
+                buf.extend_from_slice(&chunk[..n]);
+                if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let head = String::from_utf8_lossy(&buf[..pos]).to_ascii_lowercase();
+                    let len = head
+                        .lines()
+                        .find_map(|l| l.strip_prefix("content-length:"))
+                        .and_then(|v| v.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if buf.len() >= pos + 4 + len {
+                        break;
+                    }
+                }
+                if n == 0 {
+                    break;
+                }
+            }
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            s.write_all(resp.as_bytes()).unwrap();
+        });
+        url
+    }
+
+    fn view_body(code_hash: &str) -> String {
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "checker-counterparty",
+            "result": {"amount": "1", "code_hash": code_hash, "block_height": 123456789u64}
+        })
+        .to_string()
+    }
+
+    fn rpc_cfg(url: String, profile_code_hash: Option<&str>) -> CounterpartyConfig {
+        CounterpartyConfig {
+            enabled: true,
+            rpc_url: Some(url),
+            profile: AgentProfile {
+                known_payees: vec![PayeeHistory {
+                    account_id: "hostco.demo.testnet".to_string(),
+                    prior_payments: 5,
+                    is_contract: Some(true),
+                    account_age_days: Some(90.0),
+                    code_hash: profile_code_hash.map(str::to_string),
+                }],
+                ..AgentProfile::default()
+            },
+            ..CounterpartyConfig::default()
+        }
+    }
+
+    #[test]
+    fn code_changed_recently_only_on_profile_code_hash_mismatch() {
+        let input = input_for("hostco.demo.testnet");
+
+        let changed = rpc_cfg(serve_once(view_body("NEWHASH")), Some("OLDHASH"));
+        let s = check(&input, &changed).unwrap().0.unwrap();
+        assert!(s.code_changed_recently);
+        assert!(s.is_contract);
+        assert_eq!(s.account_age_days, Some(90.0), "age comes from the profile only");
+
+        let same = rpc_cfg(serve_once(view_body("OLDHASH")), Some("OLDHASH"));
+        assert!(!check(&input, &same).unwrap().0.unwrap().code_changed_recently);
+
+        let no_profile_hash = rpc_cfg(serve_once(view_body("NEWHASH")), None);
+        assert!(!check(&input, &no_profile_hash).unwrap().0.unwrap().code_changed_recently);
+
+        // A lookalike is not an exact profile match, so there is nothing to compare against.
+        let lookalike = rpc_cfg(serve_once(view_body("NEWHASH")), Some("OLDHASH"));
+        let s = check(&input_for("hostc0.demo.testnet"), &lookalike).unwrap().0.unwrap();
+        assert!(!s.code_changed_recently);
+    }
+
+    #[test]
+    fn plain_account_rpc_sets_is_contract_false_and_no_age() {
+        let cfg = CounterpartyConfig {
+            enabled: true,
+            rpc_url: Some(serve_once(view_body(NEAR_NO_CODE_HASH))),
+            ..CounterpartyConfig::default()
+        };
+        let s = check(&input_for("brand-new.testnet"), &cfg).unwrap().0.unwrap();
+        assert!(!s.is_contract);
+        assert!(!s.code_changed_recently);
+        assert_eq!(s.account_age_days, None, "view_account block_height is not the creation block");
+    }
+
+    #[test]
+    fn rpc_failure_keeps_profile_values() {
+        let mut cfg = rpc_cfg("http://127.0.0.1:9/".to_string(), Some("OLDHASH"));
+        cfg.timeout = Duration::from_millis(500);
+        let s = check(&input_for("hostco.demo.testnet"), &cfg).unwrap().0.unwrap();
+        assert!(s.is_contract, "profile is_contract kept");
+        assert!(!s.code_changed_recently);
+        assert_eq!(s.account_age_days, Some(90.0));
+        assert_eq!(s.prior_payments, 5);
+    }
+
+    #[test]
+    fn parse_view_account_contract_plain_and_error() {
+        let contract = serde_json::json!({"result": {"code_hash": "9xYabc", "amount": "5"}});
+        assert_eq!(parse_view_account(&contract).unwrap().code_hash, "9xYabc");
+
+        let plain = serde_json::json!({"result": {"code_hash": NEAR_NO_CODE_HASH, "amount": "5"}});
+        assert_eq!(parse_view_account(&plain).unwrap().code_hash, NEAR_NO_CODE_HASH);
+
+        let rpc_error = serde_json::json!({"error": {"name": "HANDLER_ERROR", "cause": {"name": "UNKNOWN_ACCOUNT"}}});
+        assert!(parse_view_account(&rpc_error).unwrap_err().contains("RPC error"));
+
+        let query_error = serde_json::json!({"result": {"error": "account foo does not exist while viewing"}});
+        assert!(parse_view_account(&query_error).unwrap_err().contains("does not exist"));
+
+        let no_hash = serde_json::json!({"result": {"amount": "5"}});
+        assert!(parse_view_account(&no_hash).unwrap_err().contains("code_hash"));
+        assert!(parse_view_account(&serde_json::json!({})).is_err());
+    }
+
+    #[test]
+    fn rpc_url_must_be_https() {
+        let with = |u: &'static str| {
+            CounterpartyConfig::from_vars(move |k| (k == "COUNTERPARTY_RPC_URL").then(|| u.to_string()))
+        };
+        assert!(with("http://rpc.testnet.near.org").unwrap_err().starts_with("COUNTERPARTY_RPC_URL"));
+        assert!(with("https://").is_err());
+        assert_eq!(
+            with("https://test.rpc.fastnear.com/").unwrap().rpc_url.as_deref(),
+            Some("https://test.rpc.fastnear.com")
+        );
+        assert_eq!(CounterpartyConfig::from_vars(|_| None).unwrap().timeout, Duration::from_millis(2000));
     }
 }

@@ -1,7 +1,7 @@
 use crate::counterparty::{self, CounterpartyConfig};
 use crate::decision::{self, DecisionClient};
 use crate::formats::*;
-use crate::fusion::{self, FusionConfig};
+use crate::fusion::{self, FusionConfig, FusionMode};
 use crate::injection::{self, InjectionConfig};
 use crate::policy::{self, PolicyConfig};
 use crate::sink::{self, SinkConfig};
@@ -44,7 +44,11 @@ pub fn record_bytes(record: &DecisionRecord) -> Result<Vec<u8>, CheckerError> {
 /// the `DecisionClient`, then `fusion::fuse` for outcome and reasons (`sdd.md §5`).
 /// Configs come from the environment (`POLICY_*`, `INJECTION_*`/`CLASSIFIER_URL`,
 /// `COUNTERPARTY_*`/`AGENT_PROFILE_*`, `FUSION_*`); a missing decision client (no keys) leaves
-/// `signals.jev` null, which holds. When `DECISION_LOG_URL` is set the record is POSTed to the sink
+/// `signals.jev` null, which holds. With `FUSION_MODE=code_rules` the client is never built or
+/// called and `signals.jev` stays null (evaluation baselines). With `FUSION_MODE=jev` and
+/// `CASCADE_ENABLED` the order is policy, counterparty, Jev, and the classifier runs only when
+/// Jev's `unusual > FUSION_HOLD_THRESHOLD`; a skipped classifier leaves `signals.injection` null.
+/// When `DECISION_LOG_URL` is set the record is POSTed to the sink
 /// (POST failure downgrades `allow` to `hold`).
 pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerError> {
     let policy_cfg = PolicyConfig::from_env().map_err(CheckerError::Config)?;
@@ -52,9 +56,13 @@ pub fn decide(input_bytes: &[u8]) -> Result<(Verdict, DecisionRecord), CheckerEr
     let counterparty_cfg = CounterpartyConfig::from_env().map_err(CheckerError::Config)?;
     let fusion_cfg = FusionConfig::from_env().map_err(CheckerError::Config)?;
     let sink_cfg = SinkConfig::from_env();
-    let client = decision::client_from_env()
-        .map_err(|e| eprintln!("checker warning: decision client unavailable: {e}"))
-        .ok();
+    let client = if fusion_cfg.mode == FusionMode::CodeRules {
+        None
+    } else {
+        decision::client_from_env()
+            .map_err(|e| eprintln!("checker warning: decision client unavailable: {e}"))
+            .ok()
+    };
     let (mut verdict, mut record) = decide_with_configs(
         input_bytes,
         &policy_cfg,
@@ -96,8 +104,13 @@ pub fn decide_with_configs(
         return Err(CheckerError::Format(input.format));
     }
     let version = env!("CARGO_PKG_VERSION").to_string();
-    let (injection_signal, _latency_ms) =
-        injection::check(&input, injection_cfg).map_err(CheckerError::Check)?;
+    // Cascade (Jev mode only): the classifier runs after Jev, and only when Jev flags the payment.
+    let cascade = fusion_cfg.mode == FusionMode::Jev && fusion_cfg.cascade;
+    let injection_signal = if cascade {
+        None
+    } else {
+        injection::check(&input, injection_cfg).map_err(CheckerError::Check)?.0
+    };
     let (counterparty_signal, _cp_latency_ms) =
         counterparty::check(&input, counterparty_cfg).map_err(CheckerError::Check)?;
     let mut signals = Signals {
@@ -107,17 +120,21 @@ pub fn decide_with_configs(
         counterparty: counterparty_signal,
         jev: None,
     };
-    if let Some(c) = client {
-        let jev = c
-            .decide(&fusion::jev_state(&input, &signals), &decision::firewall_questions())
-            .map_err(|e| e.to_string())
-            .and_then(|d| fusion::jev_signal(&d));
-        match jev {
-            Ok(j) => signals.jev = Some(j),
-            Err(e) => eprintln!("checker warning: Jev unavailable: {e}"),
+    if fusion_cfg.mode == FusionMode::Jev {
+        if let Some(c) = client {
+            let jev = c
+                .decide(&fusion::jev_state(&input, &signals), &decision::firewall_questions())
+                .map_err(|e| e.to_string())
+                .and_then(|d| fusion::jev_signal(&d));
+            match jev {
+                Ok(j) => signals.jev = Some(j),
+                Err(e) => eprintln!("checker warning: Jev unavailable: {e}"),
+            }
         }
     }
-    let (outcome, reasons) = fusion::fuse(&signals, fusion_cfg);
+    if cascade && signals.jev.as_ref().is_some_and(|j| j.unusual > fusion_cfg.hold_threshold) {
+        signals.injection = injection::check(&input, injection_cfg).map_err(CheckerError::Check)?.0;
+    }
     let record = DecisionRecord {
         format: RECORD_FORMAT.to_string(),
         input_sha256: sha256_hex(input_bytes),
@@ -369,5 +386,96 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.signals.counterparty, None);
+    }
+
+    struct PanicClient;
+    impl DecisionClient for PanicClient {
+        fn decide(
+            &self,
+            _state: &serde_json::Value,
+            _questions: &std::collections::BTreeMap<String, crate::decision::Question>,
+        ) -> Result<crate::decision::Decision, crate::decision::DecisionError> {
+            panic!("code_rules mode must not call the decision client");
+        }
+    }
+
+    fn client_with_unusual(unusual: f64) -> FixedClient {
+        let mut d = crate::fusion::testing::benign_decision();
+        d.answers.insert("unusual".into(), crate::decision::Answer::Noul { noul: unusual });
+        FixedClient(Ok(d))
+    }
+
+    /// A classifier that is enabled but unreachable: calling it makes `decide` return an error.
+    fn unreachable_classifier() -> InjectionConfig {
+        InjectionConfig {
+            enabled: true,
+            classifier_url: Some("http://127.0.0.1:9/score".into()),
+            timeout: std::time::Duration::from_millis(500),
+            ..InjectionConfig::default()
+        }
+    }
+
+    fn decide_cascade(client: &dyn DecisionClient) -> Result<(Verdict, DecisionRecord), CheckerError> {
+        decide_with_configs(
+            INPUT.as_bytes(),
+            &PolicyConfig::default(),
+            &unreachable_classifier(),
+            &CounterpartyConfig::default(),
+            &FusionConfig { cascade: true, ..FusionConfig::default() },
+            Some(client),
+        )
+    }
+
+    #[test]
+    fn cascade_skips_classifier_when_jev_is_low() {
+        let (v, r) = decide_cascade(&client_with_unusual(0.04)).expect("classifier must not run");
+        assert_eq!(r.signals.injection, None);
+        assert!(r.signals.jev.is_some());
+        assert_eq!(v.outcome, Outcome::Allow);
+    }
+
+    #[test]
+    fn cascade_runs_classifier_when_jev_is_high() {
+        let err = decide_cascade(&client_with_unusual(0.9)).expect_err("classifier attempted");
+        assert!(matches!(&err, CheckerError::Check(m) if m.contains("injection classifier")), "{err}");
+    }
+
+    #[test]
+    fn cascade_skips_classifier_without_jev() {
+        let (v, r) = decide_cascade(&FixedClient(Err(529))).expect("classifier must not run");
+        assert_eq!(r.signals.injection, None);
+        assert_eq!(v.outcome, Outcome::Hold);
+        assert_eq!(v.reasons[0], ReasonCode::CheckUnavailable);
+    }
+
+    #[test]
+    fn no_cascade_runs_classifier_first() {
+        let err = decide_with_configs(
+            INPUT.as_bytes(),
+            &PolicyConfig::default(),
+            &unreachable_classifier(),
+            &CounterpartyConfig::default(),
+            &FusionConfig::default(),
+            Some(&client_with_unusual(0.04)),
+        )
+        .expect_err("classifier runs before Jev without the cascade");
+        assert!(matches!(err, CheckerError::Check(_)));
+    }
+
+    #[test]
+    fn code_rules_never_calls_the_client() {
+        let cfg = FusionConfig { mode: FusionMode::CodeRules, ..FusionConfig::default() };
+        let (v, r) = decide_with_configs(
+            INPUT.as_bytes(),
+            &PolicyConfig::default(),
+            &InjectionConfig::default(),
+            &CounterpartyConfig::default(),
+            &cfg,
+            Some(&PanicClient),
+        )
+        .unwrap();
+        assert_eq!(r.signals.jev, None);
+        assert_eq!(v.outcome, Outcome::Allow);
+        assert_eq!(v.reasons, vec![ReasonCode::ChecksPassed]);
     }
 }
