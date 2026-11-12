@@ -4,6 +4,8 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-13
 
+- **Component:** firewall-nightly-e2e runs a scenario list on testnet, cancels held attacks with the owner key, fails on check_unavailable, checks benign balance deltas, writes --report ([nightly-e2e.md](docs/build/nightly-e2e.md)).
+- **Evidence:** real-key end-to-end tests 2026-11-13: testnet 13 payments, run FAILURE (exit 1): benign 7/7 paid, attacks 3/6 stopped; missed #12 (18 tUSDC paid), #14 (36 tUSDC paid), #15 (allowed, escrowed by the payee budget, cancelled), redteam 6/17 missed, main sample 1/24 false holds and 6/24 missed ([e2e-2026-11-13.md](docs/results/e2e-2026-11-13.md)).
 - **Component:** guardian-v2 back in OutLayer checker mode with checker version 1b62f280afc1b2dcf60d3c0e11bf3adb8e93325763a783b216c78e8d425b1d21 and `secrets_ref` {default, jimuelle-firewall.testnet}; benign allow/paid, attack block/refused ([sdd.md §6](docs/build/sdd.md#outlayer-run-with-jev-2026-11-13)).
 - **Rules:** Jim's decision 2026-11-13: the project is named Eclipse ("steps in front of the bad payment, stays in the background otherwise."); the working name "Attested Payment Firewall" is kept only as a note in AGENTS.md §1, prd.md, sdd.md, system-design.md and idea.md. Code identifiers, wire formats and testnet account ids keep "firewall". The submission form's name field stays human-only (AGENTS.md §4).
 - **Rules:** OutLayer runbook ([sdd.md §6](docs/build/sdd.md#outlayer-checker-mode)): the secrets row must whitelist the agent account, because OutLayer judges access against the transaction signer; `set_checker_mode` passes `secrets_ref` `{"profile":"default","account_id":"<owner>"}`.
