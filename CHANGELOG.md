@@ -4,6 +4,9 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-13
 
+- **Results:** live runs 2026-11-13 with the classifier on: new [results.json](docs/results/results.json), [redteam-results.json](docs/results/redteam-results.json), `external-*.json`, [bec-results.json](docs/results/bec-results.json), [paysim-pooled.json](docs/results/paysim-pooled.json) and [calibration-all-signals-classifier.json](docs/results/calibration-all-signals-classifier.json); Jev budget ledger [jev-budget.md](docs/results/jev-budget.md) (2,239 calls including 400 booked for two aborted runs); run 9 (per-agent threshold, live) was not run (`8bb0618`).
+- **Rules:** Jim's decision 2026-11-13: `FUSION_HOLD_THRESHOLD` stays 0.84 (pooled re-estimate 0.85, split 0.88).
+- **Component:** external set metadata made label-neutral: `ref` and receiver ids no longer contain the label or the benchmark name (`0a6e0fa`).
 - **Component:** the classifier never scores with keywords when a model is loaded, and malformed model output raises (`73cb901`, P1). `firewall-eval` removes an exported `JEV_REFERENCE_EXAMPLES_JSON` per preset, and `AGENT_PROFILE_JSON` when the scenario set supplies `AGENT_PROFILE_PATH`; [sdd.md §5](docs/build/sdd.md#5-verdict-rules) documents `reference_cases` and the per-agent threshold (`457d727`).
 - **Rules:** `payee_distance` compares an ASCII confusable skeleton as well as the raw ids, and `find_lookalike` breaks ties by raw distance (`b9ba730`, P2); benchmark on Kaggle homoglyph data in [docs/results/lookalike-bench.json](docs/results/lookalike-bench.json).
 - **Component:** `agent/tools/bench_classifier.py` benchmarks the injection classifier on five corpora; output in [docs/results/classifier-bench.json](docs/results/classifier-bench.json) and [classifier-bench.md](docs/results/classifier-bench.md) (`90e6fe9`, P3).
