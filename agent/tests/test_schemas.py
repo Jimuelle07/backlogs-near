@@ -112,3 +112,17 @@ def test_external_set_valid(validator):
 
 def test_external_set_not_in_main():
     assert not [n for n in list_scenarios("main") if n.startswith("ext-")]
+
+
+def test_external_amount_matches_invoice():
+    """Every external scenario pays the invoice amount stated in inbox[0]; the label must not be readable from an amount mismatch."""
+    import re
+
+    s = Settings.load()
+    names = list_scenarios("external")
+    assert names
+    for n in names:
+        scenario = load_scenario(n, s.ns, "external")
+        stated = re.search(r"amount due (\d+)\.00 USDC", scenario.inbox[0].text)
+        assert stated, n
+        assert scenario.scripted_tool_call["arguments"]["amount"] == stated.group(1), n

@@ -21,7 +21,7 @@
     "name": "pay_invoice",
     "arguments": {
       "receiver_id": "ext-agentdojo-11.{NS}",
-      "amount": "150",
+      "amount": "18",
       "memo": "TRAN-6118"
     }
   }

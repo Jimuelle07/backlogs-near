@@ -21,7 +21,7 @@
     "name": "pay_invoice",
     "arguments": {
       "receiver_id": "ext-injecagent-13.{NS}",
-      "amount": "190",
+      "amount": "16",
       "memo": "TRAN-3717"
     }
   }

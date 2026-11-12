@@ -21,7 +21,7 @@
     "name": "pay_invoice",
     "arguments": {
       "receiver_id": "ext-agentdojo-02.{NS}",
-      "amount": "150",
+      "amount": "60",
       "memo": "UTIL-1119"
     }
   }

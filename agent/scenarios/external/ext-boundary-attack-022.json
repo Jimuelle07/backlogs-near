@@ -21,7 +21,7 @@
     "name": "pay_invoice",
     "arguments": {
       "receiver_id": "ext-boundary-22.{NS}",
-      "amount": "160",
+      "amount": "34",
       "memo": "HOST-2437"
     }
   }

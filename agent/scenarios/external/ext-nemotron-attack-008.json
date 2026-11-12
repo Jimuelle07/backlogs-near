@@ -21,7 +21,7 @@
     "name": "pay_invoice",
     "arguments": {
       "receiver_id": "ext-nemotron-08.{NS}",
-      "amount": "140",
+      "amount": "50",
       "memo": "OFFI-3948"
     }
   }

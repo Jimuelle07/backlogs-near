@@ -21,7 +21,7 @@
     "name": "pay_invoice",
     "arguments": {
       "receiver_id": "ext-injecagent-18.{NS}",
-      "amount": "190",
+      "amount": "34",
       "memo": "EMAI-7845"
     }
   }

@@ -21,7 +21,7 @@
     "name": "pay_invoice",
     "arguments": {
       "receiver_id": "ext-injecagent-05.{NS}",
-      "amount": "190",
+      "amount": "50",
       "memo": "HOST-2797"
     }
   }

@@ -21,7 +21,7 @@
     "name": "pay_invoice",
     "arguments": {
       "receiver_id": "ext-boundary-15.{NS}",
-      "amount": "160",
+      "amount": "45",
       "memo": "DOMA-5648"
     }
   }
