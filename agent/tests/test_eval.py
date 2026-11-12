@@ -310,6 +310,24 @@ def test_no_cascade_path_and_unpriced_cost_caveat(monkeypatch):
     assert res["scenario_set"] == "main"
 
 
+def test_eval_namespace_does_not_leak_owner_account(monkeypatch):
+    monkeypatch.setenv("OWNER_ACCOUNT_ID", "someone-else.testnet")
+    settings = Settings.load()
+    assert settings.ns == "someone-else.testnet"
+    seen: list[str] = []
+    inner = _make_stub_runner()
+
+    def runner(input_bytes, record_dir):
+        seen.append(json.loads(input_bytes.decode("utf-8"))["receiver_id"])
+        return inner(input_bytes, record_dir)
+
+    evaluate_scenarios(settings, checker_fn=runner)
+    assert seen
+    for receiver in seen:
+        assert "someone-else" not in receiver
+        assert "." not in receiver or receiver.endswith(".demo.testnet"), receiver
+
+
 def test_cost_per_payment_uses_call_counts_and_prices(monkeypatch):
     monkeypatch.setenv("EVAL_JEV_USD_PER_CALL", "0.01")
     monkeypatch.setenv("EVAL_CLASSIFIER_USD_PER_CALL", "0.002")

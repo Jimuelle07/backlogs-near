@@ -25,6 +25,9 @@ EVAL_JEV_USD_PER_CALL / EVAL_CLASSIFIER_USD_PER_CALL (default 0.0 = unpriced).
 `--all-configurations` runs every preset above, sequentially, against the real checker binary.
 `--scenario-set redteam` evaluates agent/scenarios/redteam instead of the main set.
 `--calibration FILE` adds q_hat and unseen_family_rotation computed from FILE's cases.
+
+Scenarios are always evaluated in the `demo.testnet` namespace (EVAL_NAMESPACE), the one the
+checker's default agent profile knows, so results do not depend on OWNER_ACCOUNT_ID.
 """
 
 from __future__ import annotations
@@ -51,6 +54,10 @@ from .scenarios import list_scenarios, load_scenario
 
 RESULTS_FORMAT = "firewall.results.v1"
 DEFAULT_RESULTS_PATH = REPO_ROOT / "data" / "eval" / "results.json"
+
+# Namespace of AgentProfile::with_default_payees() in checker/src/counterparty.rs; eval is offline
+# and must not depend on OWNER_ACCOUNT_ID.
+EVAL_NAMESPACE = "demo.testnet"
 
 UNPRICED_CAVEAT = (
     "Cost per payment is unpriced (EVAL_JEV_USD_PER_CALL and EVAL_CLASSIFIER_USD_PER_CALL unset); "
@@ -126,7 +133,7 @@ def evaluate_scenarios(
         checker_version = "0.1.0"
 
         for idx, name in enumerate(names, start=1):
-            scenario = load_scenario(name, settings.ns, scenario_set)
+            scenario = load_scenario(name, EVAL_NAMESPACE, scenario_set)
             req = propose_payment(
                 scenario, ScriptedLLM(scenario), client_ref=f"{scenario.name}-1"
             )
