@@ -15,6 +15,7 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-11
 
+- **Component:** E1 live receipts panel integrated into the shared React 18.3.1 / Vite 5.4.21 landing page in `site/`; standalone app removed. Read-only snapshot, filtering, pagination, refresh, exact amount display and account explorer links retained; panel uses Geist and the shared lilac tokens.
 - **Stack:** landing page decided (D1): Vite 5 + React 18 (JSX) static site in `site/`, hosted on Cloudflare Pages; shared by lanes D and E ([AGENTS.md §5](AGENTS.md#5-stack-decided), [site/README.md](site/README.md)).
 - **Component:** unprotected-agent mode (`--unprotected` / `--mode unprotected` in `firewall-demo`, `UnprotectedLocalAgent` and `UnprotectedTestnetAgent` in `agent/src/firewall_agent/guardian.py`, `unprotected` account setup in `setup_testnet.py`) for demo step 3 where a plain agent with a full-access key pays an attack directly without the Guardian (A5).
 - **Security:** checker hardening in `checker/src/{decision,http,injection,policy,sink}.rs`: range-check Jev `confidence`/`score` and verify `choice` matches `argmax(probabilities)`, enforce HTTPS-only `NEAR_AI_BASE_URL`, disable HTTP redirects (`max_redirects(0)`), fit HTTP timeout budgets (`3s + 8s + 2×8s + 3s = 30s`) to OutLayer's execution limit, and normalize `POLICY_ALLOWLIST` case-insensitively (B4).
