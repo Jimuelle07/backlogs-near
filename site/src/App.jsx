@@ -23,6 +23,9 @@ import { ReceiptsPanel } from "./components/ReceiptsPanel";
 import { VerdictExplorer } from "./components/VerdictExplorer";
 import { DAILY_CAP, GUARDIAN_ID, NEAR_RPC_URL, PER_PAYMENT_CAP, PROJECT_NAME, REPO_URL, STATUS_NOTE } from "./config.js";
 import { createReader } from "./near.js";
+import { FROZEN_Q_HAT, NOT_RUN, familyRows, headline, jevCalls, ms, pct, redteamRow, resultRows } from "./results.js";
+import RESULTS from "../../docs/results/results.json";
+import REDTEAM from "../../docs/results/redteam-results.json";
 
 const receiptsReader = createReader({ guardian: GUARDIAN_ID, rpc: NEAR_RPC_URL });
 
@@ -64,19 +67,14 @@ const DEMO = [
   ["Normal payment", "The agent pays an 18 tUSDC hosting invoice. Allow; the receipt is on the explorer."],
   ["Attack, unprotected", "A plain agent with a full-access key pays a lookalike account. The balance drops."],
   ["Same attack, protected", "Through the Guardian: high injection score, lookalike payee, two days old. Block; the receipt shows why."],
-  ["Hold path", "A bigger invoice from a known supplier waits in escrow, is re-checked and released. No human."],
-  ["Numbers", "Missed attacks and false blocks on the held-out test set, with cost and latency per check."],
+  ["Hold path", "A bigger invoice from a known supplier waits in escrow and is released when its window ends. No human."],
+  ["Numbers", "Missed attacks, false blocks and false holds from the evaluation, with latency and Jev calls per payment."],
 ];
 
-const RESULT_ROWS = [
-  "No defense",
-  "Policy rules only",
-  "Classifier only",
-  "All signals, code rules only (no Jev)",
-  "Jev fusion, all signals",
-  "Jev fusion + conformal hold threshold (ε = 5%)",
-  "Same, unseen attack family",
-];
+const RESULT_ROWS = resultRows(RESULTS);
+const FAMILY_ROWS = familyRows(RESULTS);
+const REDTEAM_ROW = redteamRow(REDTEAM);
+const HEADLINE = headline(RESULTS);
 
 const PAPERS = [
   ["Progent", "2504.11703"],
@@ -303,7 +301,7 @@ export default function App() {
                   <tr><td>Hard caps</td><td>{PER_PAYMENT_CAP} tUSDC per payment, {DAILY_CAP} tUSDC per day</td><td>Contract code</td></tr>
                   <tr><td>Hold windows</td><td>10 min under 20 tUSDC, 1 h up to 100, 6 h above</td><td>Contract escrow</td></tr>
                   <tr><td>Whole units only</td><td>Amounts in the token's smallest unit, compared with the request or invoice</td><td>Checker code</td></tr>
-                  <tr><td>Per-payee budgets <span className="tag">Planned</span></td><td>New payees start small and grow with clean payments</td><td>Contract code</td></tr>
+                  <tr><td>Per-payee budgets</td><td>A new payee starts at 20 tUSDC; an allow above the budget waits in escrow like a hold; each paid transfer raises the budget to twice that amount, up to the per-payment cap</td><td>Contract code</td></tr>
                 </tbody>
               </table>
             </div>
@@ -338,25 +336,81 @@ export default function App() {
                 <span className="kicker">Results</span>
                 <h2 id="results-title">Measured, not promised</h2>
               </div>
-              <p>Every check on and off over a labelled set of benign and attack payments. Numbers land after the full eval run.</p>
+              <p>
+                Every check on and off over {RESULTS.benign_total} benign and {RESULTS.attack_total} attack payments (six
+                attack families), decided by live Jev calls. Read from{" "}
+                <code className="ic">docs/results/results.json</code>.
+              </p>
             </div>
+            {HEADLINE && (
+              <div className="rstats">
+                <div className="rstat">
+                  <span className="k">Missed attacks</span>
+                  <strong>{pct(HEADLINE.best.missed_attacks_pct)}</strong>
+                  <small>vs {pct(HEADLINE.base.missed_attacks_pct)} with no defense</small>
+                </div>
+                <div className="rstat">
+                  <span className="k">False blocks</span>
+                  <strong>{pct(HEADLINE.best.false_blocks_pct)}</strong>
+                  <small>benign payments refused</small>
+                </div>
+                <div className="rstat">
+                  <span className="k">False holds</span>
+                  <strong>{pct(HEADLINE.best.false_holds_pct)}</strong>
+                  <small>target ε = 5%, measured in-sample</small>
+                </div>
+              </div>
+            )}
             <div className="tablewrap">
               <table>
                 <thead>
-                  <tr><th>Configuration</th><th>False holds</th><th>False blocks</th><th>Missed attacks</th><th>Median latency</th></tr>
+                  <tr><th>Configuration</th><th>False holds</th><th>False blocks</th><th>Missed attacks</th><th>Median latency</th><th>Per payment</th></tr>
                 </thead>
                 <tbody>
                   {RESULT_ROWS.map((r) => (
-                    <tr key={r}><td>{r}</td><td className="num">—</td><td className="num">—</td><td className="num">—</td><td className="num">—</td></tr>
+                    <tr key={r.key}>
+                      <td>{r.label}</td><td className="num">{pct(r.falseHolds)}</td><td className="num">{pct(r.falseBlocks)}</td>
+                      <td className="num">{pct(r.missed)}</td><td className="num">{ms(r.medianMs)}</td><td className="num">{jevCalls(r.jevCalls)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td>Same, red-team round ({REDTEAM_ROW.total} attacks)</td><td className="num">n/a</td><td className="num">n/a</td>
+                    <td className="num">{pct(REDTEAM_ROW.missed)} <small>({REDTEAM_ROW.allowed} allowed, {REDTEAM_ROW.held} held, {REDTEAM_ROW.blocked} blocked)</small></td>
+                    <td className="num">{ms(REDTEAM_ROW.medianMs)}</td><td className="num">1 Jev call</td>
+                  </tr>
+                  {NOT_RUN.map(([label, why]) => (
+                    <tr key={label}><td>{label}</td><td colSpan={5} className="num">{why}</td></tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="note">
-              The false-hold bound holds only while an agent behaves like its calibration history (exchangeability), and
-              covers known attack families; the unseen-family row shows what happens outside them. The hard cap holds
-              regardless.
-            </p>
+            <div className="families">
+              <h3>Attacks caught, by family <small>conformal run, q̂ {FROZEN_Q_HAT}</small></h3>
+              <ul>
+                {FAMILY_ROWS.map((f) => (
+                  <li key={f.key}>
+                    <span className="fam-name">{f.label}</span>
+                    <span className="fam-bar" aria-hidden="true"><span style={{ width: `${f.detectedPct}%` }} /></span>
+                    <span className="fam-val">{f.detectedPct}% <small>({f.detected}/{f.total})</small></span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <ul className="note caveats">
+              <li>
+                The false-hold bound assumes live payments look like the calibration set (exchangeability). The{" "}
+                {pct(HEADLINE ? HEADLINE.best.false_holds_pct : 0)} is measured on the same benign set used to calibrate,
+                so it is in-sample.
+              </li>
+              <li>
+                Detection covers the six evaluated attack families. Against new or adaptive attacks, the loss is bounded
+                by the hard caps in contract code: {PER_PAYMENT_CAP} tUSDC per payment, {DAILY_CAP} tUSDC per day.
+              </li>
+              <li>
+                The injection classifier did not run in this evaluation. Cost is unpriced, so the table shows Jev calls
+                per payment.
+              </li>
+            </ul>
           </section>
 
           {/* Live receipts (E1) */}

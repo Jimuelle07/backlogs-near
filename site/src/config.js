@@ -6,7 +6,7 @@ export const PROJECT_NAME = "Attested";
 
 // Shown under the hero. Keep it true: update as checks land (sprints.md).
 export const STATUS_NOTE =
-  "Hackathon build on NEAR testnet. The checks are landing this week; until Jev fusion is wired in, the checker allows every payment.";
+  "Hackathon build on NEAR testnet. The checker decides with Jev fusion; the first testnet receipts predate it and show stub_allow. The masked re-run is not built.";
 
 // Live receipts (lane E). guardian-v2 is the current testnet Guardian (sprints.md A1 log).
 export const NEAR_RPC_URL = "https://test.rpc.fastnear.com";

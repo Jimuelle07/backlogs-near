@@ -254,6 +254,30 @@ td.num { font-family: var(--mono); color: var(--dim); }
 
 /* Results / receipts notes */
 .note { margin: 16px var(--gutter) 0; color: var(--dim); font-size: 14px; max-width: 60em; }
+
+/* D4: results from docs/results/results.json */
+.rstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 32px var(--gutter) 0; }
+.rstat { display: flex; flex-direction: column; gap: 4px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+.rstat .k { color: var(--muted); font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.rstat strong { font: 400 40px/1.2 var(--mono); color: var(--accent); font-variant-numeric: tabular-nums; }
+.rstat small { color: var(--dim); font-size: 13px; }
+td.num small { color: var(--dim); font-size: 12px; }
+.families { margin: 32px var(--gutter) 0; }
+.families h3 { font-size: 18px; font-weight: 500; margin-bottom: 16px; }
+.families h3 small { color: var(--dim); font: 400 12px var(--mono); margin-left: 8px; }
+.families ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.families li { display: grid; grid-template-columns: 11em 1fr 7.5em; align-items: center; gap: 12px; font-size: 14px; }
+.fam-bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.fam-bar > span { display: block; height: 100%; background: var(--accent); }
+.fam-val { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.fam-val small { color: var(--dim); }
+.caveats { padding-left: 20px; }
+.caveats li + li { margin-top: 6px; }
+@media (max-width: 640px) {
+  .rstats { grid-template-columns: 1fr; }
+  .families li { grid-template-columns: 1fr auto; }
+  .fam-bar { grid-column: 1 / -1; grid-row: 2; }
+}
 .panel {
   margin: 0 var(--gutter); border: 1px dashed var(--dash); border-radius: 12px; padding: clamp(20px, 3vw, 32px);
   display: flex; flex-direction: column; gap: 14px;

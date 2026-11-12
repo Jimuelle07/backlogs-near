@@ -7,4 +7,6 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 export default defineConfig(({ mode }) => ({
   plugins: [react(), ...(mode === "single" ? [viteSingleFile()] : [])],
   base: "./",
+  // The Results section imports ../docs/results/*.json from the repo root.
+  server: { fs: { allow: [".."] } },
 }));

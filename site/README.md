@@ -66,4 +66,6 @@ The first run asks for a Cloudflare login and creates the project. Any static ho
 - `src/near.js`: read-only RPC reader and exact token amount formatting; `src/near.test.js` tests it against the receipt schema example.
 - `src/styles.css`: brand tokens (`:root`) and components.
 
-Open items: project name (team lead decides; set `PROJECT_NAME`), repo URL (set `REPO_URL` once public), demo video (D3/D6), results table from `results.json` (E3/D4), architecture diagram (D2).
+- `src/results.js`: Results section rows, read at build time from `../docs/results/results.json` and `redteam-results.json` (the dev server is allowed to read `..` in `vite.config.js`); `src/results.test.js` checks them against the README Results table.
+
+Open items: project name (team lead decides; set `PROJECT_NAME`), repo URL (set `REPO_URL` once public), demo video (D3/D6).
