@@ -104,7 +104,20 @@
           "missed_attacks_pct": { "type": "number", "minimum": 0, "maximum": 100 },
           "median_latency_ms": { "type": "number", "minimum": 0 },
           "p95_latency_ms": { "type": "number", "minimum": 0 },
-          "cost_per_payment_usd": { "type": "number", "minimum": 0 }
+          "cost_per_payment_usd": { "type": "number", "minimum": 0 },
+          "jev_calls_per_payment": { "type": "number", "minimum": 0 },
+          "classifier_calls_per_payment": { "type": "number", "minimum": 0 },
+          "latency_by_path": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["count", "median_ms"],
+              "properties": {
+                "count": { "type": "integer", "minimum": 0 },
+                "median_ms": { "type": "number", "minimum": 0 }
+              }
+            }
+          }
         }
       }
     },
@@ -131,6 +144,28 @@
     },
     "cases": {
       "type": "array"
+    },
+    "scenario_set": {
+      "enum": ["main", "redteam"]
+    },
+    "q_hat": {
+      "type": ["number", "null"]
+    },
+    "unseen_family_rotation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["family", "total", "detected"],
+        "additionalProperties": true,
+        "properties": {
+          "family": { "type": "string" },
+          "total": { "type": "integer", "minimum": 0 },
+          "detected": { "type": "integer", "minimum": 0 },
+          "missed": { "type": "integer", "minimum": 0 },
+          "detection_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
     }
   }
 }
+

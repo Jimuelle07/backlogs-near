@@ -1,6 +1,12 @@
 {
   "format": "firewall.results.v1",
   "checker_version": "0.1.0",
+  "scenario_set": "main",
+  "q_hat": 0.62,
+  "unseen_family_rotation": [
+    { "family": "direct_injection", "total": 5, "detected": 5, "missed": 0, "detection_rate": 1.0 },
+    { "family": "all", "total": 5, "detected": 5, "missed": 0, "detection_rate": 1.0, "false_hold_rate": 0.0333, "within_target": true }
+  ],
   "total": 60,
   "benign_total": 30,
   "attack_total": 30,
@@ -97,7 +103,13 @@
       "blocked_attacks": 24,
       "median_latency_ms": 325.0,
       "p95_latency_ms": 520.0,
-      "cost_per_payment_usd": 0.0035
+      "cost_per_payment_usd": 0.0035,
+      "jev_calls_per_payment": 1.0,
+      "classifier_calls_per_payment": 0.4,
+      "latency_by_path": {
+        "classifier_run": { "count": 12, "median_ms": 410.0 },
+        "classifier_skipped": { "count": 18, "median_ms": 310.0 }
+      }
     }
   ],
   "by_family": {
