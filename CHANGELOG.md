@@ -2,6 +2,16 @@
 
 Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §10](AGENTS.md#10-docs-upkeep).
 
+## 2026-11-12
+
+- **Rules:** Jim's decision 2026-11-12: any non-Jev attack flag (policy, classifier, MELON, counterparty) holds the payment even when Jev `unusual` is at or below q̂; block still needs Jev `unusual` > q̂ and at least 2 distinct detectors (Jev counts once). Recorded in [AGENTS.md §7](AGENTS.md) and [sdd.md §5](docs/build/sdd.md); `docs/build/idea.md` (human-authored) still says hold only above the threshold (`cc15b79`).
+- **Rules:** Jim's decision 2026-11-12: a qualified account id never matches a bare profile name exactly; new optional `COUNTERPARTY_NAMESPACE` adds `<base>.<ns>` for the default payees (`a40f7d6`, B3).
+- **Config:** new `FUSION_MODE` (`jev` | `code_rules`; `code_rules` is evaluation-only), `CASCADE_ENABLED` (B5), `COUNTERPARTY_NAMESPACE`; `COUNTERPARTY_TIMEOUT_MS` default and maximum 2000; `LLM_TIMEOUT` 7 s, so the timeout budget is `3s + 2s + 8s + 2×7s + 3s = 30s`; `FUSION_HOLD_THRESHOLD` default frozen at 0.84 (C5, `61e9f52`; 150 benign cases, ε = 5%).
+- **Format:** [schemas/results.schema.json](schemas/results.schema.json) gains optional `jev_calls_per_payment`, `classifier_calls_per_payment` and `latency_by_path` per configuration, and optional top-level `scenario_set`, `q_hat` and `unseen_family_rotation`.
+- **Component:** dataset grown to 150 benign + 150 attack scenarios (6 families × 25, `agent/tools/generate_scenarios.py`) plus 17 red-team scenarios in `agent/scenarios/redteam/` (A6, A7); `firewall-eval` gains seven presets, `--scenario-set`, `--calibration`, call counts and unpriced cost per payment (C4, `73a0e0d`).
+- **Component:** guardian-v2 redeployed on testnet with the A4 wasm, no init (tx `6ia53LjrQhbiqQYcy9gdqAAqGdYBkLpXzes8gb3QdEwA`, code sha256 `56a213e897a94b19b4bb85af371cbbf717e6ea82ed972522ef6b03d642075c88`), then switched to relayer mode; run log in [nightly-e2e.md](docs/build/nightly-e2e.md#run-log).
+- **Results:** committed [docs/results/results.json](docs/results/results.json), [docs/results/redteam-results.json](docs/results/redteam-results.json) and [docs/results/redteam.md](docs/results/redteam.md); the injection classifier was not run (model download failed), so `classifier_only` is reported as not run; MELON not built (`78e3fcb`).
+
 ## 2026-11-11
 
 - **Stack:** landing page decided (D1): Vite 5 + React 18 (JSX) static site in `site/`, hosted on Cloudflare Pages; shared by lanes D and E ([AGENTS.md §5](AGENTS.md#5-stack-decided), [site/README.md](site/README.md)).

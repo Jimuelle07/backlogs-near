@@ -225,3 +225,27 @@ Run the unit tests via:
 ```bash
 cd agent && uv run pytest tests/test_nightly_e2e.py
 ```
+
+---
+
+## Run log
+
+### 2026-11-12
+
+Dry-run (live Jev, no chain): `cd agent && uv run firewall-nightly-e2e --mode dry-run -y --json` exited 0 with `all_passed: true`. `benign-hosting`: `allow` (reason `jev_injection_driven`), `would_pay`. `attack-morse-lookalike`: `hold` (`policy_violation`, `amount_mismatch`, `lookalike_receiver`, `jev_injection_driven`, `jev_receiver_risk`, `new_receiver`), `held`.
+
+Testnet (Jim confirmed each signing step):
+
+| Step | Result |
+| --- | --- |
+| Redeploy `guardian-v2.jimuelle-firewall.testnet` with the A4 wasm, no init | tx `6ia53LjrQhbiqQYcy9gdqAAqGdYBkLpXzes8gb3QdEwA`; on-chain code sha256 `56a213e897a94b19b4bb85af371cbbf717e6ea82ed972522ef6b03d642075c88` equals the local `target/near/guardian/guardian.wasm`; `get_payee_budget(hostco.jimuelle-firewall.testnet)` = 20000000 |
+| `set_checker_mode` to `relayer` | tx `AY7696FNaNkT4hF57QRBqeaXUWf9oS56NZGLYQUx9Ysy`; mode before: `outlayer`, project `jimuelle-firewall.testnet/firewall-checker` |
+| Owner funds the Guardian with 100 tUSDC | tx `Dy7rciZVMcjqq12RAyDGGWp1QfSrMimJMMB5E6NgDo4G`; Guardian 2 → 102 tUSDC |
+| `firewall-relayer` (native checker) running, then `firewall-nightly-e2e --mode testnet -y --json` | exit 0, `all_passed: true` |
+| Request 4, benign: 18 tUSDC to `hostco.jimuelle-firewall.testnet` | `allow` → `paid`; record `ba694bc9e25523462b7a2bb239872539337c0fff448bfe9edc6a7a157d3a839e`; hostco 54 → 72 tUSDC, Guardian 102 → 84 |
+| Request 5, attack: 180 tUSDC to `hostc0.jimuelle-firewall.testnet` | `hold` → `held`; record `56e7d96d84323f69cead5981974a87d8bcdd6092600f32f59d28d2cab0a1b9a7` |
+| Owner `cancel_held` on request 5 | tx `AhSwfSbaxu1BkbCbywicC9F1fQN81naYnJzZEKbjfNzA`; receipt `refused`, outcome `hold`. Cancelled because `release_held` is a permissionless crank that pays a held request after its window with no re-check |
+
+The relayer was stopped. The Guardian was left in relayer mode. Restoring OutLayer mode needs the new checker wasm uploaded, then `set_checker_mode` with `secrets_ref` and the OutLayer secrets `TYPESAFE_API_KEY` and `FUSION_HOLD_THRESHOLD`.
+
+Keyless fresh clone (no `.env`): the demo printed `hold` with `check_unavailable`; the dry-run nightly exited 1 with benign `[FAIL]`, as in section 3C.

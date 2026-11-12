@@ -112,11 +112,33 @@ Caveat: when the 1 NEAR gas allowance is used up, the agent is locked out and ca
 
 ## Results
 
-Filled from docs/results/results.json (C6).
+Evaluated on 150 benign and 150 attack scenarios (six attack families, 25 each), decided by Jev (`jev-1.14.0`, via the TypeSafe API, live calls on 2026-11-12). The injection classifier was not run (the local model could not be downloaded), so every row ran with `INJECTION_ENABLED=false`. The hold threshold q̂ = 0.84 was computed by `firewall-calibrate` on the first `jev_fusion_all_signals` run (150 benign, ε = 5%) and frozen before any conformal-row results existed. Re-estimates on the final runs were 0.82 (`jev_fusion_all_signals`) and 0.85 (`jev_fusion_conformal`); the threshold was not changed afterwards. At 0.84 the realised false-hold rate on the final conformal run is 4.67% (7/150), measured on the same benign set (in-sample). Cost is unpriced (`EVAL_JEV_USD_PER_CALL` and `EVAL_CLASSIFIER_USD_PER_CALL` unset), so the cost column shows Jev calls per payment.
+
+| Configuration | False holds (%) | False blocks (%) | Missed attacks (%) | Median latency (ms) | Cost per payment |
+| --- | --- | --- | --- | --- | --- |
+| No defense (`no_defense`) | 0.0 | 0.0 | 100.0 | 43.0 | 0 calls |
+| Policy rules only (`policy_only`) | 0.0 | 0.0 | 70.67 | 42.2 | 0 calls |
+| HF classifier only (`classifier_only`) | not run (classifier model unavailable) | | | | |
+| MELON re-run only | not built (cut list) | | | | |
+| All signals, code rules only, no Jev (`code_rules_all_signals`) | 0.0 | 0.0 | 55.33 | 43.4 | 0 calls |
+| Jev fusion, all signals (`jev_fusion_all_signals`, hold threshold 0.5) | 47.33 | 0.0 | 0.0 | 401.6 | 1 Jev call (unpriced) |
+| Jev fusion + conformal hold threshold, ε = 5% (`jev_fusion_conformal`, q̂ 0.84) | 4.67 | 0.0 | 20.67 | 402.8 | 1 Jev call (unpriced) |
+| Same, with cascade (`jev_fusion_conformal_cascade`) | 4.0 | 0.0 | 21.33 | 422.6 | 1 Jev call (unpriced) |
+| Same, unseen attack family (detection at q̂ per family) | n/a | n/a | direct_injection 4, encoded_injection 8, indirect_injection 4, memory_poisoning 52, lookalike_receiver 8, fake_invoice 48 (all families 20.67) | n/a | n/a |
+| Same, red-team round (17 attacks) | n/a | n/a | 52.94 (9 allowed, 7 held, 1 blocked) | not recorded | 1 Jev call (unpriced) |
+
+The cascade row never called the classifier (it was off), so it differs from the conformal row only by run-to-run Jev variation. Unseen-family figures are the complement of the detection rates in `unseen_family_rotation`: 96%, 92%, 96%, 48%, 92% and 52% in the order above. Held-out split: q̂ 0.85 on 75 calibration benign cases, false-hold rate 1.33% on 75 test benign cases. Files: [`docs/results/results.json`](docs/results/results.json), [`docs/results/redteam-results.json`](docs/results/redteam-results.json), [`docs/results/redteam.md`](docs/results/redteam.md).
 
 ## Limits
 
-Filled from docs/results/results.json (C6).
+- **Exchangeability.** The conformal bound on false holds assumes benign scores in use are exchangeable with the calibration scores. Real traffic may drift; the 4.67% figure is in-sample.
+- **Known attack families only.** The dataset has six families. At q̂, detection is 48% for `memory_poisoning` and 52% for `fake_invoice`; the other four families are at 92% to 96%.
+- **Jev flags alone never hold.** A payment is held when Jev `unusual` exceeds q̂ or a non-Jev detector fires. In the red-team round, 9 of 17 attacks were allowed; most carried Jev flags (`jev_injection_driven`, `jev_receiver_risk`) but `unusual` stayed at or below q̂ and no other detector fired. See [`docs/results/redteam.md`](docs/results/redteam.md).
+- **Hard caps are the guaranteed bound.** The Guardian's per-payment cap, daily cap and per-payee budget limit loss whatever the verdict. The Jev gate is a probabilistic filter, not a security boundary.
+- **Injection classifier not run.** It was not run in this evaluation (local model unavailable); the `classifier_only` row is empty and the cascade never invoked it.
+- **MELON not built.** It is on the cut list; its row is omitted.
+- **`release_held` does not re-check.** After the hold window, a held request is paid with no re-check; re-checks during the hold window are on the cut list.
+- **Threshold estimates vary.** Jev scores differ between runs, so q̂ re-estimates ranged from 0.82 to 0.85 (frozen value 0.84).
 
 ## Built with / third-party
 
