@@ -113,36 +113,54 @@ impl AgentProfile {
             Detailed(PayeeHistory),
         }
 
+        // The outer payload is NOT `#[serde(untagged)]`: untagged enums buffer
+        // input in serde's `Content` type, which has no 128-bit integers, so
+        // `typical_amount_units: Vec<u128>` could never match. Each concrete
+        // shape is tried with a direct `from_str` instead.
         #[derive(Deserialize)]
-        #[serde(untagged)]
+        struct Standard {
+            #[serde(default)]
+            payments_last_90d: Option<u32>,
+            #[serde(default)]
+            typical_amount_units: Option<Vec<u128>>,
+            #[serde(default)]
+            known_payees: Vec<PayeeItem>,
+        }
+
+        #[derive(Deserialize)]
+        struct MapShape {
+            #[serde(default)]
+            payments_last_90d: Option<u32>,
+            #[serde(default)]
+            typical_amount_units: Option<Vec<u128>>,
+            known_payees: std::collections::BTreeMap<String, u64>,
+        }
+
         enum ProfilePayload {
-            Standard {
-                #[serde(default)]
-                payments_last_90d: Option<u32>,
-                #[serde(default)]
-                typical_amount_units: Option<Vec<u128>>,
-                #[serde(default)]
-                known_payees: Vec<PayeeItem>,
-            },
-            MapShape {
-                #[serde(default)]
-                payments_last_90d: Option<u32>,
-                #[serde(default)]
-                typical_amount_units: Option<Vec<u128>>,
-                known_payees: std::collections::BTreeMap<String, u64>,
-            },
+            Standard(Standard),
+            MapShape(MapShape),
             BareList(Vec<PayeeItem>),
         }
 
-        let parsed: ProfilePayload = serde_json::from_str(s)
-            .map_err(|e| format!("failed to parse agent profile JSON: {e}"))?;
+        let parsed = match serde_json::from_str::<Standard>(s) {
+            Ok(v) => ProfilePayload::Standard(v),
+            Err(first) => match serde_json::from_str::<MapShape>(s) {
+                Ok(v) => ProfilePayload::MapShape(v),
+                Err(_) => match serde_json::from_str::<Vec<PayeeItem>>(s) {
+                    Ok(v) => ProfilePayload::BareList(v),
+                    Err(_) => {
+                        return Err(format!("failed to parse agent profile JSON: {first}"));
+                    }
+                },
+            },
+        };
 
         match parsed {
-            ProfilePayload::Standard {
+            ProfilePayload::Standard(Standard {
                 payments_last_90d,
                 typical_amount_units,
                 known_payees,
-            } => {
+            }) => {
                 let payees = known_payees
                     .into_iter()
                     .map(|item| match item {
@@ -162,11 +180,11 @@ impl AgentProfile {
                     known_payees: payees,
                 })
             }
-            ProfilePayload::MapShape {
+            ProfilePayload::MapShape(MapShape {
                 payments_last_90d,
                 typical_amount_units,
                 known_payees,
-            } => {
+            }) => {
                 let payees = known_payees
                     .into_iter()
                     .map(|(account_id, prior_payments)| PayeeHistory {
@@ -967,6 +985,50 @@ mod tests {
         let p3 = AgentProfile::from_json_str(shape3).unwrap();
         assert_eq!(p3.known_payees.len(), 1);
         assert_eq!(p3.known_payees[0].prior_payments, 10);
+    }
+
+    #[test]
+    fn test_profile_json_with_typical_amount_units() {
+        let s = r#"{"payments_last_90d": 120, "typical_amount_units": [9000000, 92000000], "known_payees": [{"account_id": "m1.demo.testnet", "prior_payments": 9, "is_contract": false, "account_age_days": 180.0}]}"#;
+        let p = AgentProfile::from_json_str(s).unwrap();
+        assert_eq!(p.payments_last_90d, Some(120));
+        assert_eq!(p.typical_amount_units, Some(vec![9000000, 92000000]));
+        assert_eq!(p.known_payees.len(), 1);
+        assert_eq!(p.known_payees[0].account_id, "m1.demo.testnet");
+        assert_eq!(p.known_payees[0].prior_payments, 9);
+        assert_eq!(p.known_payees[0].is_contract, Some(false));
+        assert_eq!(p.known_payees[0].account_age_days, Some(180.0));
+    }
+
+    #[test]
+    fn test_profile_json_map_shape_with_typical_amount_units() {
+        let s = r#"{"typical_amount_units": [1, 2], "known_payees": {"hostco": 5}}"#;
+        let p = AgentProfile::from_json_str(s).unwrap();
+        assert_eq!(p.typical_amount_units, Some(vec![1, 2]));
+        assert_eq!(p.known_payees.len(), 1);
+        assert_eq!(p.known_payees[0].account_id, "hostco");
+        assert_eq!(p.known_payees[0].prior_payments, 5);
+    }
+
+    #[test]
+    fn test_profile_json_keeps_values_above_u64() {
+        let s = r#"{"typical_amount_units": [1000000000000000000000000], "known_payees": ["hostco"]}"#;
+        let p = AgentProfile::from_json_str(s).unwrap();
+        assert_eq!(
+            p.typical_amount_units,
+            Some(vec![1_000_000_000_000_000_000_000_000u128])
+        );
+    }
+
+    #[test]
+    fn test_profile_json_malformed_is_err() {
+        for bad in [r#"{"known_payees": 5}"#, "not json"] {
+            let e = AgentProfile::from_json_str(bad).unwrap_err();
+            assert!(
+                e.starts_with("failed to parse agent profile JSON: "),
+                "{e}"
+            );
+        }
     }
 
     #[test]
