@@ -324,3 +324,36 @@ def test_clock_moved_back_keeps_spend(settings, monkeypatch):
         "spent_today": 400 * UNIT,
         "payee_budgets": {},
     }
+
+
+def test_grooming_stopped_by_daily_cap(settings, monkeypatch):
+    # An always-allow checker plus a growing schedule to one new payee: the budget keeps doubling,
+    # but the daily cap still bounds cumulative spend.
+    _fake_checker(monkeypatch, "allow")
+    g = _guardian(settings, [T0])
+    for i, amt in enumerate((18, 36, 72, 144, 200), start=1):
+        d = g.request_payment(_req(settings, amt * UNIT, f"ref-{i}"))
+        assert d.status == "would_pay"
+    assert _spent(g) == 470 * UNIT
+    with pytest.raises(ContractRefusal, match="^Daily cap reached$"):
+        g.request_payment(_req(settings, 200 * UNIT, "ref-6"))
+    assert _spent(g) <= 500 * UNIT
+    assert _spent(g) == 470 * UNIT
+
+
+def test_replayed_verdict_does_not_bind_larger_amount(settings):
+    g = _guardian(settings, [T0])
+    small = g.build_checker_input(_req(settings, 12 * UNIT), 7)
+    large = g.build_checker_input(_req(settings, 120 * UNIT), 7)
+    verdict = {
+        "format": guardian_mod.VERDICT_FORMAT,
+        "request_id": small["request_id"],
+        "receiver_id": small["receiver_id"],
+        "token_id": small["token_id"],
+        "amount": small["amount"],
+        "outcome": "allow",
+        "reasons": ["test"],
+        "record_sha256": "0" * 64,
+    }
+    assert guardian_mod.binds(small, verdict) is None
+    assert guardian_mod.binds(large, verdict) == "amount"
