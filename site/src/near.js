@@ -39,6 +39,15 @@ function validateReceipt(receipt) {
   return receipt;
 }
 
+function validateHeld(held) {
+  const uint = (value) => typeof value === 'string' && /^\d+$/.test(value);
+  if (!held || !uint(held.request_id) || !uint(held.amount) || !uint(held.release_at_ns)
+    || typeof held.receiver_id !== 'string') {
+    throw new Error('The Guardian returned an unsupported held payment format.');
+  }
+  return held;
+}
+
 export function createReader({ guardian = DEFAULT_GUARDIAN, rpc = DEFAULT_RPC, fetcher = fetch } = {}) {
   if (!/^[a-z0-9._-]+\.testnet$/.test(guardian)) {
     throw new Error('Choose a named NEAR testnet Guardian account.');
@@ -72,8 +81,19 @@ export function createReader({ guardian = DEFAULT_GUARDIAN, rpc = DEFAULT_RPC, f
     return { value, blockId: payload.result.block_hash, blockHeight: payload.result.block_height };
   }
 
+  async function getHeld({ signal, blockId } = {}) {
+    if (!blockId) throw new Error('Held payments require a receipt snapshot block hash.');
+    const held = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { value } = await view('get_held', { from_index: from, limit: PAGE_SIZE }, { signal, blockId });
+      if (!Array.isArray(value) || value.length > PAGE_SIZE) throw new Error('Invalid held payment page.');
+      held.push(...value.map(validateHeld));
+      if (value.length < PAGE_SIZE) return held;
+    }
+  }
+
   return {
-    guardian, rpc,
+    guardian, rpc, getHeld,
     async snapshot({ signal, pages = 1 } = {}) {
       const { value: config, blockId, blockHeight } = await view('get_config', {}, { signal });
       if (!Number.isInteger(config?.token_decimals) || config.token_decimals < 0
@@ -89,7 +109,9 @@ export function createReader({ guardian = DEFAULT_GUARDIAN, rpc = DEFAULT_RPC, f
         hasMore = value.length === PAGE_SIZE;
         if (!hasMore) break;
       }
-      return { config, receipts: sortReceipts(receipts), hasMore, blockHeight, updatedAt: new Date() };
+      const held = receipts.some((receipt) => receipt.status === 'held')
+        ? await getHeld({ signal, blockId }) : [];
+      return { config, receipts: sortReceipts(receipts), held, hasMore, blockId, blockHeight, updatedAt: new Date() };
     },
   };
 }

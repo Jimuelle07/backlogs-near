@@ -5,6 +5,7 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 ## 2026-11-13
 
 - **Component:** E3 results section in `site/` renders the C1 JSON example as a labelled sample-data table and grouped inline SVG chart, with cost/latency units and exchangeability/known-family caveats. Build and renderer validate `firewall.results.v1`; Node tests cover mapping, format rejection and rendered output.
+- **Component:** E2 inline receipt details in `site/`: keyboard opening, Escape/close with focus restoration, all receipt fields and labelled reason codes, hash copy controls and NearBlocks account links. Held entries are paginated at the receipt snapshot block; countdowns use integer nanoseconds and show `releasing` at expiry.
 
 ## 2026-11-12
 
