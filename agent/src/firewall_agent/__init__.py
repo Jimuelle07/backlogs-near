@@ -1,1 +1,1 @@
-"""Demo agent, relayer and tooling for the Attested Payment Firewall."""
+"""Demo agent, relayer and tooling for Eclipse."""

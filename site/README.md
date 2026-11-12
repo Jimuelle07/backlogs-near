@@ -73,4 +73,4 @@ The first run asks for a Cloudflare login and creates the project. Any static ho
 - `src/near.js`: read-only RPC reader and exact token amount formatting; `src/near.test.js` tests it against the receipt schema example.
 - `src/styles.css`: brand tokens (`:root`) and components.
 
-Open items: project name (team lead decides; set `PROJECT_NAME`), repo URL (set `REPO_URL` once public), demo video (D3/D6).
+Open items: repo URL (set `REPO_URL` once public), demo video (D3/D6).

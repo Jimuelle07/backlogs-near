@@ -1,4 +1,4 @@
-# Attested Payment Firewall — NEAR Hackathon Build Plan
+# Eclipse (working name: Attested Payment Firewall) — NEAR Hackathon Build Plan
 
 Nov 8, 2026 · @Jimmk
 

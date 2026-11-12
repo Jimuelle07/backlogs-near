@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Project chosen: "Attested Payment Firewall" (working name; the human sets the final name at submission). Plan: [idea.md](idea.md). Last updated 2026-11-09.
+Project chosen: "Eclipse" (named by Jim 2026-11-13; working name "Attested Payment Firewall"): steps in front of the bad payment, stays in the background otherwise. Plan: [idea.md](idea.md). Last updated 2026-11-13.
 
 Tracks are planned, not final (§5). Open questions are in §11.
 
@@ -21,7 +21,7 @@ Today's defenses run on the agent's own host, so a compromised agent can skip th
 
 ## 4. Chosen direction
 
-The Attested Payment Firewall extends Bet B "Intent Notary": a TEE-attested checker runs four checks (policy rules, injection classifier, MELON masked re-run, counterparty signals); Jev fuses them into allow / hold / block; the hold threshold is a conformal quantile with a stated false-hold bound; there is no human in the loop. NEAR holds the funds, scopes the agent's key, binds each verdict to receiver, token and exact amount, enforces caps and records the receipt.
+Eclipse extends Bet B "Intent Notary": a TEE-attested checker runs four checks (policy rules, injection classifier, MELON masked re-run, counterparty signals); Jev fuses them into allow / hold / block; the hold threshold is a conformal quantile with a stated false-hold bound; there is no human in the loop. NEAR holds the funds, scopes the agent's key, binds each verdict to receiver, token and exact amount, enforces caps and records the receipt.
 
 Pitch: "Give your agent a wallet, not the keys: every payment ships with a hardware-signed proof that it passed the check."
 

@@ -1,8 +1,8 @@
 // Site-wide settings. Edit here, not in components.
 
-// Working brand from the branding artifact. The final project name is the team lead's call
-// at submission (AGENTS.md §4); change it here when it is set.
-export const PROJECT_NAME = "Attested";
+// Project name, set by Jim on 2026-11-13.
+export const PROJECT_NAME = "Eclipse";
+export const PROJECT_TAGLINE = "Steps in front of the bad payment, stays in the background otherwise.";
 
 // Shown under the hero. Keep it true: update as checks land (sprints.md).
 export const STATUS_NOTE =

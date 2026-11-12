@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-Project chosen: "Attested Payment Firewall" ([idea.md](idea.md)). Last updated 2026-11-09. Module details: [sdd.md](sdd.md).
+Project chosen: "Eclipse" (working name "Attested Payment Firewall") ([idea.md](idea.md)). Last updated 2026-11-09. Module details: [sdd.md](sdd.md).
 
 ## 2. Context diagram
 

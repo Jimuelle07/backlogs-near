@@ -1,7 +1,7 @@
 [project]
 name = "firewall-agent"
 version = "0.1.0"
-description = "Demo agent, relayer and tooling for the Attested Payment Firewall"
+description = "Demo agent, relayer and tooling for Eclipse"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "openai",
