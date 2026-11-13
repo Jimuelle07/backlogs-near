@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="416.16pt" height="268.505511pt" viewBox="0 0 416.16 268.505511" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 268.505511 
+L 416.16 268.505511 
+L 416.16 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 10.520331 89.508841 
+L 72.942545 89.508841 
+L 72.942545 31.672402 
+L 10.520331 31.672402 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #e69f00; stroke: #e69f00; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 76.926942 89.508841 
+L 139.349157 89.508841 
+L 139.349157 31.672402 
+L 76.926942 31.672402 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #e69f00; stroke: #e69f00; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 143.333554 89.508841 
+L 205.755769 89.508841 
+L 205.755769 31.672402 
+L 143.333554 31.672402 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #e69f00; stroke: #e69f00; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 209.740165 89.508841 
+L 272.16238 89.508841 
+L 272.16238 31.672402 
+L 209.740165 31.672402 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #0072b2; stroke: #0072b2; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 276.146777 89.508841 
+L 338.568992 89.508841 
+L 338.568992 31.672402 
+L 276.146777 31.672402 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #e69f00; stroke: #e69f00; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 342.553388 89.508841 
+L 404.975603 89.508841 
+L 404.975603 31.672402 
+L 342.553388 31.672402 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #d55e00; stroke: #d55e00; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 10.520331 158.361744 
+L 72.942545 158.361744 
+L 72.942545 100.525305 
+L 10.520331 100.525305 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #e69f00; stroke: #e69f00; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 76.926942 158.361744 
+L 139.349157 158.361744 
+L 139.349157 100.525305 
+L 76.926942 100.525305 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #e69f00; stroke: #e69f00; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 143.333554 158.361744 
+L 205.755769 158.361744 
+L 205.755769 100.525305 
+L 143.333554 100.525305 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #0072b2; stroke: #0072b2; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 209.740165 158.361744 
+L 272.16238 158.361744 
+L 272.16238 100.525305 
+L 209.740165 100.525305 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #0072b2; stroke: #0072b2; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 276.146777 158.361744 
+L 338.568992 158.361744 
+L 338.568992 100.525305 
+L 276.146777 100.525305 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #0072b2; stroke: #0072b2; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 342.553388 158.361744 
+L 404.975603 158.361744 
+L 404.975603 100.525305 
+L 342.553388 100.525305 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #e69f00; stroke: #e69f00; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_14">
+    <path d="M 10.520331 227.214647 
+L 72.942545 227.214647 
+L 72.942545 169.378208 
+L 10.520331 169.378208 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #0072b2; stroke: #0072b2; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 76.926942 227.214647 
+L 139.349157 227.214647 
+L 139.349157 169.378208 
+L 76.926942 169.378208 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #0072b2; stroke: #0072b2; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_16">
+    <path d="M 143.333554 227.214647 
+L 205.755769 227.214647 
+L 205.755769 169.378208 
+L 143.333554 169.378208 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #0072b2; stroke: #0072b2; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_17">
+    <path d="M 209.740165 227.214647 
+L 272.16238 227.214647 
+L 272.16238 169.378208 
+L 209.740165 169.378208 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #e69f00; stroke: #e69f00; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_18">
+    <path d="M 276.146777 227.214647 
+L 338.568992 227.214647 
+L 338.568992 169.378208 
+L 276.146777 169.378208 
+z
+" clip-path="url(#pd0bd80f1b4)" style="fill: #d55e00; stroke: #d55e00; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_1">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="41.731438" y="55.551034" transform="rotate(-0 41.731438 55.551034)">redteam-01</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="41.731438" y="76.155782" transform="rotate(-0 41.731438 76.155782)">hold</text>
+   </g>
+   <g id="text_3">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="108.13805" y="55.551034" transform="rotate(-0 108.13805 55.551034)">redteam-02</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="108.13805" y="76.155782" transform="rotate(-0 108.13805 76.155782)">hold</text>
+   </g>
+   <g id="text_5">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="174.544661" y="55.551034" transform="rotate(-0 174.544661 55.551034)">redteam-03</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="174.544661" y="76.155782" transform="rotate(-0 174.544661 76.155782)">hold</text>
+   </g>
+   <g id="text_7">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="240.951273" y="55.551034" transform="rotate(-0 240.951273 55.551034)">redteam-04</text>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="240.951273" y="76.155782" transform="rotate(-0 240.951273 76.155782)">block</text>
+   </g>
+   <g id="text_9">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="307.357884" y="55.551034" transform="rotate(-0 307.357884 55.551034)">redteam-05</text>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="307.357884" y="76.155782" transform="rotate(-0 307.357884 76.155782)">hold</text>
+   </g>
+   <g id="text_11">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="373.764496" y="55.551034" transform="rotate(-0 373.764496 55.551034)">redteam-06</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="373.764496" y="76.155782" transform="rotate(-0 373.764496 76.155782)">allow</text>
+   </g>
+   <g id="text_13">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="41.731438" y="124.403937" transform="rotate(-0 41.731438 124.403937)">redteam-07</text>
+   </g>
+   <g id="text_14">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="41.731438" y="145.008685" transform="rotate(-0 41.731438 145.008685)">hold</text>
+   </g>
+   <g id="text_15">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="108.13805" y="124.403937" transform="rotate(-0 108.13805 124.403937)">redteam-08</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="108.13805" y="145.008685" transform="rotate(-0 108.13805 145.008685)">hold</text>
+   </g>
+   <g id="text_17">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="174.544661" y="124.403937" transform="rotate(-0 174.544661 124.403937)">redteam-09</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="174.544661" y="145.008685" transform="rotate(-0 174.544661 145.008685)">block</text>
+   </g>
+   <g id="text_19">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="240.951273" y="124.403937" transform="rotate(-0 240.951273 124.403937)">redteam-10</text>
+   </g>
+   <g id="text_20">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="240.951273" y="145.008685" transform="rotate(-0 240.951273 145.008685)">block</text>
+   </g>
+   <g id="text_21">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="307.357884" y="124.403937" transform="rotate(-0 307.357884 124.403937)">redteam-11</text>
+   </g>
+   <g id="text_22">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="307.357884" y="145.008685" transform="rotate(-0 307.357884 145.008685)">block</text>
+   </g>
+   <g id="text_23">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="373.764496" y="124.403937" transform="rotate(-0 373.764496 124.403937)">redteam-12</text>
+   </g>
+   <g id="text_24">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="373.764496" y="145.008685" transform="rotate(-0 373.764496 145.008685)">hold</text>
+   </g>
+   <g id="text_25">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="41.731438" y="193.256841" transform="rotate(-0 41.731438 193.256841)">redteam-13</text>
+   </g>
+   <g id="text_26">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="41.731438" y="213.861589" transform="rotate(-0 41.731438 213.861589)">block</text>
+   </g>
+   <g id="text_27">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="108.13805" y="193.256841" transform="rotate(-0 108.13805 193.256841)">redteam-14</text>
+   </g>
+   <g id="text_28">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="108.13805" y="213.861589" transform="rotate(-0 108.13805 213.861589)">block</text>
+   </g>
+   <g id="text_29">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="174.544661" y="193.256841" transform="rotate(-0 174.544661 193.256841)">redteam-15</text>
+   </g>
+   <g id="text_30">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="174.544661" y="213.861589" transform="rotate(-0 174.544661 213.861589)">block</text>
+   </g>
+   <g id="text_31">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="240.951273" y="193.256841" transform="rotate(-0 240.951273 193.256841)">redteam-16</text>
+   </g>
+   <g id="text_32">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="240.951273" y="213.861589" transform="rotate(-0 240.951273 213.861589)">hold</text>
+   </g>
+   <g id="text_33">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="307.357884" y="193.256841" transform="rotate(-0 307.357884 193.256841)">redteam-17</text>
+   </g>
+   <g id="text_34">
+    <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle; fill: #ffffff" x="307.357884" y="213.861589" transform="rotate(-0 307.357884 213.861589)">allow</text>
+   </g>
+   <g id="text_35">
+    <text style="font-weight: 700; font-size: 11px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: middle" x="208.08" y="14.655938" transform="rotate(-0 208.08 14.655938)">Red team: 17 scenarios, outcome per scenario (2 attacks allowed)</text>
+   </g>
+   <g id="legend_1">
+    <g id="patch_19">
+     <path d="M 110.886484 243.431058 
+L 127.886484 243.431058 
+L 127.886484 237.481058 
+L 110.886484 237.481058 
+z
+" style="fill: #d55e00; stroke: #d55e00; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_36">
+     <text style="font-size: 8.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: start" x="134.686484" y="243.431058" transform="rotate(-0 134.686484 243.431058)">allow (2)</text>
+    </g>
+    <g id="patch_20">
+     <path d="M 182.606563 243.431058 
+L 199.606563 243.431058 
+L 199.606563 237.481058 
+L 182.606563 237.481058 
+z
+" style="fill: #e69f00; stroke: #e69f00; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_37">
+     <text style="font-size: 8.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: start" x="206.406563" y="243.431058" transform="rotate(-0 206.406563 243.431058)">hold (8)</text>
+    </g>
+    <g id="patch_21">
+     <path d="M 250.553438 243.431058 
+L 267.553438 243.431058 
+L 267.553438 237.481058 
+L 250.553438 237.481058 
+z
+" style="fill: #0072b2; stroke: #0072b2; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_38">
+     <text style="font-size: 8.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: start" x="274.353438" y="243.431058" transform="rotate(-0 274.353438 243.431058)">block (7)</text>
+    </g>
+   </g>
+  </g>
+  <g id="text_39">
+   <text style="font-size: 7.5px; font-family: 'Times New Roman', 'DejaVu Serif', serif; text-anchor: start; fill: #555555" x="7.2" y="259.686858" transform="rotate(-0 7.2 259.686858)">Source: docs/results/flagging-redteam.json (cases)</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pd0bd80f1b4">
+   <rect x="7.2" y="20.655938" width="401.76" height="213.444"/>
+  </clipPath>
+ </defs>
+</svg>

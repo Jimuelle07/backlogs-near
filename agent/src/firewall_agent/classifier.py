@@ -1,4 +1,4 @@
-"""Injection classifier service for protectai/deberta-v3-base-prompt-injection-v2 (C2).
+"""Injection classifier service (default protectai/deberta-v3-base-prompt-injection-v2; --model selects another binary injection classifier).
 
 Provides an HTTP scoring endpoint compatible with the Rust checker's
 InjectionConfig (`CLASSIFIER_URL`). By default it loads the Hugging Face model
@@ -17,7 +17,13 @@ from typing import Any
 logger = logging.getLogger("firewall.classifier")
 
 MODEL_ID = "protectai/deberta-v3-base-prompt-injection-v2"
+PROMPT_GUARD_MODEL_ID = "meta-llama/Llama-Prompt-Guard-2-86M"
 HEURISTIC_MODEL_ID = "keyword-heuristic"
+
+# Pipeline label names per binary classifier: protectai reports SAFE/INJECTION,
+# Prompt Guard 2 reports BENIGN/MALICIOUS (class 0 / class 1), possibly as LABEL_0/LABEL_1.
+POSITIVE_LABELS = frozenset({"INJECTION", "MALICIOUS", "LABEL_1"})
+NEGATIVE_LABELS = frozenset({"SAFE", "BENIGN", "LABEL_0"})
 
 # Simple heuristic indicators for prompt injection when running without weights loaded
 INJECTION_KEYWORDS = [
@@ -73,7 +79,11 @@ class ClassifierBackend:
         first = res[0]
         label = str(first["label"]).upper()
         score = float(first["score"])
-        return score if "INJECTION" in label else (1.0 - score)
+        if label in POSITIVE_LABELS:
+            return score
+        if label in NEGATIVE_LABELS:
+            return 1.0 - score
+        raise RuntimeError(f"classifier model {self.model_id} returned an unknown label {label!r}")
 
     def score_batch(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         per_item: list[dict[str, Any]] = []
@@ -123,8 +133,8 @@ def make_handler(backend: ClassifierBackend):
     return ClassifierHandler
 
 
-def run_server(port: int = 8088, load_model: bool = True) -> HTTPServer:
-    backend = ClassifierBackend(load_model=load_model)
+def run_server(port: int = 8088, load_model: bool = True, model_id: str = MODEL_ID) -> HTTPServer:
+    backend = ClassifierBackend(model_id=model_id, load_model=load_model)
     handler = make_handler(backend)
     server = HTTPServer(("127.0.0.1", port), handler)
     return server
@@ -140,8 +150,13 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="use the keyword heuristic instead of loading the model (offline tests)",
     )
+    ap.add_argument(
+        "--model",
+        default=MODEL_ID,
+        help="Hugging Face model id to serve (default: %(default)s)",
+    )
     args = ap.parse_args(argv)
-    server = run_server(args.port, load_model=not args.heuristic)
+    server = run_server(args.port, load_model=not args.heuristic, model_id=args.model)
     print(f"Starting injection classifier server on http://127.0.0.1:{args.port}...")
     try:
         server.serve_forever()
