@@ -5,7 +5,7 @@ export const PROJECT_NAME = "Eclipse";
 export const PROJECT_TAGLINE = "Steps in front of the bad payment, stays in the background otherwise.";
 
 // Public site URL (Cloudflare Pages, D1). Canonical, Open Graph, sitemap and JSON-LD use it.
-export const SITE_URL = "https://eclipse-20v.pages.dev/";
+export const SITE_URL = "https://eclipse-9le.pages.dev/";
 
 // Shown under the hero. Keep it true: update as checks land (sprints.md).
 export const STATUS_NOTE =
