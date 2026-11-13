@@ -54,16 +54,30 @@ Open `/#results`. `src/components/ResultsSection.jsx` imports `../docs/results/r
 
 The section shows three headline numbers for the conformal row against no defense, a table of every configuration (false holds, false blocks, missed attacks, median latency, calls per payment, since cost is unpriced), the red-team round and the not-built MELON row, the missed-attacks / false-blocks chart, attacks caught per family (from `by_family`, the cascade row; `unseen_family_rotation` is not a detection rate at q̂), and the caveats (in-sample false holds above the 5% target, known families only, hard caps). `npm test` checks the numbers against the README; `npm run build` checks bundling.
 
-## Deploy (human, needs a Cloudflare account)
+## Deploy (CI/CD: GitHub Actions to Cloudflare Pages)
 
-Live at https://eclipse-20v.pages.dev/ (Cloudflare Pages project `eclipse`, first deployed 2026-11-13 from main `38aeaf0`). The project is not connected to GitHub: redeploy from `site/` on an up-to-date `main` after each merge that touches the site.
+Live at https://eclipse-9le.pages.dev/ (Cloudflare Pages project `eclipse`, deployed 2026-11-13 from main `603babd` plus the site-URL switch). It replaced https://eclipse-20v.pages.dev/ (first deployed 2026-11-13 from main `38aeaf0`, another Cloudflare account, no longer updated).
+
+[`.github/workflows/site.yml`](../.github/workflows/site.yml) runs on every PR and every push to `main` that touches `site/`, `docs/results/`, `schemas/`, `contract/guardian/src/lib.rs` (the tests and the build read them) or the workflow itself:
+
+- `build`: `npm ci`, `npm test`, `npm run build`, then uploads `site/dist` as the `site-dist` artifact.
+- `deploy`: only for a push to `main` or a manual run on `main` (Actions → site → Run workflow). It deploys that artifact with `wrangler pages deploy dist --project-name eclipse --branch main` in the `production` environment. Deploys run one at a time; PRs never deploy.
+
+One-time setup (human, repo admin): add two repository secrets (Settings → Secrets and variables → Actions):
+
+- `CLOUDFLARE_API_TOKEN`: a Cloudflare API token with **Account → Cloudflare Pages → Edit** on the account that owns `eclipse`.
+- `CLOUDFLARE_ACCOUNT_ID`: that account's ID (`npx wrangler whoami`).
+
+Until both are set, `deploy` fails and `build` still checks PRs.
+
+Manual deploy, from `site/` on an up-to-date `main`:
 
 ```
 npm run build
 npx wrangler pages deploy dist --project-name eclipse --branch main
 ```
 
-The first run asks for a Cloudflare login and creates the project. Any static host works: `dist/` uses relative paths.
+`wrangler` deploys to whichever account it is logged in to (`npx wrangler whoami`). If that account has no `eclipse` project, it creates a new one with a different subdomain. Any static host works: `dist/` uses relative paths.
 
 ## Search and AI crawlers (SEO / GEO)
 

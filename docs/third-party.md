@@ -44,3 +44,8 @@ Moved from the README on 2026-11-13. The README keeps a names-only table: [READM
 - React, React DOM, Vite, `@vitejs/plugin-react` and vite-plugin-singlefile: shared landing page and read-only receipts frontend
 - three, three-stdlib, `@react-three/fiber`, `@react-three/drei`, GSAP, Lenis and lucide-react: shared frontend stack ([site/README.md](../site/README.md))
 - Google Fonts (Geist, Geist Mono), NEARBlocks testnet explorer, FastNEAR public testnet RPC: frontend fonts and public data links
+
+## Video (`video/`)
+
+- [Remotion](https://www.remotion.dev) (`remotion`, `@remotion/cli`, `@remotion/transitions`, `@remotion/google-fonts`): the explainer video of how Eclipse runs; Remotion License, free for individuals and companies of up to 3 people, company license otherwise (see [remotion.dev/license](https://www.remotion.dev/docs/license))
+- React and TypeScript: video components

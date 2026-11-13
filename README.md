@@ -74,33 +74,40 @@ Every number, source file and figure: [docs/results/results-detail.md](docs/resu
 ## How it works
 
 ```mermaid
-flowchart LR
-  A[Agent<br/>function-call key] --> G[Guardian<br/>request_payment]
-  G -->|pause, funds stay in contract| C
-  subgraph C[Checker - OutLayer TEE on testnet, or relayer]
-    R[Policy and provenance rules]
-    LK[Lookalike and counterparty]
-    F[Fusion]
-    V[Verdict: receiver, token,<br/>amount, request_id]
-    R --> F
-    LK --> F
-    F --> V
+%%{init: {"theme": "base", "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48}, "themeVariables": {"fontSize": "15px", "primaryColor": "#1b1925", "primaryTextColor": "#eeeaf5", "primaryBorderColor": "#c77dc6", "textColor": "#eeeaf5", "lineColor": "#a39db5", "edgeLabelBackground": "#2e2a3b", "clusterBkg": "#15131d", "clusterBorder": "#c77dc6", "titleColor": "#eeeaf5"}}}%%
+flowchart TD
+  A["<b>Agent</b><br/>function-call key:<br/>request_payment only"] -->|request_payment| G["<b>Guardian contract</b><br/>pauses the payment;<br/>funds stay in the contract"]
+  G -->|asks for a verdict| C
+
+  subgraph C["Checker · OutLayer TEE on testnet, or relayer"]
+    R["Policy and<br/>provenance rules"] --> F["<b>Fusion</b>"]
+    LK["Lookalike and<br/>counterparty"] --> F
+    F --> V["<b>Verdict</b><br/>bound to receiver, token,<br/>amount, request_id"]
   end
-  subgraph RS[Remote services, outside the TEE]
-    IC[Injection classifier service]
-    JV[TypeSafe Jev API]
+
+  subgraph RS["Remote services, outside the TEE"]
+    IC["Injection classifier<br/>service"]
+    JV["TypeSafe Jev API"]
   end
-  IC -.->|"score over HTTP(S)"| F
-  JV -.->|probabilities over HTTPS| F
-  V -->|resume with verdict, contract checks the binding| GS[Guardian settles]
-  GS -->|allow, within payee budget| P[ft_transfer]
-  GS -->|allow over payee budget, or hold| E[Escrow until hold window ends<br/>or owner cancels]
-  GS -->|block| X[Refused]
-  G -->|no verdict within 200 blocks| T[Timed out, no payment]
-  P --> RC[On-chain receipt]
+  G ~~~ RS
+  IC -.->|"score, HTTP(S)"| F
+  JV -.->|probabilities, HTTPS| F
+
+  V -->|resume; contract checks the binding| S{"Guardian<br/>settles"}
+  S -->|allow, within<br/>payee budget| P["<b>Pays</b><br/>ft_transfer"]
+  S -->|hold, or allow over<br/>payee budget| E["<b>Escrow</b><br/>until the hold window ends<br/>or the owner cancels"]
+  S -->|block| X["<b>Refused</b>"]
+  S ~~~ T
+  G -.->|no verdict within<br/>200 blocks| T["<b>Timed out</b><br/>no payment"]
+  P --> RC[("On-chain receipt")]
   E --> RC
   X --> RC
   T --> RC
+
+  classDef refused fill:#edb1e8,stroke:#edb1e8,color:#1f1226
+  classDef key stroke-width:2px
+  class X refused
+  class G,S,V key
 ```
 
 What NEAR does:
@@ -150,6 +157,7 @@ Complete list: [results-detail.md](docs/results/results-detail.md#limits).
 | Rust | near-sdk-rs, near-contract-standards, cargo-near, serde, serde_json, sha2, hex, ureq, wasi-http-client |
 | Python | uv, hatchling, py-near, openai, httpx, jsonschema, python-dotenv, pytest, matplotlib |
 | Frontend | React, React DOM, Vite, @vitejs/plugin-react, vite-plugin-singlefile, three, three-stdlib, @react-three/fiber, @react-three/drei, GSAP, Lenis, lucide-react, Google Fonts (Geist, Geist Mono), NEARBlocks testnet explorer, FastNEAR public testnet RPC |
+| Video | Remotion, @remotion/cli, @remotion/transitions, @remotion/google-fonts, TypeScript |
 
 Links, licenses and what each one is used for: [docs/third-party.md](docs/third-party.md).
 
