@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, Hourglass, LoaderCircle } from "lucide-react";
 import { prefersReducedMotion } from "../motion.js";
+import results from "../../../docs/results/results.json";
+import { formatResultNumber, headline } from "../results.js";
+import { PROJECT_NAME } from "../config.js";
 
 // Runs `tick` every `ms` while the element is on screen; never under reduced motion.
 function useTicker(ref, ms, tick) {
@@ -62,6 +65,31 @@ export function HoldLog() {
         </div>
       ))}
       {shown < HOLD_LINES.length && <span className="hl-caret" />}
+    </div>
+  );
+}
+
+// Demo card 06: the committed evaluation numbers, no defense against Jev fusion + conformal threshold.
+// Same source and rows as the Results section headline, so the two never disagree.
+const NUMBERS = (() => {
+  const top = headline(results);
+  if (!top) return [];
+  const row = (label, key) => [label, top.base[key], top.best[key]];
+  return [row("Missed attacks", "missed_attacks_pct"), row("False blocks", "false_blocks_pct"), row("False holds", "false_holds_pct")];
+})();
+
+export function DemoNumbers() {
+  if (!NUMBERS.length) return null;
+  return (
+    <div className="dnums">
+      <div className="dn-row dn-head" aria-hidden="true"><span /><span>No defense</span><span>{PROJECT_NAME}</span></div>
+      {NUMBERS.map(([label, base, best]) => (
+        <div className="dn-row" key={label}>
+          <span>{label}</span>
+          <span className="dn-base">{formatResultNumber(base)}%</span>
+          <b>{formatResultNumber(best)}%</b>
+        </div>
+      ))}
     </div>
   );
 }

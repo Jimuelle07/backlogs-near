@@ -132,7 +132,10 @@ function Node({ position, Icon, label, filled }) {
 
 function Scene({ progress, pointer, reduce }) {
   // On wide canvases the eclipse sits left of centre so the overlay text has room on the right.
-  const { viewport } = useThree();
+  const { viewport, camera } = useThree();
+  // The Agent node sits nearer the camera (z 1.6), where the visible width is smaller than at z 0;
+  // clamp it against that width so its ring and label never cross the canvas edge.
+  const agentHalfW = viewport.getCurrentViewport(camera, [0, 0, 1.6]).width / 2;
   const offsetX = viewport.aspect > 1.3 ? -viewport.width * 0.22 : 0;
   const group = useRef();
   const sun = useRef();
@@ -178,7 +181,7 @@ function Scene({ progress, pointer, reduce }) {
         <Node position={[0, -MOON_R - 0.25, 0]} Icon={Landmark} label="Guardian" filled />
       </group>
       <Particles occ={occ} />
-      <Node position={[Math.max(-2.0, -viewport.width / 2 + 1.15 - offsetX), 1.15, 1.6]} Icon={Bot} label="Agent" />
+      <Node position={[Math.max(-2.0, -agentHalfW + 1.3 - offsetX), 1.15, 1.6]} Icon={Bot} label="Agent" />
       <Node position={[0, SUN_R + 0.45, 0]} Icon={Cpu} label="Checker" />
     </group>
   );
