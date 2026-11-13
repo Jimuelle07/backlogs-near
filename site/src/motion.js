@@ -63,7 +63,7 @@ export async function startMotion(refs) {
     reveal(q(".faq-item"), ".faq", { dist: 24, stagger: 0.04 });
     // Groups of cards, callouts and steps: each row moves as one block so its cards stay level.
     const groups = [".callouts", ".psteps", ".steps", ".grid4", ".cards", ".tiers", ".bento", ".rstats", ".dbento", ".vgrid", ".rules", ".caps",
-      ".vx", ".ad", ".split", ".tablewrap", ".rgrid", ".receipts-panel", ".term-win", ".caveats"];
+      ".vx", ".pp", ".split", ".tablewrap", ".rgrid", ".receipts-panel", ".term-win", ".caveats"];
     groups.forEach((sel) => q(sel).forEach((group) => reveal(group, group)));
 
     // Same attack: Morse field progress, ASCII boxes drift in, lilac panel wipes up.
@@ -93,7 +93,7 @@ export async function startMotion(refs) {
     // Diagram arrows draw in; result bars grow.
     // Diagram, scroll-driven: steps light up in payment order as the diagram scrolls through the
     // viewport (scrubbed, so scrolling back reverses it). Arrows draw as their step arrives.
-    const adSvg = document.querySelector(".ad-svg");
+    const adSvg = document.querySelector(".pp-svg");
     if (adSvg) {
       const tl = gsap.timeline({
         scrollTrigger: { trigger: adSvg, start: "top 85%", end: "bottom 95%", scrub: 0.6 },
@@ -101,11 +101,11 @@ export async function startMotion(refs) {
       });
       for (let k = 0; k <= 8; k++) {
         const items = adSvg.querySelectorAll(`[data-at="${k}"]`);
-        const paths = adSvg.querySelectorAll(`.ad-arrow[data-at="${k}"] path`);
-        const boxes = [...items].filter((el) => !el.classList.contains("ad-arrow"));
+        const paths = adSvg.querySelectorAll(`.pp-arrow[data-at="${k}"] path`);
+        const boxes = [...items].filter((el) => !el.classList.contains("pp-arrow"));
         if (paths.length) {
           // Fade the whole arrow (line, head and label) in as its line draws, so no head shows early.
-          tl.fromTo(adSvg.querySelectorAll(`.ad-arrow[data-at="${k}"]`), { opacity: 0.3 }, { opacity: 1, duration: 0.3 }, k);
+          tl.fromTo(adSvg.querySelectorAll(`.pp-arrow[data-at="${k}"]`), { opacity: 0.3 }, { opacity: 1, duration: 0.3 }, k);
           tl.fromTo(paths, { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.6 }, k);
         }
         // Opacity only: a transform on SVG groups can misplace them, and a low floor read as missing boxes.
@@ -116,7 +116,7 @@ export async function startMotion(refs) {
     }
     // Payment-path list (phones), scroll-driven: steps slide in one by one, the connector lines draw
     // down between them, and the step at mid-screen is highlighted.
-    const adItems = q(".ad-list li");
+    const adItems = q(".pp-list li");
     if (adItems.length && window.matchMedia("(max-width: 760px)").matches) {
       adItems.forEach((li, k) => {
         gsap.fromTo(li, { x: -40, opacity: 0 }, {
@@ -127,7 +127,7 @@ export async function startMotion(refs) {
           "--grow": 1, ease: "none",
           scrollTrigger: { trigger: li, start: "top 95%", end: "top 70%", scrub: 0.5 },
         });
-        ScrollTrigger.create({ trigger: li, start: "top 55%", end: "bottom 55%", toggleClass: { targets: li, className: "ad-live" } });
+        ScrollTrigger.create({ trigger: li, start: "top 55%", end: "bottom 55%", toggleClass: { targets: li, className: "pp-live" } });
       });
     }
 
