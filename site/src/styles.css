@@ -1423,6 +1423,19 @@ footer { margin-top: clamp(40px, 5vw, 64px); border-top: 1px dashed var(--dash);
   position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap;
   font: 500 11px var(--mono); font-style: normal; color: var(--text); background: #15131dcc; padding: 2px 8px; border-radius: 999px;
 }
+.pnode { transition: box-shadow 200ms ease, background-color 200ms ease; }
+.pnode.on { background: #edb1e826; box-shadow: 0 0 0 6px #edb1e833; }
+/* The payment travelling through the scene, and the checker's verdict */
+.gpay { font: 500 11px var(--mono); color: var(--text); background: #15131dcc; border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.gpay i { font-style: normal; color: var(--muted); }
+.gverdict { display: grid; justify-items: start; gap: 4px; white-space: nowrap; opacity: 0; transition: opacity 200ms ease; transform: translate(34px, -50%); }
+.gverdict:not([data-v=""]) { opacity: 1; }
+.gverdict .vchip { display: none; padding: 4px 8px; background: #15131de6; }
+.gverdict[data-v="allow"] .vchip.allow, .gverdict[data-v="hold"] .vchip.hold { display: inline-flex; }
+.gverdict[data-v="block"] .vchip.block { display: inline-flex; background: var(--accent); }
+.gverdict em { font: 400 11px var(--mono); font-style: normal; color: var(--muted); background: #15131dcc; padding: 1px 6px; border-radius: 4px; }
+/* Narrow: no room beside the checker, so the chip sits above it, without the reason line. */
+@media (max-width: 900px) { .gverdict { transform: translate(-50%, calc(-100% - 28px)); } .gverdict em { display: none; } }
 
 /* Protocol: one wide frame, 3D across it, steps overlaid on the right */
 .protocol { display: block; }
@@ -1436,6 +1449,11 @@ footer { margin-top: clamp(40px, 5vw, 64px); border-top: 1px dashed var(--dash);
   background: #15131dcc; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   border: 1px solid var(--line); border-radius: 10px;
 }
+/* The card for the phase the scene is acting out */
+.psteps-overlay li { transition: background-color 300ms ease, border-color 300ms ease; }
+.psteps-overlay[data-step="0"] li:nth-child(1),
+.psteps-overlay[data-step="1"] li:nth-child(2),
+.psteps-overlay[data-step="2"] li:nth-child(3) { border-color: #edb1e870; background: #201a2acc; }
 @media (max-width: 900px) {
   .stage3 { height: auto; display: flex; flex-direction: column; }
   .stage3 .globe { position: relative; height: 380px; }

@@ -66,13 +66,6 @@ export async function startMotion(refs) {
       ".vx", ".ad", ".split", ".tablewrap", ".rgrid", ".receipts-panel", ".term-win", ".caveats"];
     groups.forEach((sel) => q(sel).forEach((group) => reveal(group, group)));
 
-
-    // Eclipse: scroll progress through the protocol section moves the Guardian in front of the sun.
-    ScrollTrigger.create({
-      trigger: "#protocol", start: "top bottom", end: "bottom top",
-      onUpdate: (st) => { refs.globeProgress.current = st.progress; },
-    });
-
     // Same attack: Morse field progress, ASCII boxes drift in, lilac panel wipes up.
     ScrollTrigger.create({
       trigger: "#problem .split", start: "top bottom", end: "bottom top",
