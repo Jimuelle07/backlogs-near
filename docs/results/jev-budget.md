@@ -33,8 +33,8 @@ Runs of 2026-11-13, 01:04 to 02:34 local. The checker was built from this branch
 | 18 | external held-out set (200), `jev_fusion_conformal`, checker `5d57145` (Jev v2, defaults 0.81 and 0.81) | `flagging-external.json` | 200 | 2,903 |
 | 19 | redteam set (17), `jev_fusion_conformal`, checker `5d57145` (Jev v2, defaults 0.81 and 0.81) | `flagging-redteam.json` | 17 | 2,920 |
 | 20 | nightly dry-run, 2 scenarios (`benign-hosting`, `attack-morse-lookalike`), checker `5d57145` | none (console output; summary in ledger.md R20) | 2 | 2,922 |
-| 21 | code-rules gate after the provenance rules: main, external and redteam sets with `code_rules_all_signals` (no Jev), checker `4e0a598` | `flagging-main-code-rules.json`, `flagging-external-code-rules.json`, `flagging-redteam-code-rules.json` | 2,922 |
-| 22 | main set re-fused at the calibrated defaults: `--all-configurations --refuse-from flagging-main-calibration.json` on the R17 records, checker `5d57145`; the two Jev rows are re-fused with `checker --refuse` (no Jev call; the `jev_called` flags in the file are copied from R17), the four code-rules rows are run, the cascade row is skipped | `flagging-main.json` | 2,922 |
+| 21 | code-rules gate after the provenance rules: main, external and redteam sets with `code_rules_all_signals` (no Jev), checker `4e0a598` | `flagging-main-code-rules.json`, `flagging-external-code-rules.json`, `flagging-redteam-code-rules.json` | 0 | 2,922 |
+| 22 | main set re-fused at the calibrated defaults: `--all-configurations --refuse-from flagging-main-calibration.json` on the R17 records, checker `5d57145`; the two Jev rows are re-fused with `checker --refuse` (no Jev call; the `jev_called` flags in the file are copied from R17), the four code-rules rows are run, the cascade row is skipped | `flagging-main.json` | 0 | 2,922 |
 
 Total booked: 2,922 calls, of which 400 are booked for the two aborted runs 6a and 7a. This is below the 3,000 stop line (cap 3,100). Runs 10–14 total 88 calls on 2026-11-13 (prior cumulative 2,239). Runs 15 onward (flagging work, branch `flagging-provenance-jev-v2`) total 595 calls.
 
