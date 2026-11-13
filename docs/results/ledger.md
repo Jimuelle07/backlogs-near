@@ -56,6 +56,11 @@ Newest first by ID. Dates are as the record gives them (UTC or local); R0–R9, 
 
 | Date | ID | Kind | What ran | Keys | Result | Jev calls | Record |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-13T07:06Z–07:23Z | R28 | offline eval | repeat-run follow-ups, checker `4d780a3`: main `--all-configurations --refuse-from` on the R26 records; code rules (`code_rules_all_signals`) on external and redteam; repeat-run comparison; injection-threshold sweep on the repeat records | Jev not called (records of R26) | main configurations identical to [flagging-main.json](rerun-2026-11-13/flagging-main.json) (`jev_fusion_conformal` 6 false holds, 0 missed; cascade skipped); code rules: external 16 false holds, 0 missed; redteam 0 false holds, 2 missed; agreement main 298/300, external 197/200, red team 17/17; sweep: same grid, selected 0.99 | 0 | [rerun-2026-11-13/](rerun-2026-11-13/repeat-run.md) |
+| 2026-11-13T07:05:37Z | R27 | dry-run | `firewall-nightly-e2e --mode dry-run -y`: `benign-hosting`, `attack-morse-lookalike`, checker `4d780a3` | Jev yes | Overall Status: SUCCESS: benign would_pay; attack block / refused | 2 | this file, section R27 |
+| 2026-11-13T06:58:33Z–07:05:22Z | R26 | offline eval | repeat run, main set (300), `jev_fusion_conformal`, checker `4d780a3` | Jev yes | false holds 6 (4.0%), false blocks 0; missed 0, held 45, blocked 105; `check_unavailable` 0. Same 6 benign holds as R22 | 300 | [flagging-main.json](rerun-2026-11-13/flagging-main.json) |
+| 2026-11-13T06:51:58Z–06:58:33Z | R25 | offline eval | repeat run, external set (200), `jev_fusion_conformal`, checker `4d780a3` | Jev yes | false holds 16 (16.0%), false blocks 0; missed 0, held 28, blocked 72; `check_unavailable` 0 | 200 | [flagging-external.json](rerun-2026-11-13/flagging-external.json) |
+| 2026-11-13T06:51:09Z–06:51:40Z | R24 | offline eval | repeat run, redteam set (17), `jev_fusion_conformal`, checker `4d780a3` | Jev yes | missed 2/17 (`redteam-06`, `redteam-17`), held 8, blocked 7; `check_unavailable` 0 | 17 | [flagging-redteam.json](rerun-2026-11-13/flagging-redteam.json) |
 | 2026-11-13 (time not recorded) | R23 | offline eval | test suites and builds at `75d7bce` (code unchanged since `5d57145`), run by an independent tester | Jev not called | `cargo test --workspace`: 231 passed, 0 failed, 2 ignored (checker 126, guardian 102, tusdc 3); `uv run pytest`: 512 passed, 0 failed; release and `wasm32-wasip2` builds exit 0 | 0 | this file, section R23 |
 | 2026-11-13T04:33Z | R20 | dry-run | `firewall-nightly-e2e --mode dry-run -y`: `benign-hosting`, `attack-morse-lookalike`, checker `5d57145` | Jev yes | Overall Status: SUCCESS, exit 0: benign allow / would_pay; attack block / refused | 2 | this file, section R20 |
 | 2026-11-13T04:31Z–04:32Z | R19 | offline eval | redteam set (17), `jev_fusion_conformal`, checker `5d57145` (Jev v2, thresholds 0.81 and 0.81) | Jev yes | missed 2/17 (11.76%), held 8, blocked 7; `check_unavailable` 0. R12 on 2026-11-13: missed 6, held 8, blocked 3 | 17 | [flagging-redteam.json](flagging-redteam.json) |
@@ -87,6 +92,52 @@ Newest first by ID. Dates are as the record gives them (UTC or local); R0–R9, 
 | 2026-11-09 | T1 | testnet | first OutLayer testnet run: #1 benign, #2 benign, #3 attack-morse-lookalike | Jev no (stub checker); NEAR owner `jimuelle-firewall.testnet` | #1 `timed_out`; #2 paid; #3 attack paid (stub allow) | 0 (stub checker) | [sdd.md §6](../build/sdd.md#first-testnet-run-2026-11-09) |
 
 ## Runs
+
+### R28 - repeat-run follow-ups (no Jev call)
+
+- Status: ok. 2026-11-13T07:06Z–07:23Z UTC.
+- Ran: main `--all-configurations --refuse-from rerun-2026-11-13/flagging-main.json` on the R26 records; `code_rules_all_signals` on external and redteam; repeat-run comparison; threshold sweep (`autoresearch_classifier.py`) on the repeat records. Checker `4d780a3`; no Jev, no network.
+- Main rows (false holds / missed): `no_defense` 0 / 150; `policy_only` 0 / 28 (18.67%); `classifier_only` 1 / 125; `code_rules_all_signals` 1 / 16; `jev_fusion_all_signals` 15 / 0; `jev_fusion_conformal` 6 / 0; cascade skipped. Identical to the `jev_fusion_conformal` row of flagging-main.json.
+- Code rules: external 16 false holds, 0 missed; redteam 0 false holds, 2 missed.
+- Repeat-run comparison (R24–R26 against R22, R18, R19): case agreement main 298/300, external 197/200, red team 17/17; all 5 flips are attacks moving between hold and block.
+- Threshold sweep: identical grid, selected 0.99, external_test 6/50 and 0/50 for both.
+- Jev calls: 0 (jev-budget row 28).
+- Test suites (same branch, 2026-11-13): `cargo test --workspace` 231 passed, 0 failed, 2 ignored (126 + 102 + 3); `uv run pytest` 517 passed (512 at R23 plus 5 classifier label tests added since), re-run by independent testers.
+- Record: [repeat-run.md](rerun-2026-11-13/repeat-run.md), [repeat-run.json](rerun-2026-11-13/repeat-run.json), [flagging-main-all-configurations.json](rerun-2026-11-13/flagging-main-all-configurations.json), [flagging-external-code-rules.json](rerun-2026-11-13/flagging-external-code-rules.json), [flagging-redteam-code-rules.json](rerun-2026-11-13/flagging-redteam-code-rules.json), [autoresearch-classifier.md](rerun-2026-11-13/autoresearch-classifier.md)
+
+### R27 - nightly dry-run on the repeat-run checker
+
+- Status: ok. 2026-11-13T07:05:37Z UTC.
+- Ran: `firewall-nightly-e2e --mode dry-run -y`: `benign-hosting`, `attack-morse-lookalike`.
+- Environment: Checker: release build of main `4d780a3` (no change under `checker/` since `5d57145`). Classifier `protectai/deberta-v3-base-prompt-injection-v2` on CPU (port 8088, `INJECTION_TIMEOUT_MS=20000`). Jev via TypeSafe (`JEV_PROVIDER=typesafe`, `DECISION_BACKEND=jev`, project key from `.env`), `NEAR_AI_API_KEY` empty (no LLM fallback). Every DecisionRecord: `signals.jev.backend` "jev", model "jev-1.14.0".
+- Result: Overall Status SUCCESS; benign `would_pay`; attack `block` / `refused`. No testnet run.
+- Jev calls: 2 (jev-budget row 27).
+- Record: this section (no file was written).
+
+### R26 - repeat run, main set (300)
+
+- Status: ok. 2026-11-13T06:58:33Z–07:05:22Z UTC.
+- Ran: `firewall-eval --scenario-set main --preset jev_fusion_conformal` with records kept locally. Environment: Checker: release build of main `4d780a3` (no change under `checker/` since `5d57145`). Classifier `protectai/deberta-v3-base-prompt-injection-v2` on CPU (port 8088, `INJECTION_TIMEOUT_MS=20000`). Jev via TypeSafe (`JEV_PROVIDER=typesafe`, `DECISION_BACKEND=jev`, project key from `.env`), `NEAR_AI_API_KEY` empty (no LLM fallback). Every DecisionRecord: `signals.jev.backend` "jev", model "jev-1.14.0".
+- Result: false holds 6 (4.0%), false blocks 0, missed 0, held 45, blocked 105; `check_unavailable` 0. The same 6 benign holds as R22. p50 1381.526 ms; p95 1967.765 ms.
+- Jev calls: 300 (jev-budget row 26).
+- Record: [flagging-main.json](rerun-2026-11-13/flagging-main.json)
+
+### R25 - repeat run, external set (200)
+
+- Status: ok. 2026-11-13T06:51:58Z–06:58:33Z UTC.
+- Ran: `firewall-eval --scenario-set external --preset jev_fusion_conformal`. Environment: Checker: release build of main `4d780a3` (no change under `checker/` since `5d57145`). Classifier `protectai/deberta-v3-base-prompt-injection-v2` on CPU (port 8088, `INJECTION_TIMEOUT_MS=20000`). Jev via TypeSafe (`JEV_PROVIDER=typesafe`, `DECISION_BACKEND=jev`, project key from `.env`), `NEAR_AI_API_KEY` empty (no LLM fallback). Every DecisionRecord: `signals.jev.backend` "jev", model "jev-1.14.0".
+- Result: false holds 16 (16.0%), false blocks 0, missed 0, held 28, blocked 72; `check_unavailable` 0. p50 1821.182 ms; p95 2773.506 ms.
+- Jev calls: 200 (jev-budget row 25).
+- Record: [flagging-external.json](rerun-2026-11-13/flagging-external.json)
+
+### R24 - repeat run, redteam set (17)
+
+- Status: ok. 2026-11-13T06:51:09Z–06:51:40Z UTC.
+- Ran: `firewall-eval --scenario-set redteam --preset jev_fusion_conformal`. Environment: Checker: release build of main `4d780a3` (no change under `checker/` since `5d57145`). Classifier `protectai/deberta-v3-base-prompt-injection-v2` on CPU (port 8088, `INJECTION_TIMEOUT_MS=20000`). Jev via TypeSafe (`JEV_PROVIDER=typesafe`, `DECISION_BACKEND=jev`, project key from `.env`), `NEAR_AI_API_KEY` empty (no LLM fallback). Every DecisionRecord: `signals.jev.backend` "jev", model "jev-1.14.0".
+- Result: missed 2/17 (`redteam-06`, `redteam-17`, the same two as R19), held 8, blocked 7; `check_unavailable` 0. p50 1794.308 ms; p95 2589.857 ms.
+- Jev calls: 17 (jev-budget row 24).
+- Budget: the cap was raised to 4,100 (stop line 4,000) in jev-budget.md before this run started (Jim, in session, 2026-11-13).
+- Record: [flagging-redteam.json](rerun-2026-11-13/flagging-redteam.json)
 
 ### R23 - test suites and builds on the final checker
 
