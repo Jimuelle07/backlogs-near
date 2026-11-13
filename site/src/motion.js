@@ -103,7 +103,7 @@ export async function startMotion(refs) {
     const adSvg = document.querySelector(".ad-svg");
     if (adSvg) {
       const tl = gsap.timeline({
-        scrollTrigger: { trigger: adSvg, start: "top 80%", end: "bottom 55%", scrub: 0.6 },
+        scrollTrigger: { trigger: adSvg, start: "top 85%", end: "bottom 95%", scrub: 0.6 },
         defaults: { ease: "none" },
       });
       for (let k = 0; k <= 8; k++) {
@@ -112,10 +112,11 @@ export async function startMotion(refs) {
         const boxes = [...items].filter((el) => !el.classList.contains("ad-arrow"));
         if (paths.length) {
           // Fade the whole arrow (line, head and label) in as its line draws, so no head shows early.
-          tl.fromTo(adSvg.querySelectorAll(`.ad-arrow[data-at="${k}"]`), { opacity: 0.12 }, { opacity: 1, duration: 0.3 }, k);
+          tl.fromTo(adSvg.querySelectorAll(`.ad-arrow[data-at="${k}"]`), { opacity: 0.3 }, { opacity: 1, duration: 0.3 }, k);
           tl.fromTo(paths, { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.6 }, k);
         }
-        if (boxes.length) tl.fromTo(boxes, { opacity: 0.18, y: 10 }, { opacity: 1, y: 0, duration: 0.6 }, k + 0.3);
+        // Opacity only: a transform on SVG groups can misplace them, and a low floor read as missing boxes.
+        if (boxes.length) tl.fromTo(boxes, { opacity: 0.4 }, { opacity: 1, duration: 0.6 }, k + 0.3);
         const flows = adSvg.querySelectorAll(`[data-flow-at="${k}"]`);
         if (flows.length) tl.fromTo(flows, { opacity: 0 }, { opacity: 1, duration: 0.3 }, k + 0.4);
       }

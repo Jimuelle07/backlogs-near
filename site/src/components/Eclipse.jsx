@@ -132,7 +132,10 @@ function Node({ position, Icon, label, filled }) {
 
 function Scene({ progress, pointer, reduce }) {
   // On wide canvases the eclipse sits left of centre so the overlay text has room on the right.
-  const { viewport } = useThree();
+  const { viewport, camera } = useThree();
+  // The Agent node sits nearer the camera (z 1.6), where the visible width is smaller than at z 0;
+  // clamp it against that width so its ring and label never cross the canvas edge.
+  const agentHalfW = viewport.getCurrentViewport(camera, [0, 0, 1.6]).width / 2;
   const offsetX = viewport.aspect > 1.3 ? -viewport.width * 0.22 : 0;
   const group = useRef();
   const sun = useRef();
@@ -157,8 +160,12 @@ function Scene({ progress, pointer, reduce }) {
     }
     const g = group.current;
     if (g) {
-      g.rotation.y += (pointer.current.x * 0.25 - g.rotation.y) * 0.05;
-      g.rotation.x += (0.1 + pointer.current.y * 0.15 - g.rotation.x) * 0.05;
+      // Follows the cursor: the whole eclipse turns toward it and drifts a little after it.
+      const px = reduce ? 0 : pointer.current.x, py = reduce ? 0 : pointer.current.y;
+      g.rotation.y += (px * 0.7 - g.rotation.y) * 0.06;
+      g.rotation.x += (0.1 + py * 0.45 - g.rotation.x) * 0.06;
+      g.position.x += (offsetX + px * 0.35 - g.position.x) * 0.06;
+      g.position.y += (-py * 0.25 - g.position.y) * 0.06;
     }
   });
 
@@ -178,7 +185,7 @@ function Scene({ progress, pointer, reduce }) {
         <Node position={[0, -MOON_R - 0.25, 0]} Icon={Landmark} label="Guardian" filled />
       </group>
       <Particles occ={occ} />
-      <Node position={[Math.max(-2.0, -viewport.width / 2 + 1.15 - offsetX), 1.15, 1.6]} Icon={Bot} label="Agent" />
+      <Node position={[Math.max(-2.0, -agentHalfW + 1.3 - offsetX), 1.15, 1.6]} Icon={Bot} label="Agent" />
       <Node position={[0, SUN_R + 0.45, 0]} Icon={Cpu} label="Checker" />
     </group>
   );
@@ -194,14 +201,18 @@ export default function Eclipse({ progress }) {
     const el = wrap.current;
     const io = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting));
     io.observe(el);
+    // Listen on the whole stage, so the cursor over the step cards still turns the eclipse.
+    // Mouse only: on touch, a drag is a scroll.
+    const stage = el.parentElement || el;
     const move = (e) => {
+      if (e.pointerType !== "mouse") return;
       const r = el.getBoundingClientRect();
       pointer.current = { x: (e.clientX - r.left) / r.width - 0.5, y: (e.clientY - r.top) / r.height - 0.5 };
     };
     const leave = () => { pointer.current = { x: 0, y: 0 }; };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerleave", leave);
-    return () => { io.disconnect(); el.removeEventListener("pointermove", move); el.removeEventListener("pointerleave", leave); };
+    stage.addEventListener("pointermove", move);
+    stage.addEventListener("pointerleave", leave);
+    return () => { io.disconnect(); stage.removeEventListener("pointermove", move); stage.removeEventListener("pointerleave", leave); };
   }, []);
 
   return (
