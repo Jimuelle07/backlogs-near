@@ -59,7 +59,7 @@ Expected: `verdict: hold reasons=check_unavailable…` and `action: held`. With 
 
 ## Try it
 
-Numbered steps, each "do X → see Y". Run from the repo root unless a step says otherwise. Steps 1–3 need no keys and no funds; step 4 needs a TypeSafe Jev key. Steps 7 and 8 also run without a key, with the keyless output stated in each step; steps 5 and 6 need the key from step 4.
+Numbered steps, each "do X → see Y". Run from the repo root unless a step says otherwise. Steps 1–3 need no keys and no funds; step 4 needs a TypeSafe Jev key. Steps 5, 7 and 8 also run without a key (step 5 uses the record written in step 3; steps 7 and 8 state their keyless output); step 6 needs the key from step 4.
 
 ### Offline, no keys
 
@@ -349,7 +349,7 @@ Lookalike detection ([docs/results/lookalike-bench.json](docs/results/lookalike-
 ## Limits
 
 - **Exchangeability.** The conformal bounds on false holds (4% on Jev `unusual`, 1% on Jev `injection_driven`) assume benign scores in use are exchangeable with the calibration scores. Real traffic may drift. The main-set figure for the current checker, 6 of 150 benign held (4.0%), is in-sample: the thresholds were fitted on those cases. One of the 6 is a benign invoice the classifier flags, which holds whatever the thresholds are. The 1% bound is pooled over all benign payments, while the rule it feeds fires only for new receivers; no separate bound is claimed for that subgroup. At baseline the figure was 8 of 150 (5.33%), above the 5% target.
-- **Known attack families only.** The dataset has six families. On the current checker no main-set attack is allowed, but 2 of 17 red-team attacks are, so attacks outside these families can still pass. In the baseline cascade row, missed attacks were 12 of 25 for `fake_invoice` and 12 of 25 for `memory_poisoning`, and 1 to 2 of 25 for each of the other four families.
+- **Known attack families only.** The dataset has six families. On the current checker no main-set attack is allowed (in-sample), but 2 of 17 red-team attacks are, so attacks outside these families can still pass. In the baseline cascade row, missed attacks were 12 of 25 for `fake_invoice` and 12 of 25 for `memory_poisoning`, and 1 to 2 of 25 for each of the other four families.
 - **Jev flags alone hold only for a new receiver.** A payment is held when Jev `unusual` exceeds its threshold, when a non-Jev detector fires, or when the receiver is new and Jev `injection_driven` exceeds its threshold. For a known receiver, Jev's `injection_driven` and `receiver_risk` flags alone do not hold. At baseline Jev flags never held on their own, and 7 of 17 red-team attacks were allowed; see [`docs/results/redteam.md`](docs/results/redteam.md).
 - **Provenance rules are pattern rules.** They can be evaded: a redirect that never writes the known payee's account id, an id written with a leading `@`, invisible characters outside the checked list, or mixed scripts other than Cyrillic and Greek are not caught by the rules. Jev and the contract caps are the remaining layers for those cases.
 - **One hidden character holds a payment.** `obfuscated_context` holds any payment whose context contains an invisible character or a word mixing Latin with Cyrillic or Greek letters, including a payment to a known payee. This delays the payment; it does not refuse it.
@@ -419,7 +419,7 @@ Team roster, from [docs/build/sprints.md](docs/build/sprints.md#team):
 | Backend (lanes A, B, C) | Jim | Rc, paticolcol, Jesus |
 | Frontend (lanes D, E) | Helena | Ace |
 
-GitHub accounts with commits in this repository ([full list](https://github.com/Jimuelle07/backlogs-near/graphs/contributors)):
+GitHub accounts credited in GitHub's contributor graph for this repository (default branch; [full list](https://github.com/Jimuelle07/backlogs-near/graphs/contributors)):
 
 <table>
   <tr>
