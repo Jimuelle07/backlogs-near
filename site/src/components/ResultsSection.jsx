@@ -16,11 +16,14 @@ const SERIES = [
   { key: "falseBlocksPct", label: "False blocks", className: "results-blocks" },
 ];
 
+// Compact chart: configuration names in a left column, two thin bars per row beside them.
 function ResultsChart({ rows }) {
-  const left = 36;
-  const plotWidth = 264;
-  const groupHeight = 90;
-  const bottom = rows.length * groupHeight + 42;
+  const labelRight = 196;
+  const left = 208;
+  const plotWidth = 340;
+  const groupHeight = 38;
+  const top = 34;
+  const bottom = top + rows.length * groupHeight;
   const ticks = [0, 25, 50, 75, 100]; // Percentage axis, not observed results.
 
   return (
@@ -31,34 +34,34 @@ function ResultsChart({ rows }) {
           <li key={series.key}><span className={series.className} aria-hidden="true" />{series.label}</li>
         ))}
       </ul>
-      <svg viewBox={`0 0 360 ${bottom + 60}`} role="img" aria-labelledby="results-svg-title results-svg-desc">
+      <svg viewBox={`0 0 600 ${bottom + 44}`} role="img" aria-labelledby="results-svg-title results-svg-desc">
         <title id="results-svg-title">Missed attacks and false blocks (%)</title>
         <desc id="results-svg-desc">Grouped horizontal bars for each configuration. Exact values are in the results table above.</desc>
-        <text x={left} y="18" className="results-axis-title">Configuration</text>
+        <text x={labelRight} y="18" textAnchor="end" className="results-axis-title">Configuration</text>
         {ticks.map((tick) => {
           const x = left + (tick / 100) * plotWidth;
           return (
             <g key={tick}>
-              <line x1={x} x2={x} y1="32" y2={bottom} className="results-gridline" />
-              <text x={x} y={bottom + 22} textAnchor="middle">{tick}</text>
+              <line x1={x} x2={x} y1={top - 6} y2={bottom} className="results-gridline" />
+              <text x={x} y={bottom + 18} textAnchor="middle">{tick}</text>
             </g>
           );
         })}
         {rows.map((row, index) => {
-          const y = 52 + index * groupHeight;
+          const y = top + index * groupHeight;
           return (
             <g key={row.configuration}>
-              <text x={left} y={y} className="results-config-label">{row.configuration}</text>
+              <text x={labelRight} y={y + 17} textAnchor="end" className="results-config-label">{row.configuration}</text>
               {SERIES.map((series, seriesIndex) => {
                 const value = row[series.key];
                 const width = (value / 100) * plotWidth;
-                const barY = y + 12 + seriesIndex * 24;
+                const barY = y + 5 + seriesIndex * 13;
                 return (
                   <g key={series.key}>
-                    <rect x={left} y={barY} width={width} height="14" className={series.className}>
+                    <rect x={left} y={barY} width={width} height="10" rx="1.5" className={series.className}>
                       <title>{`${row.configuration}: ${series.label} ${formatResultNumber(value)}%`}</title>
                     </rect>
-                    <text x={left + width + 6} y={barY + 12}>{formatResultNumber(value)}</text>
+                    <text x={left + width + 6} y={barY + 9} className="results-val">{formatResultNumber(value)}</text>
                   </g>
                 );
               })}
@@ -66,8 +69,22 @@ function ResultsChart({ rows }) {
           );
         })}
         <line x1={left} x2={left + plotWidth} y1={bottom} y2={bottom} className="results-axis" />
-        <text x={left + plotWidth / 2} y={bottom + 48} textAnchor="middle" className="results-axis-title">Rate (%)</text>
+        <text x={left + plotWidth / 2} y={bottom + 38} textAnchor="middle" className="results-axis-title">Rate (%)</text>
       </svg>
+      {/* Phones: the same numbers as a plain bar list (the SVG text gets too small). */}
+      <ul className="rchart-list" aria-hidden="true">
+        {rows.map((row) => (
+          <li key={row.configuration}>
+            <span className="rl-name">{row.configuration}</span>
+            {SERIES.map((series) => (
+              <span className="rl-bar" key={series.key}>
+                <i className={series.className} style={{ width: `${row[series.key]}%` }} />
+                <b>{formatResultNumber(row[series.key])}</b>
+              </span>
+            ))}
+          </li>
+        ))}
+      </ul>
     </figure>
   );
 }
@@ -77,7 +94,6 @@ export function ResultsSection({ rows = resultRows }) {
     <section className="sec" id="results" aria-labelledby="results-title">
       <div className="head2">
         <div className="l">
-          <span className="kicker">Results</span>
           <h2 id="results-title">Measured, not promised</h2>
         </div>
         <p>
@@ -122,29 +138,31 @@ export function ResultsSection({ rows = resultRows }) {
             {rows.map((row) => (
               <tr key={row.configuration}>
                 <th scope="row"><span className="results-config">{row.configuration}</span><span className="results-description">{row.label}</span></th>
-                <td className="num">{formatResultNumber(row.falseHoldsPct)}</td>
-                <td className="num">{formatResultNumber(row.falseBlocksPct)}</td>
-                <td className="num">{formatResultNumber(row.missedAttacksPct)}</td>
-                <td className="num">{formatResultNumber(row.medianLatencyMs)}</td>
-                <td className="num">{formatCalls(row)}</td>
+                <td className="num" data-label="False holds (%)">{formatResultNumber(row.falseHoldsPct)}</td>
+                <td className="num" data-label="False blocks (%)">{formatResultNumber(row.falseBlocksPct)}</td>
+                <td className="num" data-label="Missed attacks (%)">{formatResultNumber(row.missedAttacksPct)}</td>
+                <td className="num" data-label="Median latency (ms)">{formatResultNumber(row.medianLatencyMs)}</td>
+                <td className="num" data-label="Per payment">{formatCalls(row)}</td>
               </tr>
             ))}
             <tr className="results-extra">
               <th scope="row"><span className="results-config">redteam</span><span className="results-description">Red-team round, {redteamResult.total} attacks, conformal row</span></th>
-              <td className="num">n/a</td>
-              <td className="num">n/a</td>
-              <td className="num">{formatResultNumber(redteamResult.missedPct)} <small>({redteamResult.held} held, {redteamResult.blocked} blocked)</small></td>
-              <td className="num">{formatResultNumber(redteamResult.medianMs)}</td>
-              <td className="num">{formatCalls(redteamResult)}</td>
+              <td className="num" data-label="False holds (%)">n/a</td>
+              <td className="num" data-label="False blocks (%)">n/a</td>
+              <td className="num" data-label="Missed attacks (%)">{formatResultNumber(redteamResult.missedPct)} <small>({redteamResult.held} held, {redteamResult.blocked} blocked)</small></td>
+              <td className="num" data-label="Median latency (ms)">{formatResultNumber(redteamResult.medianMs)}</td>
+              <td className="num" data-label="Per payment">{formatCalls(redteamResult)}</td>
             </tr>
             <tr className="results-extra">
               <th scope="row"><span className="results-config">melon</span><span className="results-description">Masked re-run (MELON) only</span></th>
-              <td className="num" colSpan={5}>Not built (cut list)</td>
+              <td className="num" colSpan={5} data-label="Status">Not built (cut list)</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <div className="rgrid">
       <ResultsChart rows={rows} />
+      <div className="rside">
       <div className="families">
         <h3>Attacks caught, by family <small>cascade row, q̂ {FROZEN_Q_HAT}</small></h3>
         <ul>
@@ -173,6 +191,8 @@ export function ResultsSection({ rows = resultRows }) {
           payment. More sets (external held-out, PaySim, BEC) are in the README Results section.
         </li>
       </ul>
+      </div>
+      </div>
     </section>
   );
 }
