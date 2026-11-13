@@ -4,6 +4,7 @@ Ledger of MAJOR updates only, newest first. What counts as MAJOR: [AGENTS.md §1
 
 ## 2026-11-13
 
+- **Rules:** Jim's decision 2026-11-13: Jev v2. The Jev state carries `agent_profile`; the `unusual`, `injection_driven` and `receiver_risk` questions carry examples and counterexamples; in `jev` mode a new receiver whose `injection_driven` exceeds `FUSION_JEV_INJECTION_HOLD_THRESHOLD` holds (default 1.0 = off until calibrated); ε = 5% is split 4% + 1%.
 - **Rules:** Jim's decision 2026-11-13: policy includes the provenance rules (`receiver_redirect`, `invoice_already_paid`, `untrusted_memory`, `obfuscated_context`; `checker/src/provenance.rs`), and `find_lookalike` also flags a receiver that embeds a known payee's name (affix lookalike). Jev call budget raised from 2,500 to 3,100 ([jev-budget.md](docs/results/jev-budget.md)).
 - **Component:** E4 numbers-slide generator and portable SVG/HTML/PNG assets in `site/public/demo/`, using the committed P6 conformal/no-defense and external results, cascade-family outcomes, contract caps and shared brand tokens. Reuses results format helpers; adds Node tests, source hashes and offline Geist font embedding. The blocked-attack GIF remains blocked on A8's actual shot 4 recording; E4 is not complete. [Regeneration and capture notes](docs/build/e4-demo-assets.md).
 - **Component:** firewall-nightly-e2e runs a scenario list on testnet, cancels held attacks with the owner key, fails on check_unavailable, checks benign balance deltas, writes --report ([nightly-e2e.md](docs/build/nightly-e2e.md)).

@@ -132,7 +132,12 @@ pub fn decide_with_configs(
         if let Some(c) = client {
             let jev = c
                 .decide(
-                    &fusion::jev_state(&input, &signals, fusion_cfg.reference_examples.as_ref()),
+                    &fusion::jev_state(
+                        &input,
+                        &signals,
+                        &counterparty_cfg.profile,
+                        fusion_cfg.reference_examples.as_ref(),
+                    ),
                     &decision::firewall_questions(),
                 )
                 .map_err(|e| e.to_string())
@@ -208,6 +213,11 @@ mod tests {
     use crate::counterparty::AgentProfile;
     use crate::fusion::testing::FixedClient;
 
+    /// Defaults changed by later steps must not move these tests.
+    fn pinned() -> FusionConfig {
+        FusionConfig { hold_threshold: 0.84, jev_injection_hold_threshold: 1.0, ..FusionConfig::default() }
+    }
+
     fn counterparty_on() -> CounterpartyConfig {
         CounterpartyConfig {
             enabled: true,
@@ -225,7 +235,7 @@ mod tests {
             &PolicyConfig::default(),
             &InjectionConfig::default(),
             cfg,
-            &FusionConfig::default(),
+            &pinned(),
             Some(&FixedClient::benign()),
         )
         .unwrap()
@@ -424,7 +434,7 @@ mod tests {
             &PolicyConfig::default(),
             &InjectionConfig::default(),
             &cp_cfg,
-            &FusionConfig::default(),
+            &pinned(),
             None,
         )
         .unwrap();
@@ -464,7 +474,7 @@ mod tests {
             &PolicyConfig::default(),
             &unreachable_classifier(),
             &CounterpartyConfig::default(),
-            &FusionConfig { cascade: true, ..FusionConfig::default() },
+            &FusionConfig { cascade: true, ..pinned() },
             Some(client),
         )
     }
@@ -498,7 +508,7 @@ mod tests {
             &PolicyConfig::default(),
             &unreachable_classifier(),
             &CounterpartyConfig::default(),
-            &FusionConfig::default(),
+            &pinned(),
             Some(&client_with_unusual(0.04)),
         )
         .expect_err("classifier runs before Jev without the cascade");
@@ -507,7 +517,7 @@ mod tests {
 
     #[test]
     fn code_rules_never_calls_the_client() {
-        let cfg = FusionConfig { mode: FusionMode::CodeRules, ..FusionConfig::default() };
+        let cfg = FusionConfig { mode: FusionMode::CodeRules, ..pinned() };
         let (v, r) = decide_with_configs(
             INPUT.as_bytes(),
             &PolicyConfig::default(),
@@ -535,7 +545,7 @@ mod tests {
             let fusion = FusionConfig {
                 hold_threshold: 0.84,
                 agent_hold_threshold: Some(0.70),
-                ..FusionConfig::default()
+                ..pinned()
             };
             decide_with_configs(
                 INPUT.as_bytes(),
@@ -557,11 +567,11 @@ mod tests {
     fn refuse_with_applies_the_given_hold_threshold() {
         let cp = CounterpartyConfig::default();
         let at = |hold_threshold: f64| {
-            let cfg = FusionConfig { hold_threshold, ..FusionConfig::default() };
+            let cfg = FusionConfig { hold_threshold, ..pinned() };
             refuse_with(FIXTURE_HOLD.as_bytes(), &cfg, &cp).unwrap()
         };
         assert_eq!(at(0.84).0, Outcome::Allow);
         assert_eq!(at(0.5).0, Outcome::Hold);
-        assert!(refuse_with(b"{}", &FusionConfig::default(), &cp).is_err());
+        assert!(refuse_with(b"{}", &pinned(), &cp).is_err());
     }
 }

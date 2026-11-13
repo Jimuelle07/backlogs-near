@@ -1,6 +1,7 @@
 //! Jev fusion (C3): builds the Jev `state` from the input and the signals, maps the four answers to
 //! `signals.jev`, and fuses all signals into an outcome and reason codes (`sdd.md §5`).
 //! Thresholds live in `FusionConfig` (env `FUSION_*`), never in prompts or in the Jev state.
+use crate::counterparty::AgentProfile;
 use crate::decision::{Answer, Decision};
 use crate::formats::{
     CheckerInput, JevSignal, LabelProbabilities, Outcome, ReasonCode, Signals,
@@ -10,6 +11,9 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 pub const MAX_REASONS: usize = 6;
+
+/// Most known payees carried in the Jev state.
+const MAX_STATE_PAYEES: usize = 40;
 
 /// Minimum normal payments in the agent profile before `FUSION_AGENT_HOLD_THRESHOLD` applies
 /// (idea.md "Decision model": per-agent threshold after 99+ normal payments).
@@ -35,6 +39,9 @@ pub struct FusionConfig {
     pub jev_injection_threshold: f64,
     /// `FUSION_JEV_RECEIVER_RISK_THRESHOLD`, on Jev `receiver_risk`; default 0.5.
     pub jev_receiver_risk_threshold: f64,
+    /// `FUSION_JEV_INJECTION_HOLD_THRESHOLD`: in `jev` mode a new receiver holds when Jev
+    /// `injection_driven` is above it; default 1.0 (rule off until calibrated).
+    pub jev_injection_hold_threshold: f64,
     /// `FUSION_YOUNG_ACCOUNT_DAYS`; default 7.
     pub young_account_days: f64,
     /// `FUSION_MODE`: `jev` (default) or `code_rules` (never calls the decision client).
@@ -55,6 +62,7 @@ impl Default for FusionConfig {
             injection_threshold: 0.5,
             jev_injection_threshold: 0.5,
             jev_receiver_risk_threshold: 0.5,
+            jev_injection_hold_threshold: 1.0,
             young_account_days: 7.0,
             mode: FusionMode::Jev,
             cascade: false,
@@ -126,6 +134,10 @@ impl FusionConfig {
                 "FUSION_JEV_RECEIVER_RISK_THRESHOLD",
                 d.jev_receiver_risk_threshold,
             )?,
+            jev_injection_hold_threshold: prob(
+                "FUSION_JEV_INJECTION_HOLD_THRESHOLD",
+                d.jev_injection_hold_threshold,
+            )?,
             young_account_days,
             agent_hold_threshold,
             reference_examples,
@@ -166,8 +178,14 @@ fn parse_reference_examples(raw: &str) -> Result<Value, String> {
 }
 
 /// The Jev `state`: the request, the proposed payment, untrusted context as data, and the other
-/// checks' raw signals (`null` when a check produced none). No thresholds.
-pub fn jev_state(input: &CheckerInput, signals: &Signals, reference: Option<&Value>) -> Value {
+/// checks' raw signals (`null` when a check produced none), and the agent profile (payees with a
+/// dotted account id only, at most 40). No thresholds.
+pub fn jev_state(
+    input: &CheckerInput,
+    signals: &Signals,
+    profile: &AgentProfile,
+    reference: Option<&Value>,
+) -> Value {
     let context: Vec<Value> = input
         .context
         .iter()
@@ -195,6 +213,20 @@ pub fn jev_state(input: &CheckerInput, signals: &Signals, reference: Option<&Val
             "code_changed_recently": cp.map(|c| c.code_changed_recently),
             "prior_payments": cp.map(|c| c.prior_payments),
             "lookalike_of": cp.and_then(|c| c.lookalike_of.clone()),
+        },
+        "agent_profile": {
+            "payments_last_90d": profile.payments_last_90d,
+            "typical_amount_units": profile
+                .typical_amount_units
+                .as_ref()
+                .map(|u| u.iter().map(u128::to_string).collect::<Vec<_>>()),
+            "known_payees": profile
+                .known_payees
+                .iter()
+                .filter(|p| p.account_id.contains('.'))
+                .take(MAX_STATE_PAYEES)
+                .map(|p| json!({"account_id": p.account_id, "prior_payments": p.prior_payments}))
+                .collect::<Vec<_>>(),
         },
     });
     if let Some(r) = reference {
@@ -254,7 +286,9 @@ pub fn jev_signal(d: &Decision) -> Result<JevSignal, String> {
 /// Fuse the signals (`sdd.md §5`). In `jev` mode: hold when Jev is unavailable or `unusual > q̂`; block
 /// only when `unusual > q̂` and attack flags from at least two distinct detectors fire (Jev counts once).
 /// Also hold, even when `unusual <= q̂`, when any non-Jev detector (policy, classifier, MELON,
-/// counterparty) flagged (Jim's decision 2026-11-12); Jev flags alone do not hold.
+/// counterparty) flagged (Jim's decision 2026-11-12); Jev flags alone do not hold, except that a
+/// new receiver (`prior_payments == 0`) whose `injection_driven` exceeds
+/// `jev_injection_hold_threshold` also holds (Jim's decision 2026-11-13).
 /// In `code_rules` mode Jev is ignored: two or more detectors block, one holds, none allows.
 pub fn fuse(signals: &Signals, cfg: &FusionConfig) -> (Outcome, Vec<ReasonCode>) {
     use ReasonCode::*;
@@ -326,6 +360,12 @@ pub fn fuse(signals: &Signals, cfg: &FusionConfig) -> (Outcome, Vec<ReasonCode>)
             Some(j) if j.unusual > cfg.hold_threshold && detectors >= 2 => Outcome::Block,
             Some(j) if j.unusual > cfg.hold_threshold => Outcome::Hold,
             Some(_) if hit[..4].iter().any(|h| *h) => Outcome::Hold,
+            Some(j)
+                if cp.is_some_and(|c| c.prior_payments == 0)
+                    && j.injection_driven > cfg.jev_injection_hold_threshold =>
+            {
+                Outcome::Hold
+            }
             Some(_) => Outcome::Allow,
         }
     };
@@ -461,6 +501,19 @@ mod tests {
         }
     }
 
+    /// Defaults changed by later steps must not move these tests.
+    fn pinned() -> FusionConfig {
+        FusionConfig {
+            hold_threshold: 0.84,
+            jev_injection_hold_threshold: 1.0,
+            ..FusionConfig::default()
+        }
+    }
+
+    fn cp_signal(prior_payments: u64) -> CounterpartySignal {
+        CounterpartySignal { lookalike_of: None, lookalike_distance: None, ..lookalike_signal(prior_payments) }
+    }
+
     fn lookalike_signal(prior_payments: u64) -> CounterpartySignal {
         CounterpartySignal {
             account_age_days: None,
@@ -479,7 +532,7 @@ mod tests {
             jev: Some(jev(0.1, 0.0, 0.0)),
             ..Signals::default()
         };
-        assert_eq!(fuse(&s, &FusionConfig::default()), (Outcome::Hold, vec![PolicyViolation]));
+        assert_eq!(fuse(&s, &pinned()), (Outcome::Hold, vec![PolicyViolation]));
     }
 
     #[test]
@@ -489,7 +542,7 @@ mod tests {
             jev: Some(jev(0.1, 0.9, 0.9)),
             ..Signals::default()
         };
-        let (outcome, reasons) = fuse(&s, &FusionConfig::default());
+        let (outcome, reasons) = fuse(&s, &pinned());
         assert_eq!(outcome, Outcome::Hold);
         assert_eq!(reasons, vec![LookalikeReceiver, JevInjectionDriven, JevReceiverRisk]);
     }
@@ -498,9 +551,51 @@ mod tests {
     fn below_threshold_jev_flags_alone_allow() {
         let s = Signals { jev: Some(jev(0.1, 0.9, 0.9)), ..Signals::default() };
         assert_eq!(
-            fuse(&s, &FusionConfig::default()),
+            fuse(&s, &pinned()),
             (Outcome::Allow, vec![JevInjectionDriven, JevReceiverRisk])
         );
+        // Rule off at 1.0: a new receiver with high `injection_driven` still allows.
+        let new = Signals {
+            counterparty: Some(cp_signal(0)),
+            jev: Some(jev(0.1, 0.95, 0.0)),
+            ..Signals::default()
+        };
+        assert_eq!(fuse(&new, &pinned()).0, Outcome::Allow);
+    }
+
+    fn agreement_cfg() -> FusionConfig {
+        FusionConfig { jev_injection_hold_threshold: 0.9, ..pinned() }
+    }
+
+    #[test]
+    fn new_receiver_with_injection_driven_above_hold_threshold_holds() {
+        let s = Signals {
+            counterparty: Some(cp_signal(0)),
+            jev: Some(jev(0.1, 0.95, 0.0)),
+            ..Signals::default()
+        };
+        assert_eq!(
+            fuse(&s, &agreement_cfg()),
+            (Outcome::Hold, vec![JevInjectionDriven, NewReceiver])
+        );
+        let at = Signals { jev: Some(jev(0.1, 0.9, 0.0)), ..s };
+        assert_eq!(fuse(&at, &agreement_cfg()).0, Outcome::Allow);
+    }
+
+    #[test]
+    fn known_receiver_with_injection_driven_above_hold_threshold_allows() {
+        let s = Signals {
+            counterparty: Some(cp_signal(3)),
+            jev: Some(jev(0.1, 0.95, 0.0)),
+            ..Signals::default()
+        };
+        assert_eq!(fuse(&s, &agreement_cfg()), (Outcome::Allow, vec![JevInjectionDriven]));
+    }
+
+    #[test]
+    fn null_counterparty_with_injection_driven_above_hold_threshold_allows() {
+        let s = Signals { jev: Some(jev(0.1, 0.95, 0.0)), ..Signals::default() };
+        assert_eq!(fuse(&s, &agreement_cfg()), (Outcome::Allow, vec![JevInjectionDriven]));
     }
 
     #[test]
@@ -510,7 +605,7 @@ mod tests {
             jev: Some(jev(0.9, 0.9, 0.0)),
             ..Signals::default()
         };
-        assert_eq!(fuse(&s, &FusionConfig::default()).0, Outcome::Block);
+        assert_eq!(fuse(&s, &pinned()).0, Outcome::Block);
     }
 
     #[test]
@@ -524,7 +619,7 @@ mod tests {
             jev: Some(jev(0.83, 0.86, 1.0)),
             ..Signals::default()
         };
-        let (outcome, reasons) = fuse(&s, &FusionConfig::default());
+        let (outcome, reasons) = fuse(&s, &pinned());
         assert_eq!(outcome, Outcome::Hold);
         assert_eq!(
             reasons,
@@ -535,14 +630,14 @@ mod tests {
     #[test]
     fn two_jev_flags_count_as_one_detector() {
         let s = Signals { jev: Some(jev(0.9, 0.9, 0.9)), ..Signals::default() };
-        let (outcome, reasons) = fuse(&s, &FusionConfig::default());
+        let (outcome, reasons) = fuse(&s, &pinned());
         assert_eq!(outcome, Outcome::Hold);
         assert_eq!(reasons, vec![JevInjectionDriven, JevReceiverRisk, UnusualForAgent]);
     }
 
     #[test]
     fn unusual_at_threshold_allows() {
-        let cfg = FusionConfig::default();
+        let cfg = pinned();
         let at = Signals { jev: Some(jev(0.84, 0.0, 0.0)), ..Signals::default() };
         assert_eq!(fuse(&at, &cfg), (Outcome::Allow, vec![ChecksPassed]));
         let above = Signals { jev: Some(jev(0.8400001, 0.0, 0.0)), ..Signals::default() };
@@ -573,7 +668,7 @@ mod tests {
             }),
             jev: None,
         };
-        let (outcome, reasons) = fuse(&s, &FusionConfig::default());
+        let (outcome, reasons) = fuse(&s, &pinned());
         assert_eq!(outcome, Outcome::Hold);
         assert_eq!(
             reasons,
@@ -601,6 +696,14 @@ mod tests {
                 assert!(err.starts_with(k), "{err}");
             }
         }
+        assert_eq!(
+            with("FUSION_JEV_INJECTION_HOLD_THRESHOLD", "0.9").unwrap().jev_injection_hold_threshold,
+            0.9
+        );
+        assert!(with("FUSION_JEV_INJECTION_HOLD_THRESHOLD", "1.5")
+            .unwrap_err()
+            .starts_with("FUSION_JEV_INJECTION_HOLD_THRESHOLD"));
+        assert!(with("FUSION_JEV_INJECTION_HOLD_THRESHOLD", "abc").is_err());
         assert!(with("FUSION_YOUNG_ACCOUNT_DAYS", "-1").is_err());
         assert!(with("FUSION_YOUNG_ACCOUNT_DAYS", "inf").is_err());
     }
@@ -668,7 +771,7 @@ mod tests {
             trust: "untrusted".into(),
             text: text.into(),
         }];
-        let state = jev_state(&input, &Signals::default(), None);
+        let state = jev_state(&input, &Signals::default(), &AgentProfile::default(), None);
         assert_eq!(state["untrusted_context"][0]["text"], text);
         assert_eq!(state["untrusted_context"][0]["ref"], "ctx-reply");
         assert_eq!(state["proposed_payment"]["amount"], input.amount.as_str());
@@ -677,12 +780,49 @@ mod tests {
     }
 
     #[test]
+    fn jev_state_carries_agent_profile_with_dotted_payees_only() {
+        use crate::counterparty::PayeeHistory;
+        let input: CheckerInput = serde_json::from_str(INPUT).unwrap();
+        let payee = |id: String, n: u64| PayeeHistory {
+            account_id: id,
+            prior_payments: n,
+            is_contract: None,
+            account_age_days: None,
+            code_hash: None,
+        };
+        let mut known_payees = vec![payee("hostco".into(), 9), payee("hostco.testnet".into(), 4)];
+        known_payees.extend((0..45).map(|i| payee(format!("vendor{i}.testnet"), i)));
+        let profile = AgentProfile {
+            payments_last_90d: Some(12),
+            typical_amount_units: Some(vec![15_000_000, 340282366920938463463374607431768211455]),
+            known_payees,
+        };
+        let state = jev_state(&input, &Signals::default(), &profile, None);
+        let p = &state["agent_profile"];
+        assert_eq!(p["payments_last_90d"], 12);
+        assert_eq!(
+            p["typical_amount_units"],
+            json!(["15000000", "340282366920938463463374607431768211455"])
+        );
+        let payees = p["known_payees"].as_array().unwrap();
+        assert_eq!(payees.len(), 40);
+        assert_eq!(payees[0], json!({"account_id": "hostco.testnet", "prior_payments": 4}));
+        assert_eq!(payees[1], json!({"account_id": "vendor0.testnet", "prior_payments": 0}));
+        assert!(payees.iter().all(|x| x["account_id"].as_str().unwrap().contains('.')));
+        let empty = jev_state(&input, &Signals::default(), &AgentProfile::default(), None);
+        assert_eq!(
+            empty["agent_profile"],
+            json!({"payments_last_90d": null, "typical_amount_units": null, "known_payees": []})
+        );
+    }
+
+    #[test]
     fn jev_state_reference_cases_only_when_some() {
         let input: CheckerInput = serde_json::from_str(INPUT).unwrap();
-        let none = jev_state(&input, &Signals::default(), None);
+        let none = jev_state(&input, &Signals::default(), &AgentProfile::default(), None);
         assert!(none.get("reference_cases").is_none());
         let r = json!({"fraud_examples": ["f"], "legitimate_examples": ["l"]});
-        let some = jev_state(&input, &Signals::default(), Some(&r));
+        let some = jev_state(&input, &Signals::default(), &AgentProfile::default(), Some(&r));
         assert_eq!(some["reference_cases"]["fraud_examples"], json!(["f"]));
         assert_eq!(some["reference_cases"]["legitimate_examples"], json!(["l"]));
         assert!(some["reference_cases"]["note"].as_str().unwrap().contains("not part of this payment"));
