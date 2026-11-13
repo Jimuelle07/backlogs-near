@@ -1,8 +1,17 @@
 # Results in detail
 
-Moved from the README on 2026-11-13; every number is read from the files in this folder. Short version: [README](../../README.md#results-at-a-glance).
+Moved from the README on 2026-11-13; every number is read from the files in this folder. Short version: [README](../../README.md#results).
 
 Two versions of the checker are reported. [Current checker](#current-checker-evaluation-of-2026-11-13) is what the code in this repository does now. [Baseline](#baseline-before-the-provenance-rules-and-jev-v2) is the earlier checker, kept unchanged for comparison. Every number is read from a committed file under [docs/results/](./); the run-by-run log is [ledger.md](ledger.md) (runs R15–R23).
+
+### How it was evaluated
+
+- Three scenario sets: main (150 benign, 150 attacks; six attack families, 25 each; written by the team), external (100 and 100, rewritten from public benchmarks with attribution) and red team (17 attacks).
+- Presets switch layers on one at a time, so each layer's effect is measured.
+- Split-conformal calibration sets the two hold thresholds.
+- Recorded decisions are re-scored offline (`checker --refuse`, no Jev calls).
+- A Jev call ledger: 3,441 of 4,100 calls used ([jev-budget.md](jev-budget.md)). Every run is logged in [ledger.md](ledger.md).
+- A repeat run for stability, and a rigor review of every number in the results detail ([rigor-review.md](rigor-review.md), grade Weak Accept).
 
 ### Current checker: evaluation of 2026-11-13
 
@@ -106,7 +115,7 @@ These runs used 595 Jev calls; the count per run is in [jev-budget.md](jev-budge
 3. Run `cargo test --workspace` → every suite ends with `test result: ok`.
 4. In `agent/`, run `uv run pytest` → `517 passed`.
 5. In `agent/`, run `uv run firewall-calibrate ../docs/results/flagging-main-calibration.json --epsilon 0.04` → `q_hat         : 0.81`; add `--score injection_driven --epsilon 0.01` → `q_hat         : 0.81`.
-6. With a Jev key ([step 4](../../README.md#with-a-jev-key)) and the classifier ([step 9](../reference.md#evaluation-and-benchmarks)): in `agent/`, run `uv run firewall-eval --scenario-set external --preset jev_fusion_conformal --output ../data/eval/external.json` → `scenarios: 200 (benign=100, attack=100)` and a `jev_fusion_conformal:` row. The committed run printed `false_holds=16 (16.0%) missed_attacks=0 (0.0%)`; Jev scores vary between runs. This spends 200 Jev calls.
+6. With a Jev key ([step 4](../try-it.md#with-a-jev-key)) and the classifier ([step 9](../reference.md#evaluation-and-benchmarks)): in `agent/`, run `uv run firewall-eval --scenario-set external --preset jev_fusion_conformal --output ../data/eval/external.json` → `scenarios: 200 (benign=100, attack=100)` and a `jev_fusion_conformal:` row. The committed run printed `false_holds=16 (16.0%) missed_attacks=0 (0.0%)`; Jev scores vary between runs. This spends 200 Jev calls.
 
 ### Baseline: before the provenance rules and Jev v2
 

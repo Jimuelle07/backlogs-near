@@ -31,6 +31,8 @@ Frontend D1/E1: [site/README.md](../site/README.md) — shared landing page and 
 | [results/ledger.md](results/ledger.md) | Ledger of every recorded test and eval run: what ran, keys, result, Jev calls, link to the record; entry template | Adding a run; finding the record of a run |
 | [results/results-detail.md](results/results-detail.md) | Full results: current and baseline tables, repeat run, sweep, testnet runs, benchmarks, complete limits | Checking any number behind the README summary |
 | [reference.md](reference.md) | Evaluation and benchmark steps 7–12, configuration switches, local run and testnet instructions, function-call key | Running evals, changing config, running locally |
+| [try-it.md](try-it.md) | Try-it steps 1–6 in full: keyless dry-run, Jev-key dry-run, decision record, nightly dry-run, with expected output | Running the demo for the first time |
+| [third-party.md](third-party.md) | Every third-party library, tool and dataset with link, license and use | Checking attribution or licenses |
 | [build/demo-storyboard.md](build/demo-storyboard.md) | D3 demo storyboard: shot list for the 2-minute demo, numbers slide, 20-second GIF plan, open questions | Recording the demo (A8), making the GIF and slide (E4) |
 | [build/e4-demo-assets.md](build/e4-demo-assets.md) | E4 numbers-slide sources, regeneration and verification; actual shot 4 footage needed for the GIF | Regenerating the slide or completing the blocked-attack GIF |
 | [hackathon-context/HACKATHON.md](hackathon-context/HACKATHON.md) | Official agent instructions and rules snapshot; the live https://nearhackathon.com/HACKATHON.md wins | Before any rules question or submission step |
