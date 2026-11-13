@@ -237,8 +237,10 @@ function Scene({ pointer, reduce, onStep }) {
     if (corona.current) corona.current.rotation.z = t * 0.03;
     const g = group.current;
     if (g) {
-      g.rotation.y += (pointer.current.x * 0.15 - g.rotation.y) * 0.05;
-      g.rotation.x += (pointer.current.y * 0.1 - g.rotation.x) * 0.05;
+      // Turns toward the cursor (mouse anywhere over the stage, see the listener below).
+      const px = reduce ? 0 : pointer.current.x, py = reduce ? 0 : pointer.current.y;
+      g.rotation.y += (px * 0.15 - g.rotation.y) * 0.05;
+      g.rotation.x += (py * 0.1 - g.rotation.x) * 0.05;
     }
   });
 
@@ -272,14 +274,18 @@ export default function Eclipse({ onStep }) {
     const el = wrap.current;
     const io = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting));
     io.observe(el);
+    // Listen on the whole stage, so the cursor over the step cards still turns the scene.
+    // Mouse only: on touch, a drag is a scroll.
+    const stage = el.parentElement || el;
     const move = (e) => {
+      if (e.pointerType !== "mouse") return;
       const r = el.getBoundingClientRect();
       pointer.current = { x: (e.clientX - r.left) / r.width - 0.5, y: (e.clientY - r.top) / r.height - 0.5 };
     };
     const leave = () => { pointer.current = { x: 0, y: 0 }; };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerleave", leave);
-    return () => { io.disconnect(); el.removeEventListener("pointermove", move); el.removeEventListener("pointerleave", leave); };
+    stage.addEventListener("pointermove", move);
+    stage.addEventListener("pointerleave", leave);
+    return () => { io.disconnect(); stage.removeEventListener("pointermove", move); stage.removeEventListener("pointerleave", leave); };
   }, []);
 
   return (

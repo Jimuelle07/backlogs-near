@@ -25,7 +25,7 @@ import {
 import { ArchitectureDiagram } from "./components/ArchitectureDiagram";
 import { Console } from "./components/Console";
 import { DotField } from "./components/DotField";
-import { HookFeed, HoldLog } from "./components/DemoAnims";
+import { DemoNumbers, HookFeed, HoldLog } from "./components/DemoAnims";
 import { Frame } from "./components/Frame";
 import { Logo } from "./components/Logo";
 import { MorseField } from "./components/MorseField";
@@ -481,6 +481,7 @@ export default function App() {
                     </div>
                     {i === 0 && <HookFeed />}
                     {i === 4 && <HoldLog />}
+                    {i === 5 && <DemoNumbers />}
                     <div className="dbody"><h3>{title}</h3><p>{text}</p></div>
                   </li>
                 );
