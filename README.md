@@ -15,6 +15,7 @@ Contents:
 - [Results](#results)
 - [Limits](#limits)
 - [Built with / third-party](#built-with--third-party)
+- [Contributors](#contributors)
 - [Hackathon disclosures](#hackathon-disclosures)
 - [License](#license)
 
@@ -398,6 +399,28 @@ Frontend (`site/`):
 - React, React DOM, Vite, `@vitejs/plugin-react` and vite-plugin-singlefile: shared landing page and read-only receipts frontend
 - three, three-stdlib, `@react-three/fiber`, `@react-three/drei`, GSAP, Lenis and lucide-react: shared frontend stack ([site/README.md](site/README.md))
 - Google Fonts (Geist, Geist Mono), NEARBlocks testnet explorer, FastNEAR public testnet RPC: frontend fonts and public data links
+
+## Contributors
+
+Team roster, from [docs/build/sprints.md](docs/build/sprints.md#team):
+
+| Team | Lead | Members |
+| --- | --- | --- |
+| Backend (lanes A, B, C) | Jim | Rc, paticolcol, Jesus |
+| Frontend (lanes D, E) | Helena | Ace |
+
+GitHub accounts with commits in this repository ([full list](https://github.com/Jimuelle07/backlogs-near/graphs/contributors)):
+
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/Jimuelle07"><img src="https://github.com/Jimuelle07.png?size=80" width="80" alt="Jimuelle07"><br><sub>Jimuelle07</sub></a></td>
+    <td align="center"><a href="https://github.com/helenaherrero515"><img src="https://github.com/helenaherrero515.png?size=80" width="80" alt="helenaherrero515"><br><sub>helenaherrero515</sub></a></td>
+    <td align="center"><a href="https://github.com/Lanceace5432"><img src="https://github.com/Lanceace5432.png?size=80" width="80" alt="Lanceace5432"><br><sub>Lanceace5432</sub></a></td>
+    <td align="center"><a href="https://github.com/jn-kye"><img src="https://github.com/jn-kye.png?size=80" width="80" alt="jn-kye"><br><sub>jn-kye</sub></a></td>
+    <td align="center"><a href="https://github.com/dsmipritzc"><img src="https://github.com/dsmipritzc.png?size=80" width="80" alt="dsmipritzc"><br><sub>dsmipritzc</sub></a></td>
+    <td align="center"><a href="https://github.com/Shineiii009"><img src="https://github.com/Shineiii009.png?size=80" width="80" alt="Shineiii009"><br><sub>Shineiii009</sub></a></td>
+  </tr>
+</table>
 
 ## Hackathon disclosures
 
