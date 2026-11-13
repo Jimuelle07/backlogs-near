@@ -127,13 +127,7 @@ pub fn decide_with_configs(
         counterparty: counterparty_signal,
         jev: None,
     };
-    let fusion_cfg = &FusionConfig {
-        hold_threshold: match (fusion_cfg.agent_hold_threshold, counterparty_cfg.profile.payments_last_90d) {
-            (Some(t), Some(n)) if n >= fusion::PER_AGENT_MIN_PAYMENTS => t,
-            _ => fusion_cfg.hold_threshold,
-        },
-        ..fusion_cfg.clone()
-    };
+    let fusion_cfg = &effective_fusion(fusion_cfg, counterparty_cfg);
     if fusion_cfg.mode == FusionMode::Jev {
         if let Some(c) = client {
             let jev = c
@@ -175,6 +169,37 @@ pub fn decide_with_configs(
         checker_version: version,
     };
     Ok((verdict, record))
+}
+
+/// The fusion config in force for this agent: the per-agent hold threshold replaces the global one
+/// once the profile shows at least `PER_AGENT_MIN_PAYMENTS` payments in the last 90 days.
+pub fn effective_fusion(fusion_cfg: &FusionConfig, counterparty_cfg: &CounterpartyConfig) -> FusionConfig {
+    FusionConfig {
+        hold_threshold: match (fusion_cfg.agent_hold_threshold, counterparty_cfg.profile.payments_last_90d) {
+            (Some(t), Some(n)) if n >= fusion::PER_AGENT_MIN_PAYMENTS => t,
+            _ => fusion_cfg.hold_threshold,
+        },
+        ..fusion_cfg.clone()
+    }
+}
+
+/// Re-fuse a stored `DecisionRecord`'s signals under the given configs: outcome and reasons only,
+/// no checks run and no decision client built. Lets one recorded Jev run be scored at other thresholds.
+pub fn refuse_with(
+    record_bytes: &[u8],
+    fusion_cfg: &FusionConfig,
+    counterparty_cfg: &CounterpartyConfig,
+) -> Result<(Outcome, Vec<ReasonCode>), CheckerError> {
+    let record: DecisionRecord =
+        serde_json::from_slice(record_bytes).map_err(|e| CheckerError::Parse(e.to_string()))?;
+    Ok(fusion::fuse(&record.signals, &effective_fusion(fusion_cfg, counterparty_cfg)))
+}
+
+/// `refuse_with` under the configs from the environment (`FUSION_*`, `COUNTERPARTY_*`/`AGENT_PROFILE_*`).
+pub fn refuse(record_bytes: &[u8]) -> Result<(Outcome, Vec<ReasonCode>), CheckerError> {
+    let counterparty_cfg = CounterpartyConfig::from_env().map_err(CheckerError::Config)?;
+    let fusion_cfg = FusionConfig::from_env().map_err(CheckerError::Config)?;
+    refuse_with(record_bytes, &fusion_cfg, &counterparty_cfg)
 }
 
 #[cfg(test)]
@@ -526,5 +551,17 @@ mod tests {
         };
         assert_eq!(run(120), Outcome::Hold);
         assert_eq!(run(12), Outcome::Allow);
+    }
+
+    #[test]
+    fn refuse_with_applies_the_given_hold_threshold() {
+        let cp = CounterpartyConfig::default();
+        let at = |hold_threshold: f64| {
+            let cfg = FusionConfig { hold_threshold, ..FusionConfig::default() };
+            refuse_with(FIXTURE_HOLD.as_bytes(), &cfg, &cp).unwrap()
+        };
+        assert_eq!(at(0.84).0, Outcome::Allow);
+        assert_eq!(at(0.5).0, Outcome::Hold);
+        assert!(refuse_with(b"{}", &FusionConfig::default(), &cp).is_err());
     }
 }

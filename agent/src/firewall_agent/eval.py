@@ -36,6 +36,16 @@ data/external/derived/bec-reference-examples.json; not part of `--all-configurat
 `--scenario-set redteam|external|paysim` evaluates that set instead of the main set (`external`:
 agent/scenarios/external, from public benchmarks; `paysim`: built locally under data/, with its
 own AGENT_PROFILE_PATH).
+`--record-dir DIR` keeps the DecisionRecords as DIR/<n>.json (n = the 1-based case index). DIR must
+be absent or empty and only one preset may write to it, because the checker never overwrites a
+record with different bytes.
+`--refuse-from RESULTS.json` (needs `--record-dir DIR`, which it only reads, and `--preset` or
+`--all-configurations`; not with `--scenario`) makes no Jev call. For each Jev preset it re-fuses
+every case of RESULTS.json from DIR/<n>.json with `checker --refuse` under that preset's env,
+replaces `outcome` and `reasons`, marks the case `refused`, and keeps the recorded scores,
+`jev_called` and latency. The cascade preset is skipped with a caveat, because its Jev state
+differs. Code-rules presets run normally, with a temporary record dir. The output carries
+`refused_from`.
 `--calibration FILE` adds q_hat and unseen_family_rotation computed from FILE's cases.
 
 Scenarios are always evaluated in the `demo.testnet` namespace (EVAL_NAMESPACE), the one the
@@ -50,6 +60,7 @@ import json
 import math
 import os
 import statistics
+import subprocess
 import sys
 import tempfile
 import time
@@ -77,6 +88,9 @@ UNPRICED_CAVEAT = (
 )
 MELON_CAVEAT = "MELON masked re-run was not built (cut list, idea.md); its row is omitted."
 JEV_FAILED_CAVEAT = "Jev calls that failed (check_unavailable) count as attempted calls."
+CASCADE_NOT_REFUSED_CAVEAT = (
+    "Cascade row not re-run: its Jev state differs (no classifier score), so it cannot be re-fused."
+)
 
 CAVEATS = [
     "The conformal false-hold bound (epsilon = 5%) assumes exchangeability between calibration and live traffic.",
@@ -159,7 +173,6 @@ def evaluate_scenarios(
 
         cases: list[dict] = []
         jev_failed = 0
-        latencies_ms: list[float] = []
         checker_version = "0.1.0"
 
         for idx, name in enumerate(names, start=1):
@@ -184,6 +197,11 @@ def evaluate_scenarios(
             rec_file = active_record_dir / f"{idx}.json"
             policy_ok: bool | None = None
             jev_unusual: float | None = None
+            jev_injection_driven: float | None = None
+            jev_receiver_risk: float | None = None
+            jev_label: str | None = None
+            policy_violations: list = []
+            lookalike_of: str | None = None
             jev_called = False
             classifier_called = False
             reasons_rec: list = []
@@ -204,8 +222,20 @@ def evaluate_scenarios(
                     # Jev was queried but failed: an attempted call costs the same.
                     jev_called = True
                     jev_failed += 1
-                if isinstance(jev_sig, dict) and isinstance(jev_sig.get("unusual"), (int, float)):
-                    jev_unusual = float(jev_sig["unusual"])
+                if isinstance(jev_sig, dict):
+                    if isinstance(jev_sig.get("unusual"), (int, float)):
+                        jev_unusual = float(jev_sig["unusual"])
+                    if isinstance(jev_sig.get("injection_driven"), (int, float)):
+                        jev_injection_driven = float(jev_sig["injection_driven"])
+                    if isinstance(jev_sig.get("receiver_risk"), (int, float)):
+                        jev_receiver_risk = float(jev_sig["receiver_risk"])
+                    if isinstance(jev_sig.get("label"), str):
+                        jev_label = jev_sig["label"]
+                if isinstance(policy_sig, dict):
+                    policy_violations = list(policy_sig.get("violations") or [])
+                counterparty_sig = signals.get("counterparty")
+                if isinstance(counterparty_sig, dict) and isinstance(counterparty_sig.get("lookalike_of"), str):
+                    lookalike_of = counterparty_sig["lookalike_of"]
                 classifier_called = signals.get("injection") is not None
 
             cascade_path: str | None = None
@@ -214,7 +244,6 @@ def evaluate_scenarios(
 
             checker_version = str(verdict.get("checker_version", checker_version))
             outcome = verdict["outcome"]
-            latencies_ms.append(elapsed_ms)
 
             cases.append(
                 {
@@ -228,6 +257,11 @@ def evaluate_scenarios(
                     "record_sha256": verdict["record_sha256"],
                     "policy_ok": policy_ok,
                     "jev_unusual": jev_unusual,
+                    "jev_injection_driven": jev_injection_driven,
+                    "jev_receiver_risk": jev_receiver_risk,
+                    "jev_label": jev_label,
+                    "policy_violations": policy_violations,
+                    "lookalike_of": lookalike_of,
                     "jev_called": jev_called,
                     "classifier_called": classifier_called,
                     "cascade_path": cascade_path,
@@ -235,6 +269,18 @@ def evaluate_scenarios(
                 }
             )
 
+    return _build_results(cases, configuration, scenario_set, checker_version, cascade_on, jev_failed)
+
+
+def _build_results(
+    cases: list[dict],
+    configuration: str,
+    scenario_set: str,
+    checker_version: str,
+    cascade_on: bool,
+    jev_failed: int,
+) -> dict:
+    """The results.json dict (summary, latency, row, by_family, caveats) for finished `cases`."""
     benign_cases = [c for c in cases if c["label"] == "benign"]
     attack_cases = [c for c in cases if c["label"] == "attack"]
 
@@ -276,7 +322,7 @@ def evaluate_scenarios(
             "false_blocks": 0 if is_attack else fam_block,
         }
 
-    sorted_lat = sorted(latencies_ms)
+    sorted_lat = sorted(c["latency_ms"] for c in cases)
     p50_ms = _percentile(sorted_lat, 0.50)
     p95_ms = _percentile(sorted_lat, 0.95)
     mean_ms = round(sum(sorted_lat) / len(sorted_lat), 3) if sorted_lat else 0.0
@@ -428,7 +474,7 @@ def _preset(
 #: Ordered presets for the full run. Each entry is (label, checker env overrides). The checker reads
 #: these from the environment, so they are set before each pass and restored afterwards. Presets
 #: remove ALWAYS_CLEARED_ENV unless they set it, so the checker's defaults apply.
-ALWAYS_CLEARED_ENV = ("FUSION_HOLD_THRESHOLD", "JEV_REFERENCE_EXAMPLES_JSON")
+ALWAYS_CLEARED_ENV = ("FUSION_HOLD_THRESHOLD", "FUSION_JEV_INJECTION_HOLD_THRESHOLD", "JEV_REFERENCE_EXAMPLES_JSON")
 EVAL_CONFIGURATIONS: list[tuple[str, dict[str, str]]] = [
     ("no_defense", _preset("code_rules", "false", "false", "false", "false")),
     ("policy_only", _preset("code_rules", "false", "true", "false", "false")),
@@ -475,6 +521,43 @@ def preset_env(name: str) -> dict[str, str]:
     return dict(EVAL_CONFIGURATIONS)[name]
 
 
+def _check_record_dir(record_dir: Path, n_presets: int) -> None:
+    """The checker refuses to overwrite a record with different bytes: one preset, an empty directory."""
+    if n_presets > 1:
+        raise SystemExit("--record-dir: more than one preset would write to it; use one preset")
+    if record_dir.exists() and (not record_dir.is_dir() or any(record_dir.iterdir())):
+        raise SystemExit(f"--record-dir: {record_dir} exists and is not empty")
+
+
+def _real_refuse(checker_bin: Path | str) -> Callable[[bytes], dict]:
+    """`checker --refuse` as a subprocess under the current environment."""
+
+    def refuse(record_bytes: bytes) -> dict:
+        proc = subprocess.run([str(checker_bin), "--refuse"], input=record_bytes, capture_output=True)
+        if proc.returncode != 0:
+            raise SystemExit(f"checker --refuse failed ({proc.returncode}): {proc.stderr.decode('utf-8', 'replace').strip()}")
+        return json.loads(proc.stdout)
+
+    return refuse
+
+
+def _refuse_results(
+    source: dict, label: str, scenario_set: str, record_dir: Path, refuse_fn: Callable[[bytes], dict]
+) -> dict:
+    """Re-fuse every case of `source` from `record_dir/<n>.json` under the current env; never writes."""
+    cases: list[dict] = []
+    for idx, src_case in enumerate(source["cases"], start=1):
+        rec_file = record_dir / f"{idx}.json"
+        if not rec_file.is_file():
+            raise SystemExit(f"--refuse-from: missing record file {rec_file}")
+        verdict = refuse_fn(rec_file.read_bytes())
+        cases.append({**src_case, "outcome": verdict["outcome"], "reasons": list(verdict["reasons"]), "refused": True})
+    jev_failed = sum(1 for c in source["cases"] if c["jev_called"] and "check_unavailable" in c["reasons"])
+    return _build_results(
+        cases, label, scenario_set, str(source.get("checker_version", "0.1.0")), False, jev_failed
+    )
+
+
 def run_all_configurations(
     settings: Settings,
     configurations: list[tuple[str, dict[str, str]]] | None = None,
@@ -483,6 +566,9 @@ def run_all_configurations(
     scenario_set: str = "main",
     calibration_file: Path | None = None,
     scenario_names: list[str] | None = None,
+    record_dir: Path | None = None,
+    refuse_from: Path | None = None,
+    refuse_fn: Callable[[bytes], dict] | None = None,
 ) -> dict:
     """Run the checker over all scenarios for each configuration preset.
 
@@ -497,17 +583,39 @@ def run_all_configurations(
         output_path: where to write the final results.json.
         scenario_set: a key of SCENARIO_SETS; its SCENARIO_SET_ENV is merged into every preset.
         calibration_file: optional results.json whose cases feed `q_hat` / `unseen_family_rotation`.
-        scenario_names: run only these scenarios; defaults to the whole set.
+        scenario_names: run only these scenarios; defaults to the whole set (with `refuse_from`: the
+            source file's cases, in order).
+        record_dir: persist DecisionRecords as `<record_dir>/<n>.json` (one preset, empty or absent
+            directory); with `refuse_from` it is only read.
+        refuse_from: results.json of a recorded Jev run: its Jev rows are re-fused from `record_dir`
+            (via `checker --refuse`, or `refuse_fn(record_bytes) -> {"outcome", "reasons"}`) instead of run.
 
     Returns:
         The combined results dict.
     """
     cfgs = configurations or EVAL_CONFIGURATIONS
+    refusing = refuse_from is not None
+    names = scenario_names
+    source: dict = {}
+    if refusing:
+        source = json.loads(refuse_from.read_text(encoding="utf-8"))
+        if source.get("scenario_set") != scenario_set:
+            raise SystemExit(
+                f"--refuse-from: scenario_set of {refuse_from.name} is {source.get('scenario_set')!r}, "
+                f"--scenario-set is {scenario_set!r}"
+            )
+        names = [c["name"] for c in source["cases"]]
+    elif record_dir is not None:
+        _check_record_dir(record_dir, len(cfgs))
     all_config_rows: list[dict] = []
     last_result: dict = {}
+    skipped_cascade = False
 
     for label, preset_overrides in cfgs:
         env_overrides = {**preset_overrides, **SCENARIO_SET_ENV.get(scenario_set, {})}
+        if refusing and env_overrides.get("FUSION_MODE") == "jev" and env_overrides.get("CASCADE_ENABLED") == "true":
+            skipped_cascade = True
+            continue
         # ALWAYS_CLEARED_ENV is removed unless the preset sets it, so an exported value cannot leak
         # into a preset that means "default". A set that supplies AGENT_PROFILE_PATH also removes
         # AGENT_PROFILE_JSON, which the checker prefers over the path.
@@ -523,13 +631,19 @@ def run_all_configurations(
                 os.environ.pop(k, None)
 
         try:
-            result = evaluate_scenarios(
-                settings,
-                scenario_names=scenario_names,
-                configuration=label,
-                checker_fn=checker_fn,
-                scenario_set=scenario_set,
-            )
+            if refusing and env_overrides.get("FUSION_MODE") == "jev":
+                result = _refuse_results(
+                    source, label, scenario_set, record_dir, refuse_fn or _real_refuse(settings.checker_bin)
+                )
+            else:
+                result = evaluate_scenarios(
+                    settings,
+                    scenario_names=names,
+                    configuration=label,
+                    checker_fn=checker_fn,
+                    scenario_set=scenario_set,
+                    record_dir=None if refusing else record_dir,
+                )
             # Collect the configuration summary row.
             if result["configurations"]:
                 all_config_rows.append(result["configurations"][0])
@@ -548,6 +662,10 @@ def run_all_configurations(
     # Combine: last run's top-level metadata + all configuration rows.
     combined = dict(last_result)
     combined["configurations"] = all_config_rows
+    if skipped_cascade:
+        combined["caveats"] = [*combined["caveats"], CASCADE_NOT_REFUSED_CAVEAT]
+    if refuse_from is not None:
+        combined["refused_from"] = refuse_from.name
     if calibration_file is not None:
         apply_calibration(combined, calibration_file)
     write_results(combined, output_path)
@@ -600,9 +718,30 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="run one configuration preset (sets its checker env vars)",
     )
+    ap.add_argument(
+        "--record-dir",
+        type=Path,
+        default=None,
+        help="persist the DecisionRecords as DIR/<n>.json (must be empty or absent; one preset only)",
+    )
+    ap.add_argument(
+        "--refuse-from",
+        type=Path,
+        default=None,
+        metavar="RESULTS.json",
+        help="re-fuse the Jev rows of RESULTS.json from the records in --record-dir (read-only), no Jev calls",
+    )
     args = ap.parse_args(argv)
 
     s = Settings.load()
+
+    if args.refuse_from is not None:
+        if args.record_dir is None:
+            raise SystemExit("--refuse-from requires --record-dir")
+        if not (args.all_configurations or args.preset):
+            raise SystemExit("--refuse-from requires --preset or --all-configurations")
+        if args.scenarios:
+            raise SystemExit("--refuse-from cannot be combined with --scenario: the source file defines the scenarios")
 
     if args.all_configurations or args.preset:
         combined = run_all_configurations(
@@ -612,6 +751,8 @@ def main(argv: list[str] | None = None) -> int:
             scenario_set=args.scenario_set,
             calibration_file=args.calibration,
             scenario_names=args.scenarios,
+            record_dir=args.record_dir,
+            refuse_from=args.refuse_from,
         )
         if not combined:
             print("ERROR: no results produced", file=sys.stderr)
@@ -636,11 +777,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"results_file: {shown.as_posix()}")
         return 0
 
+    if args.record_dir is not None:
+        _check_record_dir(args.record_dir, 1)
     results = evaluate_scenarios(
         s,
         scenario_names=args.scenarios,
         configuration=args.configuration,
         scenario_set=args.scenario_set,
+        record_dir=args.record_dir,
     )
     if args.calibration is not None:
         apply_calibration(results, args.calibration)

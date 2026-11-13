@@ -233,3 +233,35 @@ def test_main_rotation_flag(tmp_path, capsys):
     out = capsys.readouterr().out
     parsed = json.loads(out)
     assert set(parsed["by_family"].keys()) == set(ATTACK_FAMILIES)
+
+
+# ---------------------------------------------------------------------------
+# Second score: injection_driven
+# ---------------------------------------------------------------------------
+
+
+def test_calibrate_injection_driven_reads_case_key():
+    cases = [
+        {"label": "benign", "jev_unusual": 0.9, "jev_injection_driven": 0.1 * i} for i in range(1, 6)
+    ]
+    result = calibrate(cases, record_dir=None, epsilon=0.05, score="injection_driven")
+    assert result["n"] == 5
+    assert result["q_hat"] == pytest.approx(0.5)
+    assert calibrate(cases, record_dir=None, epsilon=0.05)["q_hat"] == pytest.approx(0.9)
+
+
+def test_calibrate_injection_driven_falls_back_to_record(tmp_path):
+    import json
+
+    (tmp_path / "1.json").write_text(
+        json.dumps({"signals": {"jev": {"unusual": 0.2, "injection_driven": 0.65}}}), encoding="utf-8"
+    )
+    cases = [{"label": "benign"}]
+    result = calibrate(cases, record_dir=tmp_path, epsilon=0.05, score="injection_driven")
+    assert result["n"] == 1
+    assert result["q_hat"] == pytest.approx(0.65)
+
+
+def test_invalid_score_raises_value_error():
+    with pytest.raises(ValueError):
+        calibrate([{"label": "benign", "jev_unusual": 0.1}], record_dir=None, score="receiver_risk")
