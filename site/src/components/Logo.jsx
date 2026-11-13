@@ -1,14 +1,14 @@
-// Pixel shield mark from the branding artifact.
-const ROWS = ["0111110", "1111111", "1111101", "1011011", "1100111", "0111110", "0011100", "0001000"];
+// Eclipse morse-halftone mark; same artwork as public/logo.svg (no wordmark).
+const MARK = '<g transform="translate(99.8,70.0)"><g fill="#EDB1E8"><circle cx="72.7" cy="8" r="3.80"/><circle cx="91.1" cy="8" r="3.75"/><rect x="38.8" y="13.50" width="12.6" height="7.00" rx="3.50"/><circle cx="58.9" cy="17" r="3.80"/><circle cx="68.1" cy="17" r="3.80"/><circle cx="86.5" cy="17" r="2.83"/><circle cx="95.7" cy="17" r="2.49"/><circle cx="114.1" cy="17" r="2.44"/><circle cx="35.9" cy="26" r="3.80"/><circle cx="54.3" cy="26" r="3.80"/><rect x="62.1" y="23.16" width="12.1" height="5.67" rx="2.84"/><rect x="81.0" y="24.52" width="11.0" height="2.95" rx="1.48"/><circle cx="100.3" cy="26" r="1.25"/><circle cx="118.7" cy="26" r="1.45"/><circle cx="127.9" cy="26" r="1.92"/><rect x="20.4" y="31.50" width="12.6" height="7.00" rx="3.50"/><circle cx="40.5" cy="35" r="3.80"/><circle cx="58.9" cy="35" r="3.30"/><circle cx="68.1" cy="35" r="2.35"/><circle cx="77.3" cy="35" r="1.49"/><circle cx="17.5" cy="44" r="3.80"/><circle cx="35.9" cy="44" r="3.80"/><circle cx="63.5" cy="44" r="2.21"/><rect x="20.4" y="49.50" width="12.6" height="7.00" rx="3.50"/><circle cx="40.5" cy="53" r="3.80"/><rect x="48.4" y="50.39" width="11.9" height="5.21" rx="2.61"/><circle cx="68.1" cy="53" r="1.21"/><circle cx="141.7" cy="53" r="0.94"/><circle cx="8.3" cy="62" r="3.80"/><circle cx="26.7" cy="62" r="3.80"/><rect x="34.2" y="58.50" width="12.6" height="7.00" rx="3.50"/><circle cx="54.3" cy="62" r="2.72"/><circle cx="63.5" cy="62" r="1.54"/><circle cx="22.1" cy="71" r="3.80"/><circle cx="31.3" cy="71" r="3.80"/><circle cx="49.7" cy="71" r="3.32"/><rect x="58.1" y="69.74" width="10.8" height="2.51" rx="1.26"/><circle cx="150.9" cy="71" r="1.86"/><rect x="15.8" y="76.50" width="12.6" height="7.00" rx="3.50"/><circle cx="35.9" cy="80" r="3.80"/><circle cx="54.3" cy="80" r="2.94"/><circle cx="63.5" cy="80" r="1.81"/><rect x="136.5" y="79.31" width="10.4" height="1.37" rx="0.69"/><circle cx="12.9" cy="89" r="3.80"/><circle cx="31.3" cy="89" r="3.80"/><circle cx="58.9" cy="89" r="2.79"/><circle cx="141.7" cy="89" r="1.51"/><rect x="15.8" y="94.50" width="12.6" height="7.00" rx="3.50"/><circle cx="35.9" cy="98" r="3.80"/><rect x="43.4" y="94.50" width="12.6" height="7.00" rx="3.50"/><circle cx="63.5" cy="98" r="2.89"/><circle cx="81.9" cy="98" r="1.21"/><circle cx="137.1" cy="98" r="1.79"/><circle cx="146.3" cy="98" r="2.67"/><circle cx="22.1" cy="107" r="3.80"/><rect x="29.6" y="103.50" width="12.6" height="7.00" rx="3.50"/><circle cx="49.7" cy="107" r="3.80"/><circle cx="58.9" cy="107" r="3.80"/><circle cx="77.3" cy="107" r="2.49"/><circle cx="86.5" cy="107" r="1.89"/><circle cx="104.9" cy="107" r="1.33"/><rect x="113.3" y="105.73" width="10.8" height="2.55" rx="1.27"/><rect x="131.2" y="104.63" width="11.7" height="4.74" rx="2.37"/><circle cx="17.5" cy="116" r="3.80"/><circle cx="26.7" cy="116" r="3.80"/><circle cx="45.1" cy="116" r="3.80"/><rect x="52.6" y="112.50" width="12.6" height="7.00" rx="3.50"/><rect x="71.1" y="112.84" width="12.3" height="6.33" rx="3.16"/><circle cx="91.1" cy="116" r="2.76"/><circle cx="109.5" cy="116" r="2.50"/><circle cx="118.7" cy="116" r="2.69"/><circle cx="127.9" cy="116" r="3.07"/><circle cx="31.3" cy="125" r="3.80"/><circle cx="49.7" cy="125" r="3.80"/><circle cx="58.9" cy="125" r="3.80"/><circle cx="68.1" cy="125" r="3.80"/><circle cx="86.5" cy="125" r="3.80"/><circle cx="114.1" cy="125" r="3.71"/><rect x="130.8" y="121.50" width="12.6" height="7.00" rx="3.50"/><circle cx="54.3" cy="134" r="3.80"/><rect x="71.0" y="130.50" width="12.6" height="7.00" rx="3.50"/><circle cx="91.1" cy="134" r="3.80"/><rect x="98.6" y="130.50" width="12.6" height="7.00" rx="3.50"/><circle cx="118.7" cy="134" r="3.80"/><rect x="38.8" y="139.50" width="12.6" height="7.00" rx="3.50"/><circle cx="58.9" cy="143" r="3.80"/><circle cx="77.3" cy="143" r="3.80"/><rect x="84.8" y="139.50" width="12.6" height="7.00" rx="3.50"/><circle cx="104.9" cy="143" r="3.80"/><circle cx="114.1" cy="143" r="3.80"/><circle cx="72.7" cy="152" r="3.80"/><circle cx="81.9" cy="152" r="3.80"/></g></g>';
 
-export function Logo({ size = 26, color = "#EDB1E8" }) {
+export function Logo({ size = 26 }) {
   return (
-    <svg width={size} height={(size * 8) / 7} viewBox="0 0 28 32" aria-hidden="true">
-      {ROWS.flatMap((row, r) =>
-        row.split("").map((v, c) =>
-          v === "1" ? <rect key={`${r}-${c}`} x={c * 4} y={r * 4} width="3.4" height="3.4" fill={color} /> : null,
-        ),
-      )}
-    </svg>
+    <svg
+      width={size}
+      height={size}
+      viewBox="97.8 68 164 164"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: MARK }}
+    />
   );
 }

@@ -65,8 +65,13 @@ npx wrangler pages deploy dist --project-name eclipse --branch main
 
 The first run asks for a Cloudflare login and creates the project. Any static host works: `dist/` uses relative paths.
 
+## Search and AI crawlers (SEO / GEO)
+
+`npm run build` runs `scripts/prerender.mjs` after Vite: it renders the page into `dist/index.html` (so crawlers and AI answer engines that do not run JavaScript read the full content; `src/main.jsx` hydrates it), adds JSON-LD (`WebSite`, `SoftwareApplication`, `FAQPage`), and writes `sitemap.xml`, `robots.txt` and `llms.txt` from `src/config.js` (`SITE_URL`), `src/faq.js` and `docs/results/results.json`. The canonical and Open Graph tags in `index.html` use the same URL (checked by `src/seo.test.js`). `public/404.html` makes unknown paths return 404 on Cloudflare Pages instead of the home page. `public/og.png` is the 1200×630 social preview, made from `scripts/og-card.html`. If the site URL changes, update `SITE_URL` and the URLs in `index.html`.
+
 ## Where things live
 
+- `src/faq.js`: the FAQ section and its FAQPage structured data (one list).
 - `src/config.js`: project name, status note, Guardian id, RPC URL, explorer, caps, repo URL. Edit here first.
 - `src/App.jsx`: all sections, in page order.
 - `src/components/ResultsSection.jsx` and `src/results.js`: results table, chart and per-family list from `docs/results/`; `src/results.test.js` checks the format guard on the C1 example and the real numbers against the README.

@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatAmount, STATUSES } from '../near.js';
 import { reasonLabel, statusLabels as labels, statusTones } from '../receipt.js';
 import { ExternalLink, ReceiptDetail } from './ReceiptDetail.jsx';
+import { Ban, Check, Hourglass, ListChecks } from 'lucide-react';
+
+const FILTER_ICONS = { all: ListChecks, paid: Check, held: Hourglass, refused: Ban };
 
 export function ReceiptsPanel({ reader }) {
   const [snapshot, setSnapshot] = useState(null);
@@ -82,7 +85,7 @@ export function ReceiptsPanel({ reader }) {
   const refresh = () => setRequest((previous) => ({ ...previous, revision: previous.revision + 1 }));
 
   return <section className="receipts-panel" aria-labelledby="payment-receipts-title">
-      <div className="panel-heading"><h3 id="payment-receipts-title">Payment receipts</h3>
+      <div className="panel-heading"><span className="win-dots" aria-hidden="true"><i /><i /><i /></span><h3 id="payment-receipts-title">Payment receipts</h3>
         <div className="refresh-controls"><label className="auto-refresh"><input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.target.checked)} /> Auto-refresh · 30s</label>
           <button className="refresh-button" onClick={refresh} disabled={busy}><span aria-hidden="true" className={busy ? 'spin' : ''}>↻</span> {busy ? 'Reading…' : 'Refresh'}</button></div></div>
 
@@ -95,7 +98,7 @@ export function ReceiptsPanel({ reader }) {
       </div>
 
       <div className="toolbar"><div className="filters" role="group" aria-label="Filter receipt status">
-        {['all', 'paid', 'held', 'refused'].map((status) => <button key={status} aria-pressed={filter === status} className={filter === status ? 'selected' : ''} onClick={() => setFilter(status)}>{status === 'all' ? 'All receipts' : labels[status]}</button>)}
+        {['all', 'paid', 'held', 'refused'].map((status) => { const Icon = FILTER_ICONS[status]; return <button key={status} aria-pressed={filter === status} className={filter === status ? 'selected' : ''} onClick={() => setFilter(status)}><Icon size={15} aria-hidden="true" />{status === 'all' ? 'All receipts' : labels[status]}</button>; })}
         <label className="sr-only" htmlFor="other-status">Other receipt status</label>
         <select id="other-status" value={['timed_out', 'transfer_failed', 'paying'].includes(filter) ? filter : ''} onChange={(event) => setFilter(event.target.value || 'all')}>
           <option value="">Other statuses</option>{['timed_out', 'transfer_failed', 'paying'].map((status) => <option key={status} value={status}>{labels[status]}</option>)}
