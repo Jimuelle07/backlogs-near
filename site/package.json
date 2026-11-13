@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "test": "node --test src/*.test.js",
-    "build": "vite build",
+    "build": "vite build && node scripts/prerender.mjs",
     "build:single": "vite build --mode single",
     "preview": "vite preview"
   },

@@ -4,6 +4,9 @@
 export const PROJECT_NAME = "Eclipse";
 export const PROJECT_TAGLINE = "Steps in front of the bad payment, stays in the background otherwise.";
 
+// Public site URL (Cloudflare Pages, D1). Canonical, Open Graph, sitemap and JSON-LD use it.
+export const SITE_URL = "https://eclipse-20v.pages.dev/";
+
 // Shown under the hero. Keep it true: update as checks land (sprints.md).
 export const STATUS_NOTE =
   "Hackathon build on NEAR testnet. The checker decides with Jev fusion; the first testnet receipts predate it and show stub_allow. The masked re-run is not built.";
