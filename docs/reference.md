@@ -1,6 +1,6 @@
 # Reference
 
-Moved from the README on 2026-11-13: evaluation and benchmark steps 7–12, configuration switches, and local run instructions. Steps 1–6 stay in [README Try it](../README.md#try-it).
+Moved from the README on 2026-11-13: evaluation and benchmark steps 7–12, configuration switches, and local run instructions. Steps 1–6: [try-it.md](try-it.md) (short form: [README Quick start](../README.md#quick-start)).
 
 ## Evaluation and benchmarks
 
@@ -52,7 +52,7 @@ cargo build -p checker --target wasm32-wasip2 --release
 cd agent && uv sync && uv run pytest
 ```
 
-Contract wasm files: `target/near/guardian/guardian.wasm` and `target/near/tusdc/tusdc.wasm`. `--no-abi` skips ABI generation, which fails to link on Windows MSVC. The dry-run needs no keys, but without `TYPESAFE_API_KEY` every payment is held (step 3 of Try it in the [README](../README.md#try-it)).
+Contract wasm files: `target/near/guardian/guardian.wasm` and `target/near/tusdc/tusdc.wasm`. `--no-abi` skips ABI generation, which fails to link on Windows MSVC. The dry-run needs no keys, but without `TYPESAFE_API_KEY` every payment is held (step 3 in [try-it.md](try-it.md#offline-no-keys)).
 
 ### Testnet
 

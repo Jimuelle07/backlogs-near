@@ -2,20 +2,37 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, Line } from "@react-three/drei";
 import * as THREE from "three";
-import { Bot, Cpu, Landmark } from "lucide-react";
+import { Ban, Bot, Check, Cpu, Hourglass, Landmark, Store } from "lucide-react";
 import { prefersReducedMotion } from "../motion.js";
+import { ROWS } from "./Console.jsx";
 
-// The project's name as a picture: "steps in front of the bad payment, stays in the background
-// otherwise". Two dotted globes with lat/long grids: the checker (lilac sun) and the Guardian (dim
-// moon). A stream of payments from the agent crosses the sun. As you scroll, the Guardian slides in
-// front; at totality the corona flares and bad payments (pink) hit it and scatter.
+// The three steps beside it, acted out on the hero console's sample payments, one at a time:
+// 1 the agent asks: the payment travels from the agent to the Guardian (the globe: it holds the funds);
+// 2 the checker decides: the Guardian pauses it and a signal goes up to the checker and back;
+// 3 only the contract pays: allow goes on to the payee; hold circles the Guardian in escrow;
+//   block: the corona flares (the Guardian "steps in front") and the payment bounces back unpaid.
+// onStep(i) reports the phase so the matching step card lights up.
 // Loaded lazily (React.lazy) so three.js never blocks the first paint or the prerender.
 
-const SUN_R = 1.25;
-const MOON_R = 1.28;
-const MOON_X = 2.3;
-const COUNT = 80;
-const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const R = 1.0; // Guardian globe
+const AGENT_X = -2.55;
+const PAYEE_X = 2.55;
+const CHECK_Y = 1.9;
+const Z = 1.2; // how far the payment rises in front of the globe while it crosses it
+const HOLD_R = 1.42;
+const ASK = 1.3, DECIDE = 1.4, OUT = 1.9, REST = 0.5;
+const CYCLE = ASK + DECIDE + OUT + REST;
+// dns-renew (allow), hostc0 (block), hostco (allow), supplier (hold).
+const ORDER = [3, 0, 1, 2].map((i) => ROWS[i]);
+const VERDICT = { allow: "ALLOW · paid", hold: "HOLD · in escrow", block: "BLOCK · not paid" };
+const COLOR = { ask: new THREE.Color("#EEEAF5"), allow: new THREE.Color("#EDB1E8"), hold: new THREE.Color("#EEEAF5"), block: new THREE.Color("#FF8FB0") };
+const LILAC = new THREE.Color("#F2C2EE");
+
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const ease = (x) => { const t = clamp01(x); return t * t * (3 - 2 * t); };
+const easeOut = (x) => 1 - Math.pow(1 - clamp01(x), 3);
+// The payment path runs at z = 0, through the Guardian; the dot lifts in front of the globe to cross it.
+const lift = (x) => Z * (1 - ease((Math.abs(x) - R * 0.6) / (R * 0.65)));
 
 // Fibonacci points kept where an abstract sine "land" mask is high (not a real map).
 function landPoints(r, count, seed = 0) {
@@ -48,17 +65,19 @@ function gridLines(r) {
   return lines;
 }
 
-// Corona: dots in a flat ring around the sun, denser near the limb.
+// Corona: dots in a flat ring around the globe, denser near the limb.
 function coronaPoints(count) {
   const out = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2;
-    const streamer = Math.pow(Math.abs(Math.sin(a * 3)), 6) * 0.8;
-    const d = SUN_R * 1.06 + Math.pow(Math.random(), 2.4) * (0.7 + streamer);
+    const streamer = Math.pow(Math.abs(Math.sin(a * 3)), 6) * 0.6;
+    const d = R * 1.06 + Math.pow(Math.random(), 2.4) * (0.55 + streamer);
     out[i * 3] = Math.cos(a) * d; out[i * 3 + 1] = Math.sin(a) * d; out[i * 3 + 2] = -0.2;
   }
   return out;
 }
+
+const circle = (r, z = 0) => Array.from({ length: 73 }, (_, i) => new THREE.Vector3(Math.cos(i * Math.PI / 36) * r, Math.sin(i * Math.PI / 36) * r, z));
 
 // A globe in the site's style: dark core, lat/long grid, dotted land.
 function DottedGlobe({ r, dots, dotColor, dotSize, gridColor, gridOpacity, core }) {
@@ -75,54 +94,10 @@ function DottedGlobe({ r, dots, dotColor, dotSize, gridColor, gridOpacity, core 
   );
 }
 
-// Payments from the agent crossing the sun; bad ones (pink) bounce off the Guardian at totality.
-function Particles({ occ }) {
-  const ref = useRef();
-  const state = useMemo(() => {
-    const pos = new Float32Array(COUNT * 3);
-    const col = new Float32Array(COUNT * 3);
-    const good = new THREE.Color("#EDB1E8"), bad = new THREE.Color("#FF8FB0");
-    const p = [];
-    for (let i = 0; i < COUNT; i++) {
-      const isBad = i % 4 === 0;
-      p.push({ x: -5.5 + Math.random() * 11, y: (Math.random() - 0.5) * 1.6, vx: 0.5 + Math.random() * 0.5, vy: 0, bad: isBad, hit: 0 });
-      (isBad ? bad : good).toArray(col, i * 3);
-    }
-    return { pos, col, p };
-  }, []);
-  useFrame((_, dtRaw) => {
-    const dt = Math.min(dtRaw, 0.05);
-    const o = occ.current;
-    state.p.forEach((q, i) => {
-      if (q.hit > 0) {
-        q.x += q.vx * dt; q.y += q.vy * dt; q.hit -= dt;
-        if (q.hit <= 0) { q.x = -5.6; q.y = (Math.random() - 0.5) * 1.6; q.vx = 0.5 + Math.random() * 0.5; q.vy = 0; }
-      } else {
-        q.x += q.vx * dt;
-        if (q.bad && o > 0.7 && q.x > -MOON_R - 0.05 && q.x < 0 && Math.abs(q.y) < MOON_R) {
-          q.hit = 0.9; q.vx = -0.6 - Math.random() * 0.8; q.vy = (Math.random() - 0.5) * 2.4;
-        }
-        if (q.x > 5.6) { q.x = -5.6; q.y = (Math.random() - 0.5) * 1.6; }
-      }
-      state.pos[i * 3] = q.x; state.pos[i * 3 + 1] = q.y; state.pos[i * 3 + 2] = 1.6;
-    });
-    ref.current.geometry.attributes.position.needsUpdate = true;
-  });
-  return (
-    <points ref={ref}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[state.pos, 3]} />
-        <bufferAttribute attach="attributes-color" args={[state.col, 3]} />
-      </bufferGeometry>
-      <pointsMaterial size={0.07} vertexColors transparent sizeAttenuation depthWrite={false} />
-    </points>
-  );
-}
-
-function Node({ position, Icon, label, filled }) {
+function Node({ position, Icon, label, filled, nodeRef }) {
   return (
     <Html position={position} center zIndexRange={[3, 0]}>
-      <span className={`pnode${filled ? " filled" : ""}`}>
+      <span ref={nodeRef} className={`pnode${filled ? " filled" : ""}`}>
         <Icon size={filled ? 20 : 17} strokeWidth={1.6} aria-hidden="true" />
         <em>{label}</em>
       </span>
@@ -130,68 +105,166 @@ function Node({ position, Icon, label, filled }) {
   );
 }
 
-function Scene({ progress, pointer, reduce }) {
-  // On wide canvases the eclipse sits left of centre so the overlay text has room on the right.
-  const { viewport, camera } = useThree();
-  // The Agent node sits nearer the camera (z 1.6), where the visible width is smaller than at z 0;
-  // clamp it against that width so its ring and label never cross the canvas edge.
-  const agentHalfW = viewport.getCurrentViewport(camera, [0, 0, 1.6]).width / 2;
-  const offsetX = viewport.aspect > 1.3 ? -viewport.width * 0.22 : 0;
-  const group = useRef();
-  const sun = useRef();
-  const moon = useRef();
-  const corona = useRef();
-  const occ = useRef(0);
-  const sunDots = useMemo(() => landPoints(SUN_R, 7000, 0), []);
-  const moonDots = useMemo(() => landPoints(MOON_R, 6000, 1.7), []);
-  const coronaDots = useMemo(() => coronaPoints(2600), []);
+// One payment at a time: position, colour and labels follow the timeline above.
+function Payment({ corona, checker, payee, onStep }) {
+  const time = useRef(0);
+  const last = useRef({ k: -1, step: -1, verdict: null, paid: false });
+  const dot = useRef();
+  const pulse = useRef();
+  const ring = useRef();
+  const label = useRef();
+  const amount = useRef();
+  const payeeName = useRef();
+  const verdict = useRef();
+  const why = useRef();
+  const ringPts = useMemo(() => circle(HOLD_R), []);
 
-  useFrame(({ clock }) => {
-    // Scroll progress through the section → how far the Guardian has moved in front.
-    occ.current += (smooth(0.18, 0.5, progress.current ?? 0) - occ.current) * (reduce ? 1 : 0.08);
-    const o = occ.current;
-    const t = reduce ? 0 : clock.elapsedTime;
-    if (sun.current) sun.current.rotation.y = 0.6 + t * 0.08;
-    if (moon.current) { moon.current.position.x = (1 - o) * MOON_X; moon.current.rotation.y = -t * 0.06; }
-    if (corona.current) {
-      corona.current.material.opacity = 0.2 + o * 0.8;
-      corona.current.scale.setScalar(0.92 + o * 0.16 + Math.sin(t * 1.4) * 0.012);
-      corona.current.rotation.z = t * 0.03;
+  useFrame((_, dt) => {
+    time.current += Math.min(dt, 0.05);
+    const k = Math.floor(time.current / CYCLE);
+    const t = time.current - k * CYCLE;
+    const [kind, to, amt, reason] = ORDER[k % ORDER.length];
+    const l = last.current;
+    if (l.k !== k) {
+      l.k = k;
+      amount.current.textContent = `${amt.toFixed(2)} tUSDC`;
+      payeeName.current.textContent = to;
+      why.current.textContent = reason;
     }
-    const g = group.current;
-    if (g) {
-      // Follows the cursor: the whole eclipse turns toward it and drifts a little after it.
-      const px = reduce ? 0 : pointer.current.x, py = reduce ? 0 : pointer.current.y;
-      g.rotation.y += (px * 0.7 - g.rotation.y) * 0.06;
-      g.rotation.x += (0.1 + py * 0.45 - g.rotation.x) * 0.06;
-      g.position.x += (offsetX + px * 0.35 - g.position.x) * 0.06;
-      g.position.y += (-py * 0.25 - g.position.y) * 0.06;
+
+    const step = t < ASK ? 0 : t < ASK + DECIDE ? 1 : 2;
+    if (step !== l.step) { l.step = step; onStep?.(step); checker.current?.classList.toggle("on", step === 1); }
+    const shown = t >= ASK + DECIDE * 0.8 ? kind : "";
+    if (shown !== l.verdict) { l.verdict = shown; verdict.current.dataset.v = shown; }
+    const paid = kind === "allow" && t > ASK + DECIDE + OUT * 0.6;
+    if (paid !== l.paid) { l.paid = paid; payee.current?.classList.toggle("on", paid); }
+
+    let x = 0, y = 0, z = null, alpha = 1, color = COLOR.ask, flare = 0, ringOn = 0;
+    const p = dot.current.position;
+    if (step === 0) {
+      x = THREE.MathUtils.lerp(AGENT_X + 0.4, 0, ease(t / ASK));
+      alpha = clamp01(t / 0.25);
+    } else if (step === 1) {
+      const v = (t - ASK) / DECIDE;
+      dot.current.scale.setScalar(1 + Math.sin(v * Math.PI * 4) * 0.18);
+      const up = v < 0.5 ? ease(v * 2) : 1 - ease((v - 0.5) * 2);
+      pulse.current.position.set(0, THREE.MathUtils.lerp(R + 0.05, CHECK_Y - 0.32, up), 0.3);
+      pulse.current.material.opacity = Math.sin(clamp01(v) * Math.PI);
+      color = v > 0.8 ? COLOR[kind] : COLOR.ask;
+    } else {
+      const u = (t - ASK - DECIDE) / OUT;
+      color = COLOR[kind];
+      if (kind === "allow") {
+        x = THREE.MathUtils.lerp(0, PAYEE_X - 0.4, ease(u / 0.7));
+        alpha = 1 - clamp01((u - 0.75) / 0.25);
+      } else if (kind === "block") {
+        flare = Math.sin(clamp01(u / 0.8) * Math.PI);
+        x = THREE.MathUtils.lerp(0, -1.7, easeOut(u));
+        y = Math.sin(easeOut(u) * Math.PI) * 0.45;
+        alpha = 1 - clamp01((u - 0.4) / 0.6);
+      } else {
+        // Hold: out to the escrow ring, then circle the Guardian.
+        ringOn = clamp01(u / 0.2);
+        const a = -Math.PI / 2 - easeOut(u) * Math.PI * 1.6;
+        const m = ease(u / 0.25);
+        x = THREE.MathUtils.lerp(0, Math.cos(a) * HOLD_R, m);
+        y = THREE.MathUtils.lerp(0, Math.sin(a) * HOLD_R, m);
+        z = THREE.MathUtils.lerp(Z, 0, m);
+        alpha = 1 - clamp01((u - 0.85) / 0.15);
+      }
+      if (t > ASK + DECIDE + OUT) alpha = 0;
+    }
+    if (step !== 1) { dot.current.scale.setScalar(1); pulse.current.material.opacity = 0; }
+    p.set(x, y, z ?? lift(x));
+    dot.current.material.color.copy(color);
+    dot.current.material.opacity = alpha;
+    label.current.style.opacity = alpha;
+    ring.current.material.opacity = ringOn * 0.7 * (kind === "hold" && step === 2 ? 1 : 0);
+
+    const c = corona.current;
+    if (c) {
+      c.material.opacity = 0.22 + flare * 0.78;
+      c.material.color.copy(LILAC).lerp(COLOR.block, flare);
+      c.scale.setScalar(1 + flare * 0.18);
     }
   });
 
   return (
-    <group ref={group} position={[offsetX, 0, 0]}>
+    <>
+      <mesh ref={dot} position={[AGENT_X + 0.4, 0, 0]}>
+        <sphereGeometry args={[0.075, 20, 20]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        <Html position={[0, 0.3, 0]} center zIndexRange={[4, 0]}>
+          <span ref={label} className="gpay" style={{ opacity: 0 }}><b ref={amount} /> → <i ref={payeeName} /></span>
+        </Html>
+      </mesh>
+      <mesh ref={pulse}>
+        <sphereGeometry args={[0.05, 12, 12]} />
+        <meshBasicMaterial color="#EDB1E8" transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <Line ref={ring} points={ringPts} color="#EEEAF5" lineWidth={1} dashed dashSize={0.06} gapSize={0.06} transparent opacity={0} />
+      <Html position={[0, CHECK_Y, 0.3]} zIndexRange={[4, 0]}>
+        <div ref={verdict} className="gverdict" data-v="">
+          <span className="vchip allow"><Check size={12} aria-hidden="true" />{VERDICT.allow}</span>
+          <span className="vchip hold"><Hourglass size={12} aria-hidden="true" />{VERDICT.hold}</span>
+          <span className="vchip block"><Ban size={12} aria-hidden="true" />{VERDICT.block}</span>
+          <em ref={why} />
+        </div>
+      </Html>
+    </>
+  );
+}
+
+function Scene({ pointer, reduce, onStep }) {
+  // On wide canvases the scene sits in the left half, beside the step cards; it scales to fit.
+  const { viewport } = useThree();
+  const wide = viewport.aspect > 1.3;
+  const scale = Math.min(1, (wide ? viewport.width * 0.5 : viewport.width * 0.94) / 6.4, viewport.height / 4.9);
+  const offsetX = wide ? -viewport.width * 0.215 : 0;
+  const group = useRef();
+  const globe = useRef();
+  const corona = useRef();
+  const checker = useRef();
+  const payee = useRef();
+  const dots = useMemo(() => landPoints(R, 5200, 0), []);
+  const coronaDots = useMemo(() => coronaPoints(2200), []);
+  const path = useMemo(() => [new THREE.Vector3(AGENT_X + 0.4, 0, 0), new THREE.Vector3(PAYEE_X - 0.4, 0, 0)], []);
+  const link = useMemo(() => [new THREE.Vector3(0, R + 0.05, 0.3), new THREE.Vector3(0, CHECK_Y - 0.32, 0.3)], []);
+
+  useFrame(({ clock }) => {
+    const t = reduce ? 0 : clock.elapsedTime;
+    if (globe.current) globe.current.rotation.y = 0.6 + t * 0.08;
+    if (corona.current) corona.current.rotation.z = t * 0.03;
+    const g = group.current;
+    if (g) {
+      // Turns toward the cursor (mouse anywhere over the stage, see the listener below).
+      const px = reduce ? 0 : pointer.current.x, py = reduce ? 0 : pointer.current.y;
+      g.rotation.y += (px * 0.15 - g.rotation.y) * 0.05;
+      g.rotation.x += (py * 0.1 - g.rotation.x) * 0.05;
+    }
+  });
+
+  return (
+    <group ref={group} position={[offsetX, -0.15 * scale, 0]} scale={scale}>
       <points ref={corona}>
         <bufferGeometry><bufferAttribute attach="attributes-position" args={[coronaDots, 3]} /></bufferGeometry>
-        <pointsMaterial color="#F2C2EE" size={0.026} sizeAttenuation transparent opacity={0.2} depthWrite={false} blending={THREE.AdditiveBlending} />
+        <pointsMaterial color="#F2C2EE" size={0.024} sizeAttenuation transparent opacity={0.22} depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
-      {/* The sun: the checker */}
-      <group ref={sun}>
-        <DottedGlobe r={SUN_R} dots={sunDots} dotColor="#E39BDE" dotSize={0.032} gridColor="#C77DC6" gridOpacity={0.35} core="#1b1022" />
+      <group ref={globe}>
+        <DottedGlobe r={R} dots={dots} dotColor="#C892CF" dotSize={0.028} gridColor="#4A3F63" gridOpacity={0.6} core="#120e18" />
       </group>
-      {/* The moon: the Guardian, sliding in front */}
-      <group ref={moon} position={[MOON_X, 0, 0.9]}>
-        <DottedGlobe r={MOON_R} dots={moonDots} dotColor="#6E6588" dotSize={0.026} gridColor="#3A3550" gridOpacity={0.6} core="#0b0910" />
-        <Node position={[0, -MOON_R - 0.25, 0]} Icon={Landmark} label="Guardian" filled />
-      </group>
-      <Particles occ={occ} />
-      <Node position={[Math.max(-2.0, -agentHalfW + 1.3 - offsetX), 1.15, 1.6]} Icon={Bot} label="Agent" />
-      <Node position={[0, SUN_R + 0.45, 0]} Icon={Cpu} label="Checker" />
+      <Line points={path} color="#5A5070" lineWidth={1} dashed dashSize={0.08} gapSize={0.07} />
+      <Line points={link} color="#5A5070" lineWidth={1} dashed dashSize={0.06} gapSize={0.06} />
+      <Node position={[AGENT_X, 0, 0]} Icon={Bot} label="Agent" />
+      <Node position={[0, CHECK_Y, 0.3]} Icon={Cpu} label="Checker" nodeRef={checker} />
+      <Node position={[0, -R - 0.32, 0.3]} Icon={Landmark} label="Guardian · holds the funds" filled />
+      <Node position={[PAYEE_X, 0, 0]} Icon={Store} label="Payee" nodeRef={payee} />
+      {!reduce && <Payment corona={corona} checker={checker} payee={payee} onStep={onStep} />}
     </group>
   );
 }
 
-export default function Eclipse({ progress }) {
+export default function Eclipse({ onStep }) {
   const wrap = useRef(null);
   const pointer = useRef({ x: 0, y: 0 });
   const [onScreen, setOnScreen] = useState(true);
@@ -201,7 +274,7 @@ export default function Eclipse({ progress }) {
     const el = wrap.current;
     const io = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting));
     io.observe(el);
-    // Listen on the whole stage, so the cursor over the step cards still turns the eclipse.
+    // Listen on the whole stage, so the cursor over the step cards still turns the scene.
     // Mouse only: on touch, a drag is a scroll.
     const stage = el.parentElement || el;
     const move = (e) => {
@@ -219,7 +292,7 @@ export default function Eclipse({ progress }) {
     <div ref={wrap} className="globe" aria-hidden="true">
       <Canvas camera={{ position: [0, 0, 6.6], fov: 42 }} dpr={[1, 2]}
         frameloop={reduce ? "demand" : onScreen ? "always" : "never"} gl={{ antialias: true, alpha: true }}>
-        <Scene progress={progress} pointer={pointer} reduce={reduce} />
+        <Scene pointer={pointer} reduce={reduce} onStep={onStep} />
       </Canvas>
     </div>
   );

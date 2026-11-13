@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Box,
@@ -39,6 +39,15 @@ import { startMotion } from "./motion.js";
 
 // three.js loads after first paint, in its own chunk; the prerender shows the placeholder.
 const Eclipse = lazy(() => import("./components/Eclipse.jsx"));
+
+// A missing WebGL context (graphics acceleration off, blocklisted GPU) or a failed chunk load
+// must cost only the globe, not unmount the whole page.
+class SceneBoundary extends Component {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error) { console.warn("3D scene disabled:", error); }
+  render() { return this.state.failed ? this.props.fallback : this.props.children; }
+}
 
 const receiptsReader = createReader({ guardian: GUARDIAN_ID, rpc: NEAR_RPC_URL });
 
@@ -226,9 +235,11 @@ export default function App() {
   const refs = {
     heroGlow: useRef({ v: 1 }),
     ctaGlow: useRef({ v: 0.4 }),
-    globeProgress: useRef(0),
     morseProgress: useRef(0),
   };
+  // The protocol scene reports its phase; the matching step card lights up (CSS on data-step).
+  const stepsRef = useRef(null);
+  const onStep = useCallback((i) => { if (stepsRef.current) stepsRef.current.dataset.step = i; }, []);
   const [client, setClient] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
@@ -351,11 +362,13 @@ export default function App() {
             <div className="protocol">
               <Frame className="stage3" id="protocol">
                 {client ? (
-                  <Suspense fallback={<div className="globe globe-wait" aria-hidden="true" />}>
-                    <Eclipse progress={refs.globeProgress} />
-                  </Suspense>
+                  <SceneBoundary fallback={<div className="globe globe-wait" aria-hidden="true" />}>
+                    <Suspense fallback={<div className="globe globe-wait" aria-hidden="true" />}>
+                      <Eclipse onStep={onStep} />
+                    </Suspense>
+                  </SceneBoundary>
                 ) : <div className="globe globe-wait" aria-hidden="true" />}
-                <ol className="psteps psteps-overlay">
+                <ol className="psteps psteps-overlay" ref={stepsRef}>
                   {STEPS.map(({ Icon, title, text }, i) => (
                     <li key={title}>
                       <span className="pstep-n">{String(i + 1).padStart(2, "0")}</span>
