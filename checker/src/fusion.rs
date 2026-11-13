@@ -28,10 +28,10 @@ pub enum FusionMode {
     CodeRules,
 }
 
-/// Checker config for fusion. `hold_threshold` defaults to the frozen q̂ 0.84 (C5); the other probability thresholds are uncalibrated 0.5.
+/// Checker config for fusion. `hold_threshold` and `jev_injection_hold_threshold` default to the q̂ values calibrated 2026-11-13 (0.81 each); the other probability thresholds are uncalibrated 0.5.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FusionConfig {
-    /// `FUSION_HOLD_THRESHOLD`, q̂ on Jev `unusual`; default 0.84 (q̂ calibrated 2026-11-12 on 150 benign cases, ε = 5%).
+    /// `FUSION_HOLD_THRESHOLD`, q̂ on Jev `unusual`; default 0.81 (q̂ calibrated 2026-11-13 on 150 benign cases with Jev v2, ε = 4%; 0.84 before Jev v2).
     pub hold_threshold: f64,
     /// `FUSION_INJECTION_THRESHOLD`, on the classifier `max_score`; default 0.5.
     pub injection_threshold: f64,
@@ -40,7 +40,7 @@ pub struct FusionConfig {
     /// `FUSION_JEV_RECEIVER_RISK_THRESHOLD`, on Jev `receiver_risk`; default 0.5.
     pub jev_receiver_risk_threshold: f64,
     /// `FUSION_JEV_INJECTION_HOLD_THRESHOLD`: in `jev` mode a new receiver holds when Jev
-    /// `injection_driven` is above it; default 1.0 (rule off until calibrated).
+    /// `injection_driven` is above it; default 0.81 (q̂ calibrated 2026-11-13 on 150 benign cases with Jev v2, ε = 1%). 1.0 turns the rule off.
     pub jev_injection_hold_threshold: f64,
     /// `FUSION_YOUNG_ACCOUNT_DAYS`; default 7.
     pub young_account_days: f64,
@@ -58,11 +58,11 @@ pub struct FusionConfig {
 impl Default for FusionConfig {
     fn default() -> Self {
         Self {
-            hold_threshold: 0.84,
+            hold_threshold: 0.81,
             injection_threshold: 0.5,
             jev_injection_threshold: 0.5,
             jev_receiver_risk_threshold: 0.5,
-            jev_injection_hold_threshold: 1.0,
+            jev_injection_hold_threshold: 0.81,
             young_account_days: 7.0,
             mode: FusionMode::Jev,
             cascade: false,
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn fixtures_fuse() {
         // The hold-unusual fixture has unusual = 0.84; pin the pre-C5 threshold it was written for.
-        let cfg = FusionConfig { hold_threshold: 0.5, ..FusionConfig::default() };
+        let cfg = FusionConfig { hold_threshold: 0.5, ..pinned() };
         let cases: [(&str, Outcome, Vec<ReasonCode>); 5] = [
             (
                 include_str!("../../schemas/fixtures/decision-record-benign.json"),
@@ -523,6 +523,24 @@ mod tests {
             lookalike_of: Some("hostco.testnet".into()),
             lookalike_distance: Some(1),
         }
+    }
+
+    #[test]
+    fn default_thresholds_are_the_calibrated_values() {
+        let d = FusionConfig::default();
+        assert_eq!(d.hold_threshold, 0.81);
+        assert_eq!(d.jev_injection_hold_threshold, 0.81);
+        let at = |u: f64, i: f64| {
+            let s = Signals {
+                counterparty: Some(cp_signal(0)),
+                jev: Some(jev(u, i, 0.0)),
+                ..Signals::default()
+            };
+            fuse(&s, &d).0
+        };
+        assert_eq!(at(0.80, 0.82), Outcome::Hold);
+        assert_eq!(at(0.80, 0.81), Outcome::Allow);
+        assert_eq!(at(0.82, 0.0), Outcome::Hold);
     }
 
     #[test]
