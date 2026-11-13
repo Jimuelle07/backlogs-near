@@ -35,6 +35,26 @@ def test_loaded_pipeline_never_consults_keywords():
 
 
 @pytest.mark.parametrize(
+    ("label", "raw", "expected"),
+    [
+        ("MALICIOUS", 0.9, 0.9),
+        ("LABEL_1", 0.8, 0.8),
+        ("BENIGN", 0.7, 0.3),
+        ("LABEL_0", 0.6, 0.4),
+    ],
+)
+def test_loaded_pipeline_maps_binary_labels(label, raw, expected):
+    backend = _stubbed([{"label": label, "score": raw}])
+    assert backend.score_text("hello") == pytest.approx(expected)
+
+
+def test_loaded_pipeline_unknown_label_raises():
+    backend = _stubbed([{"label": "JAILBREAK", "score": 0.9}])
+    with pytest.raises(RuntimeError, match="unknown label"):
+        backend.score_text("hello")
+
+
+@pytest.mark.parametrize(
     "bad",
     [
         {},

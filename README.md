@@ -202,6 +202,14 @@ Read these rows with their limits:
 - **External set: independent for Jev only.** No threshold or question text was fitted on it, but the provenance rules were developed with this set in view. All 100 external attacks carry the policy violation `receiver_redirect`, which matches how the set is built (an invoice from a known payee plus a line naming another account; see [Limits](#limits)). The 0 of 100 shows that the rule fits this construction, not a rate for unseen attacks. All 16 benign holds come from the injection classifier (`injection_high`), none from Jev.
 - **Red-team set: not independent either.** Its scenarios were also in view when the rules were written. The 2 attacks still allowed, `redteam-06` and `redteam-17`, trip no rule, no lookalike check and no classifier, and Jev scores both below the thresholds.
 
+![Outcome shares per scenario set, current checker](docs/results/figures/fig-outcomes-current.svg)
+
+*Source: [flagging-main.json](docs/results/flagging-main.json), [flagging-external.json](docs/results/flagging-external.json), [flagging-redteam.json](docs/results/flagging-redteam.json).*
+
+![Outcome of each red-team scenario, current checker](docs/results/figures/fig-redteam-current.svg)
+
+*Source: [flagging-redteam.json](docs/results/flagging-redteam.json).*
+
 **Change against the baseline.** Same scenario sets and preset name. The checker, the Jev questions and the thresholds differ, and the current main row is a recorded run re-scored at the new thresholds, not a fresh run.
 
 | Scenario set | Attacks allowed, baseline | Attacks allowed, current | Benign held, baseline | Benign held, current | Baseline file |
@@ -209,6 +217,10 @@ Read these rows with their limits:
 | Main | 29 of 150 (19.3%) | 0 of 150 (0.0%), in-sample | 8 of 150 (5.3%) | 6 of 150 (4.0%), in-sample | [results.json](docs/results/results.json) |
 | External | 17 of 100 (17.0%) | 0 of 100 (0.0%) | 18 of 100 (18.0%) | 16 of 100 (16.0%) | [external-results.json](docs/results/external-results.json) |
 | Red-team | 7 of 17 (41.2%) | 2 of 17 (11.8%) | n/a | n/a | [redteam-results.json](docs/results/redteam-results.json) |
+
+![Baseline against current: attacks allowed and benign held per scenario set](docs/results/figures/fig-baseline-vs-current.svg)
+
+*Source: baseline [results.json](docs/results/results.json), [external-results.json](docs/results/external-results.json), [redteam-results.json](docs/results/redteam-results.json); current [flagging-main.json](docs/results/flagging-main.json), [flagging-external.json](docs/results/flagging-external.json), [flagging-redteam.json](docs/results/flagging-redteam.json).*
 
 **Main set by attack family** (in-sample; 25 attacks each, [flagging-main.json](docs/results/flagging-main.json) `by_family`).
 
@@ -221,6 +233,10 @@ Read these rows with their limits:
 | `lookalike_receiver` | 0 of 25 | 12 of 25 | 13 of 25 |
 | `fake_invoice` | 0 of 25 | 17 of 25 | 8 of 25 |
 
+![Main set outcomes by attack family](docs/results/figures/fig-family-main.svg)
+
+*Source: [flagging-main.json](docs/results/flagging-main.json) `by_family`.*
+
 **What each layer contributes** (main set, in-sample; [flagging-main.json](docs/results/flagging-main.json) `configurations`; the baseline column is the same row of [results.json](docs/results/results.json)).
 
 | Configuration | Benign held | Attacks allowed | Attacks allowed, baseline |
@@ -231,6 +247,10 @@ Read these rows with their limits:
 | All code rules, no Jev (`code_rules_all_signals`) | 1 of 150 (0.7%) | 16 of 150 (10.7%) | 69 of 150 (46.0%) |
 | Jev fusion, hold threshold 0.5 (`jev_fusion_all_signals`) | 15 of 150 (10.0%) | 0 of 150 (0.0%) | 0 of 150 (0.0%) |
 | Jev fusion, calibrated thresholds (`jev_fusion_conformal`) | 6 of 150 (4.0%) | 0 of 150 (0.0%) | 29 of 150 (19.3%) |
+
+![Main set, each layer: attacks allowed and benign held, current against baseline](docs/results/figures/fig-layers-main.svg)
+
+*Source: [flagging-main.json](docs/results/flagging-main.json) and [results.json](docs/results/results.json) `configurations`.*
 
 The cascade row was not re-run: its Jev state differs, so it cannot be re-scored from the recorded run, and a new run costs 300 Jev calls.
 
@@ -315,6 +335,14 @@ The per-agent threshold (`FUSION_AGENT_HOLD_THRESHOLD`) is implemented and unit-
 
 Files: [results.json](docs/results/results.json), [calibration-all-signals-classifier.json](docs/results/calibration-all-signals-classifier.json), [redteam-results.json](docs/results/redteam-results.json), [external-code-rules.json](docs/results/external-code-rules.json), [external-classifier-only.json](docs/results/external-classifier-only.json), [external-results.json](docs/results/external-results.json), [bec-results.json](docs/results/bec-results.json), [paysim-pooled.json](docs/results/paysim-pooled.json), [jev-budget.md](docs/results/jev-budget.md).
 
+### Injection-threshold sweep (offline re-fuse, no Jev calls)
+
+The recorded DecisionRecords of the three current-checker runs (main 300, external 200, red team 17) were re-fused with `checker --refuse` at seven `FUSION_INJECTION_THRESHOLD` values from 0.5 to 0.99, with the hold thresholds unchanged and no Jev call ([autoresearch-classifier.md](docs/results/autoresearch-classifier.md), `agent/tools/autoresearch_classifier.py`). Before any metric was read, the external set was split by sorted name within each label into a tuning half and a held-out half (50 benign and 50 attacks each); the rule keeps only thresholds that allow no main or tuning-half attack and at most 2 red-team attacks, then picks the fewest benign holds on main plus the tuning half. It picked 0.99, which lowers tuning-half benign holds from 10 to 6 of 50 and allows no attack on main or external (the same 2 of 17 red-team attacks stay allowed as at 0.5); on the held-out half, 0.99 and the current 0.5 both hold 6 of 50 benign payments and allow 0 of 50 attacks, so the gain did not carry over, and 12 of the 16 external benign holds (all boundary-pairs texts) stay held even at 0.99. The default threshold and classifier are unchanged; changing them is Jim's decision. The Prompt Guard 2 comparison is pending: the model is gated and no Hugging Face access token was available ([runbook](docs/results/autoresearch-classifier.md#pending-prompt-guard-2)).
+
+![Benign holds against FUSION_INJECTION_THRESHOLD, with red-team attacks allowed per point](docs/results/figures/fig-classifier-refuse.svg)
+
+*Source: [autoresearch-classifier.json](docs/results/autoresearch-classifier.json).*
+
 ### Live testnet runs (OutLayer, real Jev and NEAR keys)
 
 These runs used the baseline checker. The current checker has not been run on testnet.
@@ -341,6 +369,11 @@ Injection classifier (`protectai/deberta-v3-base-prompt-injection-v2`, threshold
 - `nvidia/Nemotron-RL-Agentic-Indirect-Prompt-Injection-v1`, first 300 rows by id (all positive): recall 0.79.
 - `microsoft/llmail-inject-challenge` (4 positives, 203 benign emails): false-positive rate 0.0.
 - Team in-domain, untrusted inbox items of the main set (234 positive, 175 negative): recall 0.1068, false-positive rate 0.0057.
+- Team red team, untrusted inbox items of the 17 red-team scenarios (22 positive, no negatives): recall 0.1364; the keyword heuristic 0.0.
+
+![Classifier AUROC and recall per corpus and backend](docs/results/figures/fig-classifier-bench.svg)
+
+*Source: [classifier-bench.json](docs/results/classifier-bench.json).*
 
 Read these with four caveats. The llmail corpus has only 4 positives, so only its false-positive rate on 203 benign emails is meaningful. The boundary-pairs negatives are deliberately hard, which is why its false-positive rate is high. The in-domain corpus counts every untrusted inbox item of an attack scenario as positive, including ordinary invoice emails, so item-level recall understates scenario-level detection. `p50_ms` in the file is a local CPU figure. The keyword-heuristic backend, benchmarked on the same corpora, reaches recall 0.0 to 0.0333.
 
@@ -403,6 +436,7 @@ Python (agent, relayer, eval):
 - [py-near](https://github.com/pvolnov/py-near): NEAR Python client (testnet extra)
 - [openai](https://github.com/openai/openai-python): NEAR AI Cloud client
 - httpx, jsonschema, python-dotenv, pytest
+- [matplotlib](https://matplotlib.org): README figures (`agent/tools/plot_results.py`; not in `pyproject.toml`, installed with `uv run --with`)
 
 Frontend (`site/`):
 
