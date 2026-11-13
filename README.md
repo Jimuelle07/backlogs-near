@@ -182,10 +182,9 @@ Complete list: [results-detail.md](docs/results/results-detail.md#limits).
 
 Links, licenses and what each one is used for: [docs/third-party.md](docs/third-party.md).
 
-## Team
+<h2 align="center">Team</h2>
 
-Backend (lanes A–C): Jim (lead), Rc, paticolcol, Jesus · Frontend (lanes D–E): Helena (lead), Ace ([sprints.md](docs/build/sprints.md#team)). GitHub contributors ([full list](https://github.com/Jimuelle07/backlogs-near/graphs/contributors)):
-
+<div align="center">
 <table>
   <tr>
     <td align="center"><a href="https://github.com/Jimuelle07"><img src="https://github.com/Jimuelle07.png?size=80" width="80" alt="Jimuelle07"><br><sub>Jimuelle07</sub></a></td>
@@ -196,12 +195,13 @@ Backend (lanes A–C): Jim (lead), Rc, paticolcol, Jesus · Frontend (lanes D–
     <td align="center"><a href="https://github.com/Shineiii009"><img src="https://github.com/Shineiii009.png?size=80" width="80" alt="Shineiii009"><br><sub>Shineiii009</sub></a></td>
   </tr>
 </table>
+</div>
 
 ## Hackathon disclosures
 
 - Built for NEAR HACKATHON (2026-11-01 → 2026-11-14). Pre-hackathon code: none — repository created 2026-11-08.
 - Existing product on another chain (Q-002): none; everything here was built for this hackathon.
-- Other projects by team members (Q-015): TBD(human).
+- Other projects by team members (Q-015): [LINGAP](https://github.com/wolfsenberg/LINGAP), [tapat](https://github.com/jimuelle07/tapat), [sailo](https://github.com/pdyntech/sailo).
 
 ## License
 
