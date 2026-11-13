@@ -98,6 +98,7 @@ Newest first by ID. Dates are as the record gives them (UTC or local); R0–R9, 
 - Same tester, no Jev call: `FUSION_MODE=code_rules firewall-demo --scenario attack-fake-invoice-duplicate --reset-spend` printed `verdict: hold reasons=policy_violation`; with `--scenario benign-hosting` it printed `verdict: allow reasons=checks_passed`.
 - Jev calls: 0 (no jev-budget row).
 - Record: this section (console output; no file was written).
+- Note 2026-11-13: the before-work counts (checker 111, guardian 102, tusdc 3; Python 498) are from a run of `cargo test --workspace` and `uv run pytest` at `6e8eb26` by the coordinator on 2026-11-13 before any change; console only, not booked as a separate entry.
 
 ### R20 - nightly dry-run on the final checker
 

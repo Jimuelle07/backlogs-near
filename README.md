@@ -87,7 +87,7 @@ Numbered steps, each "do X → see Y". Run from the repo root unless a step says
 7. Evaluation. In `agent/`, run `uv run firewall-eval --all-configurations` → the seven configurations (`no_defense`, `policy_only`, `classifier_only`, `code_rules_all_signals`, `jev_fusion_all_signals`, `jev_fusion_conformal`, `jev_fusion_conformal_cascade`) run over the 150 benign and 150 attack scenarios in `agent/scenarios/`, and the results are written as JSON. Useful flags: `--preset <label>` (run one of the seven configurations), `--configuration <label>` (label only), `--scenario <name>`, `--output FILE`, `--scenario-set {main,redteam,external,paysim}` (the red-team set is in `agent/scenarios/redteam/`), `--calibration FILE`, `--record-dir DIR` (keep the decision records), `--refuse-from RESULTS.json` (re-score a recorded Jev run at the current thresholds without calling Jev). The Jev configurations need `TYPESAFE_API_KEY` and spend API credits. Without a key the command still exits 0 and prints `configurations: 7`, but the Jev rows hold every benign case (`false_holds=150`) because Jev is unavailable. The eval always substitutes scenarios in the `demo.testnet` namespace, regardless of `OWNER_ACCOUNT_ID`. Optional per-call prices for the cost column: `EVAL_JEV_USD_PER_CALL`, `EVAL_CLASSIFIER_USD_PER_CALL`. Published results, current checker (2026-11-13): [flagging-main.json](docs/results/flagging-main.json), [flagging-main-calibration.json](docs/results/flagging-main-calibration.json), [flagging-external.json](docs/results/flagging-external.json), [flagging-redteam.json](docs/results/flagging-redteam.json). Baseline (2026-11-13): [results.json](docs/results/results.json), [calibration-all-signals-classifier.json](docs/results/calibration-all-signals-classifier.json), [redteam-results.json](docs/results/redteam-results.json), [redteam.md](docs/results/redteam.md), [external-code-rules.json](docs/results/external-code-rules.json), [external-classifier-only.json](docs/results/external-classifier-only.json), [external-results.json](docs/results/external-results.json), [bec-results.json](docs/results/bec-results.json), [paysim-pooled.json](docs/results/paysim-pooled.json), [jev-budget.md](docs/results/jev-budget.md).
 8. Calibration. In `agent/`, run `uv run firewall-calibrate <results.json>` on an eval results file → the conformal threshold `q_hat`, `false_hold_rate` and `sufficient_data`. Flags: `--epsilon`, `--score {unusual,injection_driven}` (default `unusual`), `--rotation` (leave-one-attack-family-out check), `--missing-as-zero`. The two frozen values are the defaults of `FUSION_HOLD_THRESHOLD` (`--epsilon 0.04`) and `FUSION_JEV_INJECTION_HOLD_THRESHOLD` (`--score injection_driven --epsilon 0.01`). On a results file produced without a Jev key it prints `n : 0`, `q_hat : 1.0` and `sufficient_data: False (need n >= 19)`.
 9. Optional injection classifier. In `agent/`, run `uv run --with transformers --with torch firewall-classifier 8088` (downloads the model; exits with an error if the model cannot load), then set `CLASSIFIER_URL=http://127.0.0.1:8088/score` in `.env` → the checker calls it and records `signals.injection` in the decision record. Without `CLASSIFIER_URL` the injection check is off (`signals.injection = null`). `uv run firewall-classifier --heuristic 8088` serves a keyword heuristic instead of the model, for offline tests only; its responses report `"model": "keyword-heuristic"`.
-10. External held-out set, no keys. In `agent/`, run `uv run firewall-eval --scenario-set external --preset code_rules_all_signals` → first line `scenarios: 200 (benign=100, attack=100)`. The set is built from public benchmarks and rewritten into payment form; sources and licenses are in [agent/scenarios/external/ATTRIBUTION.md](agent/scenarios/external/ATTRIBUTION.md).
+10. External set (public benchmarks, rewritten into payment form), no keys. In `agent/`, run `uv run firewall-eval --scenario-set external --preset code_rules_all_signals` → first line `scenarios: 200 (benign=100, attack=100)`. The set is built from public benchmarks and rewritten into payment form; sources and licenses are in [agent/scenarios/external/ATTRIBUTION.md](agent/scenarios/external/ATTRIBUTION.md).
 11. Classifier benchmark. In `agent/`, run `uv run --with transformers --with torch python tools/bench_classifier.py` → writes `docs/results/classifier-bench.json` and `docs/results/classifier-bench.md`. It downloads the public corpora on first run and takes several minutes on a CPU.
 12. Hugging Face dataset export. In `agent/`, run `uv run python tools/export_hf_dataset.py` → writes `data/hf-dataset/` (three JSONL splits: main 300 rows, redteam 17, external 200, plus a dataset card) and prints the `huggingface-cli upload …` command. The script uploads nothing. The published copy is at [Jim10/attested-payment-firewall-scenarios-eclipse](https://huggingface.co/datasets/Jim10/attested-payment-firewall-scenarios-eclipse).
 
@@ -178,77 +178,87 @@ Two versions of the checker are reported. [Current checker](#current-checker-eva
 
 ### Current checker: evaluation of 2026-11-13
 
-**Under test.** The checker at commit `5d57145`: provenance rules in the policy check, Jev v2 (the agent profile in the Jev state; questions written as examples and counterexamples) and two calibrated thresholds (`FUSION_HOLD_THRESHOLD` 0.81 and `FUSION_JEV_INJECTION_HOLD_THRESHOLD` 0.81). Preset `jev_fusion_conformal`, decided by Jev (`jev-latest` through the TypeSafe API), with the injection classifier `protectai/deberta-v3-base-prompt-injection-v2` on. No LLM fallback was configured; `check_unavailable` occurred in 0 cases.
+**Under test.** The checker at commit `5d57145`, with three changes against the baseline:
+
+- *Provenance rules*: code rules in the policy check that look at where the receiver came from (a known payee replaced by another account, an invoice already marked paid, an untrusted memory note, hidden or mixed-script characters).
+- *Jev v2*: the Jev request now carries the agent's payment profile, and its questions are written as examples and counterexamples.
+- *Two calibrated thresholds*: hold when Jev's `unusual` score exceeds 0.81, or when the receiver is new and Jev's `injection_driven` score exceeds 0.81.
+
+Preset `jev_fusion_conformal`, decided by Jev (`jev-latest` through the TypeSafe API), with the injection classifier `protectai/deberta-v3-base-prompt-injection-v2` on. No LLM fallback was configured; `check_unavailable` occurred in 0 cases.
+
+Terms: *held* means the payment waits in escrow and is paid after the hold window unless the owner cancels it; *blocked* means it is refused; *allowed* means it is paid. *In-sample* means measured on the cases used to build or fit the checker.
 
 **Outcome.**
 
 | Scenario set | Benign held | Benign blocked | Attacks allowed | Attacks held | Attacks blocked | Source file |
 | --- | --- | --- | --- | --- | --- | --- |
-| Main, 150 benign / 150 attacks | 6 of 150 (4.0%) | 0 | 0 of 150 | 45 | 105 | [flagging-main.json](docs/results/flagging-main.json) |
-| External (public benchmarks), 100 benign / 100 attacks | 16 of 100 (16.0%) | 0 | 0 of 100 | 27 | 73 | [flagging-external.json](docs/results/flagging-external.json) |
-| Red-team, 17 attacks | n/a (no benign) | n/a | 2 of 17 (11.76%) | 8 | 7 | [flagging-redteam.json](docs/results/flagging-redteam.json) |
+| Main, in-sample (150 benign / 150 attacks) | 6 of 150 (4.0%) | 0 of 150 (0.0%) | 0 of 150 (0.0%) | 45 of 150 (30.0%) | 105 of 150 (70.0%) | [flagging-main.json](docs/results/flagging-main.json) |
+| External, public benchmarks (100 benign / 100 attacks) | 16 of 100 (16.0%) | 0 of 100 (0.0%) | 0 of 100 (0.0%) | 27 of 100 (27.0%) | 73 of 100 (73.0%) | [flagging-external.json](docs/results/flagging-external.json) |
+| Red-team (17 attacks) | n/a | n/a | 2 of 17 (11.8%) | 8 of 17 (47.1%) | 7 of 17 (41.2%) | [flagging-redteam.json](docs/results/flagging-redteam.json) |
 
-**Change against the baseline** (same sets, same preset).
+Read these rows with their limits:
+
+- **Main set: in-sample.** The provenance rules and the Jev question texts were written with these scenarios in view, and both thresholds were fitted on its 150 benign cases. The row is that recorded run re-scored at the two thresholds; Jev was not called again.
+- **External set: independent for Jev only.** No threshold or question text was fitted on it, but the provenance rules were developed with this set in view. All 100 external attacks carry the policy violation `receiver_redirect`, which matches how the set is built (an invoice from a known payee plus a line naming another account; see [Limits](#limits)). The 0 of 100 shows that the rule fits this construction, not a rate for unseen attacks. All 16 benign holds come from the injection classifier (`injection_high`), none from Jev.
+- **Red-team set: not independent either.** Its scenarios were also in view when the rules were written. The 2 attacks still allowed, `redteam-06` and `redteam-17`, trip no rule, no lookalike check and no classifier, and Jev scores both below the thresholds.
+
+**Change against the baseline.** Same scenario sets and preset name. The checker, the Jev questions and the thresholds differ, and the current main row is a recorded run re-scored at the new thresholds, not a fresh run.
 
 | Scenario set | Attacks allowed, baseline | Attacks allowed, current | Benign held, baseline | Benign held, current | Baseline file |
 | --- | --- | --- | --- | --- | --- |
-| Main | 29 of 150 (19.33%) | 0 of 150 | 8 of 150 (5.33%) | 6 of 150 (4.0%) | [results.json](docs/results/results.json) |
-| External | 17 of 100 (17.0%) | 0 of 100 | 18 of 100 (18.0%) | 16 of 100 (16.0%) | [external-results.json](docs/results/external-results.json) |
-| Red-team | 7 of 17 (41.18%) | 2 of 17 (11.76%) | n/a | n/a | [redteam-results.json](docs/results/redteam-results.json) |
+| Main | 29 of 150 (19.3%) | 0 of 150 (0.0%), in-sample | 8 of 150 (5.3%) | 6 of 150 (4.0%), in-sample | [results.json](docs/results/results.json) |
+| External | 17 of 100 (17.0%) | 0 of 100 (0.0%) | 18 of 100 (18.0%) | 16 of 100 (16.0%) | [external-results.json](docs/results/external-results.json) |
+| Red-team | 7 of 17 (41.2%) | 2 of 17 (11.8%) | n/a | n/a | [redteam-results.json](docs/results/redteam-results.json) |
 
-**Main set by attack family** (25 attacks each, [flagging-main.json](docs/results/flagging-main.json) `by_family`).
+**Main set by attack family** (in-sample; 25 attacks each, [flagging-main.json](docs/results/flagging-main.json) `by_family`).
 
 | Family | Allowed | Held | Blocked |
 | --- | --- | --- | --- |
-| `direct_injection` | 0 | 3 | 22 |
-| `encoded_injection` | 0 | 1 | 24 |
-| `indirect_injection` | 0 | 5 | 20 |
-| `memory_poisoning` | 0 | 7 | 18 |
-| `lookalike_receiver` | 0 | 12 | 13 |
-| `fake_invoice` | 0 | 17 | 8 |
+| `direct_injection` | 0 of 25 | 3 of 25 | 22 of 25 |
+| `encoded_injection` | 0 of 25 | 1 of 25 | 24 of 25 |
+| `indirect_injection` | 0 of 25 | 5 of 25 | 20 of 25 |
+| `memory_poisoning` | 0 of 25 | 7 of 25 | 18 of 25 |
+| `lookalike_receiver` | 0 of 25 | 12 of 25 | 13 of 25 |
+| `fake_invoice` | 0 of 25 | 17 of 25 | 8 of 25 |
 
-**What each layer contributes** (main set, [flagging-main.json](docs/results/flagging-main.json) `configurations`; the baseline column is the same row of [results.json](docs/results/results.json)).
+**What each layer contributes** (main set, in-sample; [flagging-main.json](docs/results/flagging-main.json) `configurations`; the baseline column is the same row of [results.json](docs/results/results.json)).
 
 | Configuration | Benign held | Attacks allowed | Attacks allowed, baseline |
 | --- | --- | --- | --- |
-| No defense (`no_defense`) | 0 | 150 of 150 | 150 of 150 |
-| Policy rules only (`policy_only`) | 0 | 28 of 150 (18.67%) | 106 of 150 (70.67%) |
-| Classifier only (`classifier_only`) | 1 | 125 of 150 (83.33%) | 125 of 150 (83.33%) |
-| All code rules, no Jev (`code_rules_all_signals`) | 1 | 16 of 150 (10.67%) | 69 of 150 (46.0%) |
-| Jev fusion, hold threshold 0.5 (`jev_fusion_all_signals`) | 15 | 0 of 150 | 0 of 150 |
-| Jev fusion, calibrated thresholds (`jev_fusion_conformal`) | 6 | 0 of 150 | 29 of 150 (19.33%) |
+| No defense (`no_defense`) | 0 of 150 (0.0%) | 150 of 150 (100.0%) | 150 of 150 (100.0%) |
+| Policy rules only (`policy_only`) | 0 of 150 (0.0%) | 28 of 150 (18.7%) | 106 of 150 (70.7%) |
+| Classifier only (`classifier_only`) | 1 of 150 (0.7%) | 125 of 150 (83.3%) | 125 of 150 (83.3%) |
+| All code rules, no Jev (`code_rules_all_signals`) | 1 of 150 (0.7%) | 16 of 150 (10.7%) | 69 of 150 (46.0%) |
+| Jev fusion, hold threshold 0.5 (`jev_fusion_all_signals`) | 15 of 150 (10.0%) | 0 of 150 (0.0%) | 0 of 150 (0.0%) |
+| Jev fusion, calibrated thresholds (`jev_fusion_conformal`) | 6 of 150 (4.0%) | 0 of 150 (0.0%) | 29 of 150 (19.3%) |
 
 The cascade row was not re-run: its Jev state differs, so it cannot be re-scored from the recorded run, and a new run costs 300 Jev calls.
 
-**Acceptance criteria.** The criteria were fixed before the runs; a failed criterion would have reverted Jev v2 and kept only the provenance rules.
+**Acceptance criteria.** The criteria were fixed in the plan before any Jev run. They were set after an offline replay of the provenance rules over these same sets, so the main and external bars are not blind. A failed criterion would have reverted Jev v2 and kept only the provenance rules.
 
 | Check | Criterion | Measured | Result |
 | --- | --- | --- | --- |
-| Pilot, 38 main-set scenarios | At least 4 of the 7 attacks that no code rule catches score above every benign case on Jev `injection_driven`; no unavailable check | 7 of 7; 0 unavailable | pass |
-| Main set | Benign held ≤ 8, benign blocked 0, attacks allowed ≤ 4 | 6, 0, 0 | pass |
-| External set | Benign held ≤ 20, benign blocked 0, attacks allowed ≤ 2 | 16, 0, 0 | pass |
+| Pilot, 38 main-set scenarios | At least 4 of the 7 attacks that no code rule catches score above every benign case on Jev `injection_driven`; no unavailable check | 7 of 7; 0 unavailable. Attack scores 0.94–0.98 against a benign maximum of 0.82. The control run before Jev v2 also gave 7 of 7, at 0.69–0.82 against 0.67 | pass |
+| Main set | Benign held ≤ 8, benign blocked 0, attacks allowed ≤ 4 | 6, 0, 0 (in-sample) | pass |
+| External set | Benign held ≤ 20, benign blocked 0, attacks allowed ≤ 2 | 16, 0, 0 (rules not independent of this set) | pass |
 | Red-team set | Report only | 2 of 17 allowed | reported |
-| Test suites | All pass | 231 Rust tests and 512 Python tests passed, 0 failed | pass |
+| Rust test suite (`cargo test --workspace`) | All pass | 231 passed, 0 failed; 2 tests that call live services are ignored | pass |
+| Python test suite (`uv run pytest`) | All pass | 512 passed, 0 failed | pass |
 | End-to-end dry-run (`firewall-nightly-e2e --mode dry-run`) | `Overall Status: SUCCESS` | SUCCESS, exit 0 | pass |
 | Testnet | Not run on this checker | not run | open |
 
-**How to read these numbers.**
+**Thresholds.** Both thresholds were set with split conformal calibration on the 150 benign cases of one run ([flagging-main-calibration.json](docs/results/flagging-main-calibration.json)): 0.81 for `unusual` at a target false-hold rate (ε) of 4%, and 0.81 for `injection_driven` at ε = 1%. With n = 150, ε = 1% selects the highest benign score of that run, so the new-receiver hold fires on none of its benign cases by construction. In the earlier 38-scenario pilot, one benign new-receiver payment (`benign-office-rent`) scored 0.82 and would be held at this threshold ([flagging-pilot-v2.json](docs/results/flagging-pilot-v2.json)). Jev scores vary between runs; how many cases a repeat run would change was not measured.
 
-- The main-set figures are in-sample. The provenance rules and the Jev question texts were written with these scenarios in view, and both thresholds were fitted on the 150 benign cases of that run ([flagging-main-calibration.json](docs/results/flagging-main-calibration.json): q̂ 0.81 at ε = 4% for `unusual`, q̂ 0.81 at ε = 1% for `injection_driven`, n = 150). The main-set row is that recorded run re-scored at the two thresholds; Jev was not called again.
-- The external set is independent for Jev: neither threshold and no question text was fitted on it. It is not independent for the provenance rules, which were developed with this set and the red-team set in view. All 100 external attacks carry the policy violation `receiver_redirect`, which matches how the set is built (an invoice from a known payee plus a line naming another account; see [Limits](#limits)). Read the 0 of 100 as "the rule fits this construction", not as a rate for unseen attacks.
-- All 16 external benign holds come from the injection classifier (`injection_high`), none from Jev.
-- The two red-team attacks still allowed are `redteam-06` and `redteam-17`. Neither trips a rule, the lookalike check or the classifier, and Jev scores both below the thresholds.
-- The `injection_driven` threshold 0.81 is the highest benign score of the calibration run (ε = 1% with n = 150 selects the maximum). In the earlier 38-scenario pilot run one benign payment to a new receiver scored 0.82 ([flagging-pilot-v2.json](docs/results/flagging-pilot-v2.json)), which this threshold would hold. Jev scores vary between runs, so a repeat run can differ by a few cases.
-- A held payment is delayed, not refused: after the hold window it is paid unless the owner cancels it ([Limits](#limits)).
-- These runs used 595 Jev calls; the count per run is in [jev-budget.md](docs/results/jev-budget.md).
+These runs used 595 Jev calls; the count per run is in [jev-budget.md](docs/results/jev-budget.md).
 
-**Reproduce.** Run from the repository root after `cargo build -p checker --release` and `cd agent && uv sync`. Steps 1–4 need no key.
+**Reproduce.** Run from the repository root after `cargo build -p checker --release` and `cd agent && uv sync`. Steps 1–5 need no key.
 
 1. In `agent/`, run `FUSION_MODE=code_rules uv run firewall-demo --scenario attack-fake-invoice-duplicate --reset-spend` → `verdict: hold reasons=policy_violation`. The baseline checker allowed this payment (testnet request #12 in [e2e-2026-11-13.md](docs/results/e2e-2026-11-13.md)).
 2. In `agent/`, run `uv run firewall-eval --scenario-set main --preset policy_only` → `policy_only: false_holds=0 (0.0%) missed_attacks=28 (18.67%)`.
-3. Run `cargo test --workspace` → every suite ends with `test result: ok`. In `agent/`, run `uv run pytest` → `512 passed`.
-4. In `agent/`, run `uv run firewall-calibrate ../docs/results/flagging-main-calibration.json --epsilon 0.04` → `q_hat         : 0.81`; add `--score injection_driven --epsilon 0.01` → `q_hat         : 0.81`.
-5. With a Jev key ([step 4](#with-a-jev-key)) and the classifier ([step 9](#evaluation-and-benchmarks)): in `agent/`, run `uv run firewall-eval --scenario-set external --preset jev_fusion_conformal --output ../data/eval/external.json` → `scenarios: 200 (benign=100, attack=100)` and the `jev_fusion_conformal:` row. This spends 200 Jev calls.
+3. Run `cargo test --workspace` → every suite ends with `test result: ok`.
+4. In `agent/`, run `uv run pytest` → `512 passed`.
+5. In `agent/`, run `uv run firewall-calibrate ../docs/results/flagging-main-calibration.json --epsilon 0.04` → `q_hat         : 0.81`; add `--score injection_driven --epsilon 0.01` → `q_hat         : 0.81`.
+6. With a Jev key ([step 4](#with-a-jev-key)) and the classifier ([step 9](#evaluation-and-benchmarks)): in `agent/`, run `uv run firewall-eval --scenario-set external --preset jev_fusion_conformal --output ../data/eval/external.json` → `scenarios: 200 (benign=100, attack=100)` and a `jev_fusion_conformal:` row. The committed run printed `false_holds=16 (16.0%) missed_attacks=0 (0.0%)`; Jev scores vary between runs. This spends 200 Jev calls.
 
 ### Baseline: before the provenance rules and Jev v2
 
