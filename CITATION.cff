@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use or reference this project, please cite it as below."
+type: software
+title: "Eclipse: a payment firewall for AI agents on NEAR"
+abstract: >-
+  Eclipse is a payment firewall for AI agents. The agent holds only a
+  function-call key to a Guardian contract on NEAR; the contract holds the
+  funds. Every payment request pauses while a checker (in OutLayer's TEE on
+  testnet) fuses policy and provenance rules, a lookalike check, an injection
+  classifier and a TypeSafe Jev decision into allow, hold or block. The
+  contract pays only on an exact receiver, token, amount and request_id match,
+  inside hard caps, and writes an on-chain receipt for every outcome.
+authors:
+  - name: "Eclipse team (NEAR HACKATHON 2026)"
+repository-code: "https://github.com/Jimuelle07/backlogs-near"
+url: "https://eclipse-9le.pages.dev/"
+license: MIT
+keywords:
+  - NEAR
+  - AI agents
+  - prompt injection
+  - payment firewall
+  - smart contract
+  - trusted execution environment
+  - TypeSafe Jev

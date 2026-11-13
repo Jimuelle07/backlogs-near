@@ -6,13 +6,14 @@
 
 A payment firewall for AI agents, on NEAR.
 
+[![Live site](https://img.shields.io/badge/live-eclipse--9le.pages.dev-EDB1E8)](https://eclipse-9le.pages.dev/)
 [![NEAR testnet](https://img.shields.io/badge/NEAR-testnet-00EC97)](https://testnet.nearblocks.io/address/guardian-v2.jimuelle-firewall.testnet)
 [![Decisions: TypeSafe Jev](https://img.shields.io/badge/decisions-TypeSafe%20Jev-6E56CF)](https://typesafe.ai)
 [![Rust](https://img.shields.io/badge/Rust-near--sdk%205.29.1-000000?logo=rust)](contract/guardian/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](agent/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Quick start](#quick-start) · [Results](#results) · [How it works](#how-it-works) · [Limits](#limits) · [Built with](#built-with) · [All docs](docs/index.md)
+[Live site](https://eclipse-9le.pages.dev/) · [Quick start](#quick-start) · [Results](#results) · [How it works](#how-it-works) · [FAQ](#faq) · [Limits](#limits) · [Built with](#built-with) · [All docs](docs/index.md)
 
 </div>
 
@@ -138,6 +139,26 @@ What NEAR does:
 </details>
 
 Design: [system design](docs/build/system-design.md) · [software design](docs/build/sdd.md) · [schemas](schemas/).
+
+## FAQ
+
+**What is Eclipse?**
+A payment firewall for AI agents on NEAR. The agent holds only a function-call key that can ask a Guardian contract for a payment. The contract holds the funds, pauses each request, and pays only after a checker running off the agent's host returns allow.
+
+**How does it stop prompt-injection payments?**
+Each payment request runs a checker: policy and provenance rules (the amount must match the request or invoice), an injection classifier on everything the agent read, and counterparty signals such as account age and lookalike distance to known payees. TypeSafe Jev fuses these signals into allow, hold or block. Results and their caveats: [Results](#results).
+
+**What does NEAR do in this design?**
+It holds the funds in the Guardian contract, limits the agent's key to one method, pauses each request with yield and resume, pays only on an exact match of receiver, token, amount and `request_id`, enforces hard caps (200 tUSDC per payment, 500 per day) and writes an on-chain receipt for every payment.
+
+**Does a human approve payments?**
+No. Allowed payments are paid at once, unless the amount is above the payee's budget (a new payee starts at 20 tUSDC), in which case they wait like a hold. Held payments wait in escrow for a window set by the amount and are then released; the owner can cancel a hold. No AI decides an amount.
+
+**Is it live on mainnet?**
+No. It is a NEAR HACKATHON 2026 build on NEAR testnet with a mock tUSDC token (6 decimals). The [live site](https://eclipse-9le.pages.dev/) reads the testnet Guardian's receipts.
+
+**Can I try it without keys?**
+Yes: the [Quick start](#quick-start) dry-run needs no keys and no funds.
 
 ## Limits
 
