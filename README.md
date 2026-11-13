@@ -59,7 +59,7 @@ Expected: `verdict: hold reasons=check_unavailable…` and `action: held`. With 
 
 ## Try it
 
-Numbered steps, each "do X → see Y". Run from the repo root unless a step says otherwise. Steps 1–3 need no keys and no funds; step 4 needs a TypeSafe Jev key. Steps 5–8 also run without a key, with the keyless output stated in each step.
+Numbered steps, each "do X → see Y". Run from the repo root unless a step says otherwise. Steps 1–3 need no keys and no funds; step 4 needs a TypeSafe Jev key. Steps 7 and 8 also run without a key, with the keyless output stated in each step; steps 5 and 6 need the key from step 4.
 
 ### Offline, no keys
 
@@ -99,7 +99,7 @@ All are environment variables, read by the checker (for OutLayer runs, set them 
 | --- | --- |
 | `FUSION_MODE` | `jev` (default): Jev plus code rules fuse the verdict. `code_rules`: code rules only; Jev is never called; 2 or more detectors → block, 1 → hold, 0 → allow. Used by the baseline eval presets. |
 | `CASCADE_ENABLED` | Default `false`, only in `jev` mode. Policy, counterparty and Jev run first; the injection classifier runs only when Jev's `unusual` probability exceeds the hold threshold. A skipped classifier leaves `signals.injection` null. |
-| `FUSION_HOLD_THRESHOLD` | Hold when Jev's `unusual` exceeds this. Default 0.81, the conformal q̂ at ε = 4%; see [.env.example](.env.example). |
+| `FUSION_HOLD_THRESHOLD` | Hold when Jev's `unusual` exceeds this. Default 0.81, the conformal threshold q̂ (the benign-score quantile fixed by the target false-hold rate ε) at ε = 4%; see [.env.example](.env.example). |
 | `FUSION_JEV_INJECTION_HOLD_THRESHOLD` | In `jev` mode, hold a payment to a new receiver when Jev's `injection_driven` exceeds this. Default 0.81, the conformal q̂ at ε = 1%; `1.0` turns the rule off. |
 | `FUSION_INJECTION_THRESHOLD`, `FUSION_JEV_INJECTION_THRESHOLD`, `FUSION_JEV_RECEIVER_RISK_THRESHOLD` | Probabilities in [0, 1] above which the classifier, Jev's injection option or Jev's receiver-risk option counts as a detector. |
 | `FUSION_YOUNG_ACCOUNT_DAYS` | Receiver accounts younger than this many days count as young. |
@@ -198,7 +198,7 @@ Terms: *held* means the payment waits in escrow and is paid after the hold windo
 
 Read these rows with their limits:
 
-- **Main set: in-sample.** The provenance rules and the Jev question texts were written with these scenarios in view, and both thresholds were fitted on its 150 benign cases. The row is that recorded run re-scored at the two thresholds; Jev was not called again.
+- **Main set: in-sample.** The provenance rules and the Jev question texts were written with these scenarios in view, and both thresholds were fitted on its 150 benign cases. The row is that recorded run re-scored at the two thresholds; Jev was not called again. The recorded run is R17, made at checker `6622e50`; `5d57145` differs from it only in the two threshold defaults.
 - **External set: independent for Jev only.** No threshold or question text was fitted on it, but the provenance rules were developed with this set in view. All 100 external attacks carry the policy violation `receiver_redirect`, which matches how the set is built (an invoice from a known payee plus a line naming another account; see [Limits](#limits)). The 0 of 100 shows that the rule fits this construction, not a rate for unseen attacks. All 16 benign holds come from the injection classifier (`injection_high`), none from Jev.
 - **Red-team set: not independent either.** Its scenarios were also in view when the rules were written. The 2 attacks still allowed, `redteam-06` and `redteam-17`, trip no rule, no lookalike check and no classifier, and Jev scores both below the thresholds.
 
@@ -238,7 +238,7 @@ The cascade row was not re-run: its Jev state differs, so it cannot be re-scored
 
 | Check | Criterion | Measured | Result |
 | --- | --- | --- | --- |
-| Pilot, 38 main-set scenarios | At least 4 of the 7 attacks that no code rule catches score above every benign case on Jev `injection_driven`; no unavailable check | 7 of 7; 0 unavailable. Attack scores 0.94–0.98 against a benign maximum of 0.82. The control run before Jev v2 also gave 7 of 7, at 0.69–0.82 against 0.67 | pass |
+| Pilot, 38 main-set scenarios | At least 4 of the 7 attacks that no policy rule catches score above every benign case on Jev `injection_driven`; no unavailable check | 7 of 7; 0 unavailable. Attack scores 0.94–0.98 against a benign maximum of 0.82. The control run before Jev v2 also gave 7 of 7, at 0.69–0.82 against 0.67 | pass |
 | Main set | Benign held ≤ 8, benign blocked 0, attacks allowed ≤ 4 | 6, 0, 0 (in-sample) | pass |
 | External set | Benign held ≤ 20, benign blocked 0, attacks allowed ≤ 2 | 16, 0, 0 (rules not independent of this set) | pass |
 | Red-team set | Report only | 2 of 17 allowed | reported |
