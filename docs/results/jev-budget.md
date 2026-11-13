@@ -1,6 +1,6 @@
 # Jev call budget ledger (Sprint 4b, P6)
 
-Budget: at most 3,100 Jev calls (raised from 2,500 by Jim, 2026-11-13). Stop line for starting a new run: 3,000. Calls are counted as cases with `jev_called` in each output file; the two aborted runs have no file and are booked at the counts below.
+Budget: at most 4,100 Jev calls (raised from 2,500 to 3,100 by Jim, 2026-11-13, then to 4,100 by Jim in session on 2026-11-13 for the repeat run of every scenario set). Stop line for starting a new run: 4,000. Calls are counted as cases with `jev_called` in each output file; the two aborted runs have no file and are booked at the counts below.
 
 ## Environment of every live run
 
@@ -35,12 +35,21 @@ Runs of 2026-11-13, 01:04 to 02:34 local. The checker was built from this branch
 | 20 | nightly dry-run, 2 scenarios (`benign-hosting`, `attack-morse-lookalike`), checker `5d57145` | none (console output; summary in ledger.md R20) | 2 | 2,922 |
 | 21 | code-rules gate after the provenance rules: main, external and redteam sets with `code_rules_all_signals` (no Jev), checker `4e0a598` | `flagging-main-code-rules.json`, `flagging-external-code-rules.json`, `flagging-redteam-code-rules.json` | 0 | 2,922 |
 | 22 | main set re-fused at the calibrated defaults: `--all-configurations --refuse-from flagging-main-calibration.json` on the R17 records, checker `5d57145`; the two Jev rows are re-fused with `checker --refuse` (no Jev call; the `jev_called` flags in the file are copied from R17), the four code-rules rows are run, the cascade row is skipped | `flagging-main.json` | 0 | 2,922 |
+| 24 | repeat run, red-team set (17), `jev_fusion_conformal`, checker release build of main `4d780a3` (code under `checker/` unchanged since `5d57145`; Jev v2, defaults 0.81 and 0.81; model `jev-1.14.0`) | `rerun-2026-11-13/flagging-redteam.json` | 17 | 2,939 |
+| 25 | repeat run, external set (200), same checker and preset | `rerun-2026-11-13/flagging-external.json` | 200 | 3,139 |
+| 26 | repeat run, main set (300), same checker and preset | `rerun-2026-11-13/flagging-main.json` | 300 | 3,439 |
+| 27 | nightly dry-run, 2 scenarios (`benign-hosting`, `attack-morse-lookalike`), same checker | none (console output; summary in ledger.md R27) | 2 | 3,441 |
+| 28 | offline: `--all-configurations --refuse-from` on the run 26 records, code rules on external and redteam, repeat-run comparison and threshold sweep (no Jev) | `rerun-2026-11-13/flagging-main-all-configurations.json`, `rerun-2026-11-13/flagging-external-code-rules.json`, `rerun-2026-11-13/flagging-redteam-code-rules.json`, `rerun-2026-11-13/repeat-run.json`, `rerun-2026-11-13/autoresearch-classifier.json` | 0 | 3,441 |
 
-Total booked: 2,922 calls, of which 400 are booked for the two aborted runs 6a and 7a. This is below the 3,000 stop line (cap 3,100). Runs 10–14 total 88 calls on 2026-11-13 (prior cumulative 2,239). Runs 15 onward (flagging work, branch `flagging-provenance-jev-v2`) total 595 calls.
+Row numbers equal ledger run IDs; R23 (test suites, no Jev call) has no row.
+
+Total booked: 3,441 calls, of which 400 are booked for the two aborted runs 6a and 7a. This is below the 4,000 stop line (cap 4,100). Runs 10–14 total 88 calls on 2026-11-13 (prior cumulative 2,239). Runs 15–22 (flagging work, branch `flagging-provenance-jev-v2`) total 595 calls. Runs 24–27 total 519 calls (17 + 200 + 300 + 2): the repeat run of every scenario set with real Jev, Jim's decision 2026-11-13 (budget raised to 4,100). Run 28 made no Jev call.
 
 Runs 10–14 (offline evals 2026-11-12T20:19Z–20:20Z UTC): native checker from origin/main `38aeaf0`, classifier `protectai/deberta-v3-base-prompt-injection-v2` on local CPU (`firewall-classifier`, port 8088, `INJECTION_TIMEOUT_MS=20000`), `TYPESAFE_API_KEY` set, no NEAR AI key, preset `jev_fusion_conformal`. Runs 10 and 14 ran on testnet with `guardian-v2` in OutLayer mode. Results: [e2e-2026-11-13.md](e2e-2026-11-13.md).
 
-Runs 15 onward (flagging work, 2026-11-13 UTC): native checker built from branch `flagging-provenance-jev-v2` at the commit named in each row, classifier `protectai/deberta-v3-base-prompt-injection-v2` on local CPU (`uv run --with transformers --with torch firewall-classifier 8088`, `CLASSIFIER_URL=http://127.0.0.1:8088/score`, `INJECTION_TIMEOUT_MS=20000`), `TYPESAFE_API_KEY` set, `CHECKER_LLM_MODEL` empty (no LLM fallback; a Jev failure shows as `check_unavailable`). DecisionRecords of these runs are kept locally under the gitignored `data/eval/records/` and are not committed.
+Runs 15–22 (flagging work, 2026-11-13 UTC): native checker built from branch `flagging-provenance-jev-v2` at the commit named in each row, classifier `protectai/deberta-v3-base-prompt-injection-v2` on local CPU (`uv run --with transformers --with torch firewall-classifier 8088`, `CLASSIFIER_URL=http://127.0.0.1:8088/score`, `INJECTION_TIMEOUT_MS=20000`), `TYPESAFE_API_KEY` set, `CHECKER_LLM_MODEL` empty (no LLM fallback; a Jev failure shows as `check_unavailable`). DecisionRecords of these runs are kept locally under the gitignored `data/eval/records/` and are not committed.
+
+Runs 24–27 (repeat run, 2026-11-13 UTC, 06:51Z–07:05Z): native release checker built from main `4d780a3` (no change under `checker/` since `5d57145`), classifier `protectai/deberta-v3-base-prompt-injection-v2` on local CPU (port 8088, `INJECTION_TIMEOUT_MS=20000`), Jev through TypeSafe (`JEV_PROVIDER=typesafe`, `DECISION_BACKEND=jev`, project key from `.env`), `NEAR_AI_API_KEY` empty (no LLM fallback). Every DecisionRecord has `signals.jev.backend` "jev" and model "jev-1.14.0". `check_unavailable` is 0 in every file. Results: [rerun-2026-11-13/repeat-run.md](rerun-2026-11-13/repeat-run.md).
 
 ## Notes
 

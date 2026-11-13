@@ -16,10 +16,12 @@ workspace data/autoresearch/classifier/data/.
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
 from firewall_agent.config import REPO_ROOT, Settings
 from firewall_agent.eval import preset_env, run_all_configurations
@@ -48,6 +50,31 @@ COMMITTED = {
 }
 BACKEND_SUFFIX = {"deberta": "", "promptguard2": "-promptguard2"}
 
+
+class Paths(NamedTuple):
+    sources: dict[str, Path]
+    committed: dict[str, Path]
+    records: dict[str, dict[str, Path]]  # set -> backend -> record dir
+    out_json: Path
+    out_md: Path
+    work: Path
+
+
+def make_paths(tag: str | None) -> Paths:
+    """Untagged: the committed flagging-*.json run. Tagged: docs/results/<tag>/ (source == committed reference)."""
+    # With a tag the committed reference is the tagged run itself (that run used default thresholds), so the
+    # incumbent guard checks re-fuse fidelity, not the README's frozen numbers.
+    if tag is None:
+        sources, committed = SOURCES, COMMITTED
+        rec_prefix, out_dir, work = "flagging-", RESULTS, WORK
+    else:
+        sources = committed = {s: RESULTS / tag / f"flagging-{s}.json" for s in SETS}
+        rec_prefix, out_dir = f"{tag}-", RESULTS / tag
+        work = REPO_ROOT / "data" / "autoresearch" / f"classifier-{tag}"
+    records = {s: {b: RECORDS / f"{rec_prefix}{s}{suf}" for b, suf in BACKEND_SUFFIX.items()} for s in SETS}
+    return Paths(sources, committed, records, out_dir / OUT_JSON.name, out_dir / OUT_MD.name, work)
+
+
 SPLIT_RULE = (
     "Within each label, the case names of flagging-external.json are sorted; names at even 0-based "
     "positions form external_tune, odd positions external_test. Fixed before any metric was read. "
@@ -67,6 +94,21 @@ uv run --with transformers --with torch python tools/reclassify_records.py --set
 uv run --with transformers --with torch python tools/reclassify_records.py --set redteam  --results ../docs/results/flagging-redteam.json           --records ../data/eval/records/flagging-redteam  --model meta-llama/Llama-Prompt-Guard-2-86M --out ../data/eval/records/flagging-redteam-promptguard2
 uv run python tools/autoresearch_classifier.py
 uv run --with matplotlib python tools/plot_results.py"""
+
+def runbook(tag: str | None) -> str:
+    """The Step 4b commands; with a tag, the reclassify and autoresearch lines point at the tagged run."""
+    if tag is None:
+        return RUNBOOK
+    bench, *reclassify, _, plot = RUNBOOK.splitlines()
+    tagged = [
+        f"uv run --with transformers --with torch python tools/reclassify_records.py --set {s} "
+        f"--results ../docs/results/{tag}/flagging-{s}.json --records ../data/eval/records/{tag}-{s} "
+        f"--model meta-llama/Llama-Prompt-Guard-2-86M --out ../data/eval/records/{tag}-{s}-promptguard2"
+        for s in SETS
+    ]
+    assert len(tagged) == len(reclassify)
+    return "\n".join([bench, *tagged, f"uv run python tools/autoresearch_classifier.py --tag {tag}", plot])
+
 
 PROPOSALS = [
     (
@@ -109,8 +151,8 @@ def _count(cases: list[dict]) -> dict:
     }
 
 
-def external_split() -> tuple[set[str], set[str]]:
-    cases = json.loads(SOURCES["external"].read_text(encoding="utf-8"))["cases"]
+def external_split(paths: Paths) -> tuple[set[str], set[str]]:
+    cases = json.loads(paths.sources["external"].read_text(encoding="utf-8"))["cases"]
     tune: set[str] = set()
     test: set[str] = set()
     for label in sorted({c["label"] for c in cases}):
@@ -119,19 +161,19 @@ def external_split() -> tuple[set[str], set[str]]:
     return tune, test
 
 
-def refuse_run(settings: Settings, backend: str, threshold: float, scenario_set: str) -> list[dict]:
+def refuse_run(settings: Settings, paths: Paths, backend: str, threshold: float, scenario_set: str) -> list[dict]:
     env = {**preset_env(PRESET), "FUSION_INJECTION_THRESHOLD": str(threshold)}
     # Only the jev/no-cascade path is re-fused; anything else would run the checker live (Jev calls).
     if env.get("FUSION_MODE") != "jev" or env.get("CASCADE_ENABLED") != "false":
         raise SystemExit(f"preset {PRESET} would not be re-fused; refusing to run")
-    record_dir = RECORDS / f"flagging-{scenario_set}{BACKEND_SUFFIX[backend]}"
+    record_dir = paths.records[scenario_set][backend]
     result = run_all_configurations(
         settings,
         configurations=[(f"{backend}@{threshold}", env)],
-        output_path=WORK / "data" / f"{scenario_set}-{backend}-{threshold}.json",
+        output_path=paths.work / "data" / f"{scenario_set}-{backend}-{threshold}.json",
         scenario_set=scenario_set,
         record_dir=record_dir,
-        refuse_from=SOURCES[scenario_set],
+        refuse_from=paths.sources[scenario_set],
     )
     cases = result["cases"]
     if not all(c.get("refused") for c in cases):
@@ -139,26 +181,35 @@ def refuse_run(settings: Settings, backend: str, threshold: float, scenario_set:
     return cases
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument(
+        "--tag",
+        default=None,
+        help="rerun tag: read docs/results/<tag>/flagging-*.json and data/eval/records/<tag>-<set>[-promptguard2], "
+        "write docs/results/<tag>/autoresearch-classifier.{json,md}",
+    )
+    tag = ap.parse_args(argv).tag
+    paths = make_paths(tag)
     settings = Settings.load()
     if not Path(settings.checker_bin).is_file():
         raise SystemExit(f"missing checker binary {settings.checker_bin}; run: cargo build -p checker --release")
 
     backends = ["deberta"]
     skipped: list[str] = []
-    pg_dirs = [RECORDS / f"flagging-{s}-promptguard2" for s in SETS]
+    pg_dirs = [paths.records[s]["promptguard2"] for s in SETS]
     if all(d.is_dir() for d in pg_dirs):
         backends.append("promptguard2")
     else:
         print("promptguard2 records absent; skipped (see Step 4b runbook in autoresearch-classifier.md)")
         skipped.append("promptguard2")
 
-    tune, test = external_split()
+    tune, test = external_split(paths)
     grid: list[dict] = []
     test_cases: dict[tuple[str, float], list[dict]] = {}
     for backend in backends:
         for t in THRESHOLDS:
-            per_set = {s: refuse_run(settings, backend, t, s) for s in SETS}
+            per_set = {s: refuse_run(settings, paths, backend, t, s) for s in SETS}
             main_c = _count(per_set["main"])
             red_c = _count(per_set["redteam"])
             tune_c = _count([c for c in per_set["external"] if c["name"] in tune])
@@ -188,7 +239,7 @@ def main() -> None:
                 }
                 want = {}
                 for s in SETS:
-                    c = _count(json.loads(COMMITTED[s].read_text(encoding="utf-8"))["cases"])
+                    c = _count(json.loads(paths.committed[s].read_text(encoding="utf-8"))["cases"])
                     want[s] = (c["benign_held"], c["attacks_allowed"])
                 diff = {s: {"committed": want[s], "refused": got[s]} for s in SETS if want[s] != got[s]}
                 if diff:
@@ -219,8 +270,8 @@ def main() -> None:
         "preset": PRESET,
         "sources": {
             s: {
-                "results": _rel(SOURCES[s]),
-                "records": {b: _rel(RECORDS / f"flagging-{s}{BACKEND_SUFFIX[b]}") for b in backends},
+                "results": _rel(paths.sources[s]),
+                "records": {b: _rel(paths.records[s][b]) for b in backends},
             }
             for s in SETS
         },
@@ -234,16 +285,18 @@ def main() -> None:
         "external_test": ext_test,
         "jev_calls": 0,
     }
-    OUT_JSON.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    OUT_MD.write_text(render_md(result, incumbent, selected), encoding="utf-8")
-    print(f"selected {selected['backend']}@{selected['threshold']}; wrote {OUT_JSON} and {OUT_MD}")
+    if tag:
+        result["tag"] = tag
+    paths.out_json.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    paths.out_md.write_text(render_md(result, incumbent, selected), encoding="utf-8")
+    print(f"selected {selected['backend']}@{selected['threshold']}; wrote {paths.out_json} and {paths.out_md}")
 
 
 def render_md(result: dict, incumbent: dict, selected: dict) -> str:
     sel_label = f"{selected['backend']} @ {selected['threshold']}"
     inc_label = f"{incumbent['backend']} @ {incumbent['threshold']}"
     lines = [
-        "# Injection classifier and threshold sweep (offline re-fuse)",
+        "# Injection classifier and threshold sweep (offline re-fuse)" + (f" ({result['tag']})" if result.get("tag") else ""),
         "",
         "Generated by `agent/tools/autoresearch_classifier.py` "
         f"(checker commit `{result['checker_commit']}`, preset `{result['preset']}`, Jev calls: {result['jev_calls']}). "
@@ -322,7 +375,7 @@ def render_md(result: dict, incumbent: dict, selected: dict) -> str:
             "export `HF_TOKEN` and run from `agent/`, in this order:",
             "",
             "```",
-            RUNBOOK,
+            runbook(result.get("tag")),
             "```",
             "",
             "If Prompt Guard 2 scores the benchmark's plain-injection probe at or below 0.9, the probe criterion "

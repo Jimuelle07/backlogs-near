@@ -2,7 +2,7 @@
   "models": [
     "protectai/deberta-v3-base-prompt-injection-v2"
   ],
-  "generated_at": "2026-11-13T06:01:19+00:00",
+  "generated_at": "2026-11-13T07:38:43+00:00",
   "threshold": 0.5,
   "corpora": [
     {
@@ -21,7 +21,7 @@
           "fpr": 0.0,
           "f1": 0.5366,
           "auroc": 0.8957,
-          "p50_ms": 1835.33
+          "p50_ms": 552.25
         },
         {
           "backend": "keyword-heuristic",
@@ -52,7 +52,7 @@
           "fpr": 0.575,
           "f1": 0.6966,
           "auroc": 0.72,
-          "p50_ms": 1205.21
+          "p50_ms": 666.64
         },
         {
           "backend": "keyword-heuristic",
@@ -83,7 +83,7 @@
           "fpr": null,
           "f1": null,
           "auroc": null,
-          "p50_ms": 845.87
+          "p50_ms": 728.49
         },
         {
           "backend": "keyword-heuristic",
@@ -114,7 +114,7 @@
           "fpr": 0.0,
           "f1": 0.6667,
           "auroc": 1.0,
-          "p50_ms": 696.08
+          "p50_ms": 670.07
         },
         {
           "backend": "keyword-heuristic",
@@ -145,7 +145,7 @@
           "fpr": 0.0057,
           "f1": 0.1923,
           "auroc": 0.5967,
-          "p50_ms": 604.04
+          "p50_ms": 593.72
         },
         {
           "backend": "keyword-heuristic",
@@ -176,7 +176,7 @@
           "fpr": null,
           "f1": null,
           "auroc": null,
-          "p50_ms": 614.3
+          "p50_ms": 591.76
         },
         {
           "backend": "keyword-heuristic",
