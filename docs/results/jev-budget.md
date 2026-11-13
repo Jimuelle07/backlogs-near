@@ -28,9 +28,10 @@ Runs of 2026-11-13, 01:04 to 02:34 local. The checker was built from this branch
 | 13 | main-set stratified sample (48), `jev_fusion_conformal` | `e2e-2026-11-13-main-sample.json` | 48 | 2,314 |
 | 14 | live testnet run #10–#22 | `e2e-2026-11-13-testnet.json` | 13 | 2,327 |
 | 15 | pilot control: 38 main-set scenarios ([flagging-pilot-scenarios.txt](flagging-pilot-scenarios.txt)), `jev_fusion_conformal`, checker `285ca2a` (Jev questions and state as before) | `flagging-pilot-v1.json` | 38 | 2,365 |
-| 21 | code-rules gate after the provenance rules: main, external and redteam sets with `code_rules_all_signals` (no Jev), checker `4e0a598` | `flagging-main-code-rules.json`, `flagging-external-code-rules.json`, `flagging-redteam-code-rules.json` | 0 | 2,365 |
+| 16 | pilot on Jev v2: same 38 scenarios, `jev_fusion_conformal`, checker `6622e50` (agent_profile in the Jev state, example/counterexample questions; injection hold off) | `flagging-pilot-v2.json` | 38 | 2,403 |
+| 21 | code-rules gate after the provenance rules: main, external and redteam sets with `code_rules_all_signals` (no Jev), checker `4e0a598` | `flagging-main-code-rules.json`, `flagging-external-code-rules.json`, `flagging-redteam-code-rules.json` | 0 | 2,403 |
 
-Total booked: 2,365 calls, of which 400 are booked for the two aborted runs 6a and 7a. This is below the 3,000 stop line (cap 3,100). Runs 10–14 total 88 calls on 2026-11-13 (prior cumulative 2,239). Runs 15 onward (flagging work, branch `flagging-provenance-jev-v2`) total 38 calls.
+Total booked: 2,403 calls, of which 400 are booked for the two aborted runs 6a and 7a. This is below the 3,000 stop line (cap 3,100). Runs 10–14 total 88 calls on 2026-11-13 (prior cumulative 2,239). Runs 15 onward (flagging work, branch `flagging-provenance-jev-v2`) total 76 calls.
 
 Runs 10–14 (offline evals 2026-11-12T20:19Z–20:20Z UTC): native checker from origin/main `38aeaf0`, classifier `protectai/deberta-v3-base-prompt-injection-v2` on local CPU (`firewall-classifier`, port 8088, `INJECTION_TIMEOUT_MS=20000`), `TYPESAFE_API_KEY` set, no NEAR AI key, preset `jev_fusion_conformal`. Runs 10 and 14 ran on testnet with `guardian-v2` in OutLayer mode. Results: [e2e-2026-11-13.md](e2e-2026-11-13.md).
 
