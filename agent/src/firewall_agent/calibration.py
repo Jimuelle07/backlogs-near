@@ -70,56 +70,68 @@ def false_hold_rate(scores: Sequence[float], q_hat: float) -> float:
 # ---------------------------------------------------------------------------
 
 
-def _case_unusual(case: dict, idx: int, record_dir: Path | None) -> float | None:
-    """The Jev `unusual` score for one case: `jev_unusual` first, then `{idx}.json` in record_dir."""
-    if isinstance(case.get("jev_unusual"), (int, float)):
-        return float(case["jev_unusual"])
+SCORES = ("unusual", "injection_driven")
+
+
+def _check_score(score: str) -> None:
+    if score not in SCORES:
+        raise ValueError(f"score: expected one of {SCORES}, got {score!r}")
+
+
+def _case_score(case: dict, idx: int, record_dir: Path | None, score: str = "unusual") -> float | None:
+    """The Jev `score` for one case: `jev_<score>` first, then `{idx}.json` in record_dir."""
+    _check_score(score)
+    if isinstance(case.get(f"jev_{score}"), (int, float)):
+        return float(case[f"jev_{score}"])
     if record_dir is not None:
         rec_path = record_dir / f"{idx}.json"
         if rec_path.is_file():
             try:
                 rec = json.loads(rec_path.read_bytes())
                 jev_sig = (rec.get("signals") or {}).get("jev")
-                if isinstance(jev_sig, dict) and "unusual" in jev_sig:
-                    return float(jev_sig["unusual"])
+                if isinstance(jev_sig, dict) and score in jev_sig:
+                    return float(jev_sig[score])
             except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError):
                 return None
     return None
 
 
-def jev_unusual_scores(
+def jev_scores(
     cases: list[dict],
     label: str,
     record_dir: Path | None = None,
     missing_as_zero: bool = False,
+    score: str = "unusual",
 ) -> list[float]:
-    """Jev `unusual` scores for every case with the given label, in results.json order.
+    """Jev `score` (`unusual` or `injection_driven`) for every case with the given label, in results.json order.
 
-    `firewall-eval` writes `jev_unusual` on each case; `record_dir` (the DecisionRecord
+    `firewall-eval` writes `jev_<score>` on each case; `record_dir` (the DecisionRecord
     files) is the fallback source. A case with no Jev signal is skipped unless
     `missing_as_zero`, which substitutes 0.0 (never held) so the pipeline still runs
     without a Jev key — that run is not a calibration and says so via `sufficient_data`.
     """
+    _check_score(score)
     scores: list[float] = []
     for idx, case in enumerate(cases, start=1):
         if case.get("label") != label:
             continue
-        unusual = _case_unusual(case, idx, record_dir)
-        if unusual is None:
+        value = _case_score(case, idx, record_dir, score)
+        if value is None:
             if not missing_as_zero:
                 continue
-            unusual = 0.0
-        scores.append(unusual)
+            value = 0.0
+        scores.append(value)
     return scores
 
 
-def jev_unusual_scores_from_cases(
+def benign_jev_scores(
     cases: list[dict],
     record_dir: Path | None = None,
     missing_as_zero: bool = False,
+    score: str = "unusual",
 ) -> list[float]:
-    """Jev `unusual` scores for the benign cases (the pooled calibration set)."""
-    return jev_unusual_scores(cases, "benign", record_dir, missing_as_zero)
+    """Jev `score` for the benign cases (the pooled calibration set)."""
+    return jev_scores(cases, "benign", record_dir, missing_as_zero, score)
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +144,7 @@ def calibrate(
     record_dir: Path | None = None,
     epsilon: float = EPSILON_DEFAULT,
     missing_as_zero: bool = False,
+    score: str = "unusual",
 ) -> dict:
     """Compute q_hat and the empirical false-hold rate on the full calibration set.
 
@@ -140,11 +153,12 @@ def calibrate(
         record_dir: directory of DecisionRecord JSON files (optional).
         epsilon: target false-hold rate.
         missing_as_zero: substitute 0.0 for cases with no Jev signal.
+        score: which Jev score to calibrate, `unusual` or `injection_driven`.
 
     Returns:
         dict with keys: n, q_hat, empirical_false_hold_rate, epsilon, sufficient_data.
     """
-    scores = jev_unusual_scores_from_cases(cases, record_dir, missing_as_zero)
+    scores = benign_jev_scores(cases, record_dir, missing_as_zero, score)
     n = len(scores)
     q_hat = compute_q_hat(scores, epsilon)
     fhr = false_hold_rate(scores, q_hat)
@@ -196,7 +210,7 @@ def unseen_family_rotation(
     Returns:
         dict with the pooled row (`q_hat`, `false_hold_rate`, `within_target`) and `by_family`.
     """
-    benign = jev_unusual_scores(cases, "benign", record_dir, missing_as_zero)
+    benign = jev_scores(cases, "benign", record_dir, missing_as_zero)
     step = max(1, round(1.0 / test_fraction)) if test_fraction > 0 else 1
     calibration = [s for i, s in enumerate(benign) if i % step != 0]
     test = [s for i, s in enumerate(benign) if i % step == 0]
@@ -272,6 +286,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Treat cases with no Jev signal as unusual=0.0 instead of skipping them.",
     )
     ap.add_argument(
+        "--score",
+        choices=SCORES,
+        default="unusual",
+        help="Jev score to calibrate (default unusual; --rotation always uses unusual).",
+    )
+    ap.add_argument(
         "--rotation",
         action="store_true",
         help="Run unseen-family rotation (leave-one-attack-family-out).",
@@ -298,6 +318,7 @@ def main(argv: list[str] | None = None) -> int:
             record_dir=args.record_dir,
             epsilon=args.epsilon,
             missing_as_zero=args.missing_as_zero,
+            score=args.score,
         )
         print(f"n             : {result['n']}")
         print(f"q_hat         : {result['q_hat']}")

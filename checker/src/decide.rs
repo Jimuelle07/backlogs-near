@@ -4,6 +4,7 @@ use crate::formats::*;
 use crate::fusion::{self, FusionConfig, FusionMode};
 use crate::injection::{self, InjectionConfig};
 use crate::policy::{self, PolicyConfig};
+use crate::provenance;
 use crate::sink::{self, SinkConfig};
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -115,24 +116,28 @@ pub fn decide_with_configs(
     let (counterparty_signal, _cp_latency_ms) =
         counterparty::check(&input, counterparty_cfg).map_err(CheckerError::Check)?;
     let mut signals = Signals {
-        policy: policy_cfg.enabled.then(|| policy::check(&input, policy_cfg)),
+        policy: policy_cfg.enabled.then(|| {
+            let mut p = policy::check(&input, policy_cfg);
+            p.violations.extend(provenance::check(&input, &counterparty_cfg.profile.known_payees));
+            p.ok = p.violations.is_empty();
+            p
+        }),
         injection: injection_signal,
         melon: None,
         counterparty: counterparty_signal,
         jev: None,
     };
-    let fusion_cfg = &FusionConfig {
-        hold_threshold: match (fusion_cfg.agent_hold_threshold, counterparty_cfg.profile.payments_last_90d) {
-            (Some(t), Some(n)) if n >= fusion::PER_AGENT_MIN_PAYMENTS => t,
-            _ => fusion_cfg.hold_threshold,
-        },
-        ..fusion_cfg.clone()
-    };
+    let fusion_cfg = &effective_fusion(fusion_cfg, counterparty_cfg);
     if fusion_cfg.mode == FusionMode::Jev {
         if let Some(c) = client {
             let jev = c
                 .decide(
-                    &fusion::jev_state(&input, &signals, fusion_cfg.reference_examples.as_ref()),
+                    &fusion::jev_state(
+                        &input,
+                        &signals,
+                        &counterparty_cfg.profile,
+                        fusion_cfg.reference_examples.as_ref(),
+                    ),
                     &decision::firewall_questions(),
                 )
                 .map_err(|e| e.to_string())
@@ -171,11 +176,47 @@ pub fn decide_with_configs(
     Ok((verdict, record))
 }
 
+/// The fusion config in force for this agent: the per-agent hold threshold replaces the global one
+/// once the profile shows at least `PER_AGENT_MIN_PAYMENTS` payments in the last 90 days.
+pub fn effective_fusion(fusion_cfg: &FusionConfig, counterparty_cfg: &CounterpartyConfig) -> FusionConfig {
+    FusionConfig {
+        hold_threshold: match (fusion_cfg.agent_hold_threshold, counterparty_cfg.profile.payments_last_90d) {
+            (Some(t), Some(n)) if n >= fusion::PER_AGENT_MIN_PAYMENTS => t,
+            _ => fusion_cfg.hold_threshold,
+        },
+        ..fusion_cfg.clone()
+    }
+}
+
+/// Re-fuse a stored `DecisionRecord`'s signals under the given configs: outcome and reasons only,
+/// no checks run and no decision client built. Lets one recorded Jev run be scored at other thresholds.
+pub fn refuse_with(
+    record_bytes: &[u8],
+    fusion_cfg: &FusionConfig,
+    counterparty_cfg: &CounterpartyConfig,
+) -> Result<(Outcome, Vec<ReasonCode>), CheckerError> {
+    let record: DecisionRecord =
+        serde_json::from_slice(record_bytes).map_err(|e| CheckerError::Parse(e.to_string()))?;
+    Ok(fusion::fuse(&record.signals, &effective_fusion(fusion_cfg, counterparty_cfg)))
+}
+
+/// `refuse_with` under the configs from the environment (`FUSION_*`, `COUNTERPARTY_*`/`AGENT_PROFILE_*`).
+pub fn refuse(record_bytes: &[u8]) -> Result<(Outcome, Vec<ReasonCode>), CheckerError> {
+    let counterparty_cfg = CounterpartyConfig::from_env().map_err(CheckerError::Config)?;
+    let fusion_cfg = FusionConfig::from_env().map_err(CheckerError::Config)?;
+    refuse_with(record_bytes, &fusion_cfg, &counterparty_cfg)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::counterparty::AgentProfile;
     use crate::fusion::testing::FixedClient;
+
+    /// Defaults changed by later steps must not move these tests.
+    fn pinned() -> FusionConfig {
+        FusionConfig { hold_threshold: 0.84, jev_injection_hold_threshold: 1.0, ..FusionConfig::default() }
+    }
 
     fn counterparty_on() -> CounterpartyConfig {
         CounterpartyConfig {
@@ -194,7 +235,7 @@ mod tests {
             &PolicyConfig::default(),
             &InjectionConfig::default(),
             cfg,
-            &FusionConfig::default(),
+            &pinned(),
             Some(&FixedClient::benign()),
         )
         .unwrap()
@@ -393,7 +434,7 @@ mod tests {
             &PolicyConfig::default(),
             &InjectionConfig::default(),
             &cp_cfg,
-            &FusionConfig::default(),
+            &pinned(),
             None,
         )
         .unwrap();
@@ -433,7 +474,7 @@ mod tests {
             &PolicyConfig::default(),
             &unreachable_classifier(),
             &CounterpartyConfig::default(),
-            &FusionConfig { cascade: true, ..FusionConfig::default() },
+            &FusionConfig { cascade: true, ..pinned() },
             Some(client),
         )
     }
@@ -467,7 +508,7 @@ mod tests {
             &PolicyConfig::default(),
             &unreachable_classifier(),
             &CounterpartyConfig::default(),
-            &FusionConfig::default(),
+            &pinned(),
             Some(&client_with_unusual(0.04)),
         )
         .expect_err("classifier runs before Jev without the cascade");
@@ -476,7 +517,7 @@ mod tests {
 
     #[test]
     fn code_rules_never_calls_the_client() {
-        let cfg = FusionConfig { mode: FusionMode::CodeRules, ..FusionConfig::default() };
+        let cfg = FusionConfig { mode: FusionMode::CodeRules, ..pinned() };
         let (v, r) = decide_with_configs(
             INPUT.as_bytes(),
             &PolicyConfig::default(),
@@ -504,7 +545,7 @@ mod tests {
             let fusion = FusionConfig {
                 hold_threshold: 0.84,
                 agent_hold_threshold: Some(0.70),
-                ..FusionConfig::default()
+                ..pinned()
             };
             decide_with_configs(
                 INPUT.as_bytes(),
@@ -520,5 +561,17 @@ mod tests {
         };
         assert_eq!(run(120), Outcome::Hold);
         assert_eq!(run(12), Outcome::Allow);
+    }
+
+    #[test]
+    fn refuse_with_applies_the_given_hold_threshold() {
+        let cp = CounterpartyConfig::default();
+        let at = |hold_threshold: f64| {
+            let cfg = FusionConfig { hold_threshold, ..pinned() };
+            refuse_with(FIXTURE_HOLD.as_bytes(), &cfg, &cp).unwrap()
+        };
+        assert_eq!(at(0.84).0, Outcome::Allow);
+        assert_eq!(at(0.5).0, Outcome::Hold);
+        assert!(refuse_with(b"{}", &pinned(), &cp).is_err());
     }
 }

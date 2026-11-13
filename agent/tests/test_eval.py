@@ -498,3 +498,245 @@ def test_apply_calibration_writes_q_hat_and_rotation(tmp_path):
     rows = {r["family"]: r for r in results["unseen_family_rotation"]}
     assert rows["fake_invoice"]["detected"] == 1
     assert rows["all"]["total"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Step 3 / Step 5 — per-case signals, --record-dir, --refuse-from
+# ---------------------------------------------------------------------------
+
+JEV_SIGNAL = {
+    "backend": "jev",
+    "model": "jev-latest",
+    "unusual": 0.4,
+    "injection_driven": 0.7,
+    "receiver_risk": 0.25,
+    "label": "B",
+    "label_probabilities": {"A": 0.2, "B": 0.7, "C": 0.1},
+}
+PILOT_NAMES = ["benign-hosting", "attack-morse-lookalike", "benign-partial-payment"]
+JEV_PRESET = "jev_fusion_conformal"
+CASCADE_PRESET = "jev_fusion_conformal_cascade"
+
+
+def _signal_runner(signals, outcome_for=lambda _ci: ("allow", ["stub_allow"])):
+    """Stub runner whose DecisionRecord carries `signals` (merged over the all-null defaults)."""
+    stub = _make_stub_runner(outcome_for)
+
+    def runner(input_bytes, record_dir):
+        verdict = stub(input_bytes, record_dir)
+        path = record_dir / f"{verdict['request_id']}.json"
+        record = json.loads(path.read_bytes())
+        record["signals"].update(signals)
+        raw = json.dumps(record, separators=(",", ":")).encode("utf-8")
+        path.write_bytes(raw)
+        return {**verdict, "record_sha256": hashlib.sha256(raw).hexdigest()}
+
+    return runner
+
+
+def _jev_source(tmp_path, names=PILOT_NAMES):
+    """Record a Jev run with the stub: returns (source results file, record dir)."""
+    rec = tmp_path / "rec"
+    src = tmp_path / "src.json"
+    run_all_configurations(
+        Settings.load(),
+        configurations=[(JEV_PRESET, eval_mod.preset_env(JEV_PRESET))],
+        checker_fn=_signal_runner({"jev": JEV_SIGNAL}),
+        output_path=src,
+        scenario_names=names,
+        record_dir=rec,
+    )
+    return src, rec
+
+
+def _snapshot(directory):
+    return {p.name: p.read_bytes() for p in sorted(directory.iterdir())}
+
+
+def test_refuse_from_replaces_outcomes_and_recomputes_summary(tmp_path):
+    src, rec = _jev_source(tmp_path)
+    before = _snapshot(rec)
+    assert len(before) == 3
+    refused_calls = []
+
+    def refuse_fn(record_bytes):
+        rid = json.loads(record_bytes)["request_id"]
+        refused_calls.append(rid)
+        return {"outcome": "hold", "reasons": ["unusual_for_agent"]} if rid == "2" else {
+            "outcome": "allow",
+            "reasons": [],
+        }
+
+    out = tmp_path / "refused.json"
+    combined = run_all_configurations(
+        Settings.load(),
+        configurations=[
+            ("no_defense", eval_mod.preset_env("no_defense")),
+            (JEV_PRESET, eval_mod.preset_env(JEV_PRESET)),
+        ],
+        checker_fn=_make_stub_runner(),
+        output_path=out,
+        record_dir=rec,
+        refuse_from=src,
+        refuse_fn=refuse_fn,
+    )
+    assert refused_calls == ["1", "2", "3"]
+    assert combined["refused_from"] == "src.json"
+    assert json.loads(out.read_text(encoding="utf-8"))["refused_from"] == "src.json"
+    assert [c["name"] for c in combined["cases"]] == PILOT_NAMES
+    assert [c["outcome"] for c in combined["cases"]] == ["allow", "hold", "allow"]
+    assert combined["cases"][1]["reasons"] == ["unusual_for_agent"]
+    assert all(c["refused"] is True for c in combined["cases"])
+    assert all(c["jev_called"] is True for c in combined["cases"])
+    assert combined["summary"]["held_attacks"] == 1
+    assert combined["summary"]["missed_attacks"] == 0
+    rows = {r["configuration"]: r for r in combined["configurations"]}
+    assert rows[JEV_PRESET]["held_attacks"] == 1
+    assert rows[JEV_PRESET]["jev_calls_per_payment"] == 1.0
+    # The code-rules row ran normally over the source's scenarios (stub: all allow), not re-fused.
+    assert rows["no_defense"]["missed_attacks"] == 1
+    assert _snapshot(rec) == before
+
+
+def test_refuse_from_skips_cascade_preset_with_caveat(tmp_path):
+    src, rec = _jev_source(tmp_path)
+    combined = run_all_configurations(
+        Settings.load(),
+        configurations=[
+            (CASCADE_PRESET, eval_mod.preset_env(CASCADE_PRESET)),
+            (JEV_PRESET, eval_mod.preset_env(JEV_PRESET)),
+        ],
+        output_path=tmp_path / "refused.json",
+        record_dir=rec,
+        refuse_from=src,
+        refuse_fn=lambda _b: {"outcome": "allow", "reasons": []},
+    )
+    assert [r["configuration"] for r in combined["configurations"]] == [JEV_PRESET]
+    caveat = "Cascade row not re-run: its Jev state differs (no classifier score), so it cannot be re-fused."
+    assert combined["caveats"].count(caveat) == 1
+
+
+def test_refuse_from_missing_record_file_exits(tmp_path):
+    src, rec = _jev_source(tmp_path)
+    (rec / "2.json").unlink()
+    with pytest.raises(SystemExit, match=r"2\.json"):
+        run_all_configurations(
+            Settings.load(),
+            configurations=[(JEV_PRESET, eval_mod.preset_env(JEV_PRESET))],
+            output_path=tmp_path / "refused.json",
+            record_dir=rec,
+            refuse_from=src,
+            refuse_fn=lambda _b: {"outcome": "allow", "reasons": []},
+        )
+
+
+def test_refuse_from_scenario_set_mismatch_exits(tmp_path):
+    src, rec = _jev_source(tmp_path)
+    with pytest.raises(SystemExit, match="scenario_set"):
+        run_all_configurations(
+            Settings.load(),
+            configurations=[(JEV_PRESET, eval_mod.preset_env(JEV_PRESET))],
+            output_path=tmp_path / "refused.json",
+            scenario_set="redteam",
+            record_dir=rec,
+            refuse_from=src,
+            refuse_fn=lambda _b: {"outcome": "allow", "reasons": []},
+        )
+
+
+def test_refuse_from_cli_argument_rules(tmp_path):
+    src = tmp_path / "src.json"
+    src.write_text("{}", encoding="utf-8")
+    base = ["--refuse-from", str(src), "--output", str(tmp_path / "o.json")]
+    with pytest.raises(SystemExit, match="record-dir"):
+        main([*base, "--preset", JEV_PRESET])
+    with pytest.raises(SystemExit, match="preset"):
+        main([*base, "--record-dir", str(tmp_path / "rec")])
+    with pytest.raises(SystemExit, match="scenario"):
+        main([*base, "--record-dir", str(tmp_path / "rec"), "--preset", JEV_PRESET, "--scenario", "benign-hosting"])
+
+
+def test_record_dir_rejects_non_empty_dir(tmp_path):
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    (rec / "1.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(SystemExit, match="not empty"):
+        run_all_configurations(
+            Settings.load(),
+            configurations=[("cfg", {"FUSION_MODE": "code_rules"})],
+            checker_fn=_make_stub_runner(),
+            output_path=tmp_path / "o.json",
+            scenario_names=PILOT_NAMES,
+            record_dir=rec,
+        )
+    assert _snapshot(rec) == {"1.json": b"{}"}
+
+
+def test_record_dir_rejects_several_presets(tmp_path):
+    with pytest.raises(SystemExit, match="one preset"):
+        run_all_configurations(
+            Settings.load(),
+            configurations=[("a", {"FUSION_MODE": "code_rules"}), ("b", {"FUSION_MODE": "code_rules"})],
+            checker_fn=_make_stub_runner(),
+            output_path=tmp_path / "o.json",
+            scenario_names=PILOT_NAMES,
+            record_dir=tmp_path / "rec",
+        )
+
+
+def test_record_dir_cli_rejects_non_empty_dir(tmp_path):
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    (rec / "x").write_text("x", encoding="utf-8")
+    with pytest.raises(SystemExit, match="not empty"):
+        main(["--record-dir", str(rec), "--output", str(tmp_path / "o.json"), "--scenario", "benign-hosting"])
+
+
+def test_cases_carry_new_signal_keys_from_the_record():
+    signals = {
+        "jev": JEV_SIGNAL,
+        "policy": {"ok": False, "violations": ["amount_mismatch_request"]},
+        "counterparty": {"lookalike_of": "hostco.demo.testnet", "prior_payments": 0},
+    }
+    res = evaluate_scenarios(
+        Settings.load(), scenario_names=["benign-hosting"], checker_fn=_signal_runner(signals)
+    )
+    case = res["cases"][0]
+    assert case["jev_injection_driven"] == 0.7
+    assert case["jev_receiver_risk"] == 0.25
+    assert case["jev_label"] == "B"
+    assert case["policy_violations"] == ["amount_mismatch_request"]
+    assert case["lookalike_of"] == "hostco.demo.testnet"
+    keys = list(case)
+    assert keys[keys.index("jev_unusual") + 1 : keys.index("jev_unusual") + 6] == [
+        "jev_injection_driven",
+        "jev_receiver_risk",
+        "jev_label",
+        "policy_violations",
+        "lookalike_of",
+    ]
+
+
+def test_cases_new_signal_keys_default_when_signals_absent():
+    res = evaluate_scenarios(
+        Settings.load(),
+        scenario_names=["benign-hosting"],
+        checker_fn=_signal_runner({"policy": None}),
+    )
+    case = res["cases"][0]
+    assert case["jev_injection_driven"] is None
+    assert case["jev_receiver_risk"] is None
+    assert case["jev_label"] is None
+    assert case["policy_violations"] == []
+    assert case["lookalike_of"] is None
+
+
+def test_preset_removes_exported_injection_hold_threshold(tmp_path, monkeypatch):
+    import os
+
+    name = "FUSION_JEV_INJECTION_HOLD_THRESHOLD"
+    monkeypatch.setenv(name, "0.2")
+    seen: list[dict[str, str | None]] = []
+    _run_preset(tmp_path, _env_probe_runner([name], seen))
+    assert seen and all(s[name] is None for s in seen)
+    assert os.environ[name] == "0.2"

@@ -4,6 +4,10 @@ use std::io::{Read, Write};
 use std::process::exit;
 
 fn main() {
+    #[cfg(not(target_os = "wasi"))]
+    if std::env::args().nth(1).as_deref() == Some("--refuse") {
+        refuse_stdin();
+    }
     let mut input = Vec::new();
     if let Err(e) = std::io::stdin().read_to_end(&mut input) {
         eprintln!("checker error: cannot read stdin: {e}");
@@ -54,6 +58,36 @@ fn main() {
     if out.write_all(&line).and_then(|_| out.flush()).is_err() {
         exit(2);
     }
+}
+
+/// `checker --refuse`: re-fuse a DecisionRecord from stdin under the env configs and print
+/// `{"outcome":...,"reasons":[...]}`. Never returns.
+#[cfg(not(target_os = "wasi"))]
+fn refuse_stdin() -> ! {
+    let mut input = Vec::new();
+    if let Err(e) = std::io::stdin().read_to_end(&mut input) {
+        eprintln!("checker error: cannot read stdin: {e}");
+        exit(2);
+    }
+    let (outcome, reasons) = match decide::refuse(&input) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("checker error: {e}");
+            exit(2);
+        }
+    };
+    let line = match serde_json::to_string(&serde_json::json!({"outcome": outcome, "reasons": reasons})) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("checker error: {e}");
+            exit(2);
+        }
+    };
+    let mut out = std::io::stdout();
+    if writeln!(out, "{line}").and_then(|_| out.flush()).is_err() {
+        exit(2);
+    }
+    exit(0);
 }
 
 /// The record file is the owner's decision log: never replace an existing
