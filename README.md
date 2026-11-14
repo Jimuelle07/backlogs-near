@@ -1,5 +1,11 @@
 <div align="center">
 
+![Animation: a Morse-code X reply makes the agent propose 180 tUSDC to the lookalike account hostc0. The Guardian pauses the payment, the checker raises six flags, the verdict is block and 0 tUSDC moves. The normal 18 tUSDC invoice to hostco is then allowed and paid.](site/public/demo/eclipse-demo.gif)
+
+<sub>Animation of testnet receipts #6 (allow, paid) and #7 (block, refused) from 2026-11-13 (<a href="docs/build/sdd.md#outlayer-run-with-jev-2026-11-13">run log</a>); not a screen recording. Jev's score varies between runs; this attempt scored above the hold threshold.</sub>
+
+**[Watch the full demo video](https://drive.google.com/file/d/13YEZlaN2TEu1yxlvRQc6oXd-9RrjCPc5/view?usp=sharing)** · [X post](https://x.com/Jimuelle17/status/2121470442712236097)
+
 # Eclipse
 
 **Steps in front of the bad payment. Stays in the background otherwise.**
@@ -14,12 +20,6 @@ A payment firewall for AI agents, on NEAR.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 [Live site](https://eclipse-9le.pages.dev/) · [Demo video](https://drive.google.com/file/d/13YEZlaN2TEu1yxlvRQc6oXd-9RrjCPc5/view?usp=sharing) · [X post](https://x.com/Jimuelle17/status/2121470442712236097) · [Quick start](#quick-start) · [Results](#results) · [How it works](#how-it-works) · [FAQ](#faq) · [Limits](#limits) · [Built with](#built-with) · [All docs](docs/index.md)
-
-![Animation: a Morse-code X reply makes the agent propose 180 tUSDC to the lookalike account hostc0. The Guardian pauses the payment, the checker raises six flags, the verdict is block and 0 tUSDC moves. The normal 18 tUSDC invoice to hostco is then allowed and paid.](site/public/demo/eclipse-demo.gif)
-
-<sub>Animation of testnet receipts #6 (allow, paid) and #7 (block, refused) from 2026-11-13 (<a href="docs/build/sdd.md#outlayer-run-with-jev-2026-11-13">run log</a>); not a screen recording. Jev's score varies between runs; this attempt scored above the hold threshold.</sub>
-
-**[Watch the full demo video](https://drive.google.com/file/d/13YEZlaN2TEu1yxlvRQc6oXd-9RrjCPc5/view?usp=sharing)** · [X post](https://x.com/Jimuelle17/status/2121470442712236097)
 
 </div>
 
