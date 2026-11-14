@@ -240,7 +240,7 @@ Claude Code and Codex screen every project first by checking that it runs and do
 
 **README outline**
 
-1. One-line pitch and 20-second GIF of the blocked attack
+1. One-line pitch and a 15-second animated GIF: the blocked attack, then a normal payment (Jim, 2026-11-14)
 2. Problem: the Grok wallet incident and why host-side checks fail
 3. Architecture diagram and the four checks
 4. Quickstart: env vars, testnet deploy, run benign demo, run attack demo, expected log output

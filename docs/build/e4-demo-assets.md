@@ -2,7 +2,7 @@
 
 Owner: Ace. Branch: `feat/e4-demo-assets`, from `origin/main` after D3 approval
 and merge (PR #26; numbers refreshed in PR #28). E4 remains **in progress** until
-both the slide and the actual blocked-attack GIF are saved and reviewed.
+both the slide and the README GIF are saved and reviewed.
 
 ## Storyboard alignment
 
@@ -24,21 +24,30 @@ hashes and mapped values are recorded in `numbers-slide.data.json`.
 Text input hashes normalize line endings to LF; font hashes use the binary
 bytes, so Windows checkout conversion does not change the provenance hashes.
 
-## GIF prerequisite and current blocker
+## README GIF
 
-No screen recording was found in the repository, including ignored media.
-D3 is a storyboard, not a screen-recorded application implementation. The
-documented Morse attempt is request 5: outcome `hold`, later owner-cancelled to
-status `refused` ([nightly log](nightly-e2e.md#run-log)). That is not a blocking
-run and cannot be used as footage of `block`. G2 and A8 are not recorded as done
-in `sprints.md`. An eval case that blocks is not a testnet screen recording.
+Jim's decision of 2026-11-14 ([D3 README GIF](demo-storyboard.md#readme-gif)):
+the README GIF is a 15-second motion-graphics animation, not a cut of the shot 4
+screen recording, and no longer waits on A8. It animates testnet receipts #7
+(the Morse attack, `block`, `refused`) and #6 (the hosting invoice, `allow`,
+`paid`) from the [OutLayer run of 2026-11-13](sdd.md#outlayer-run-with-jev-2026-11-13);
+the request, Morse text and proposed tool call come from
+`agent/scenarios/attack-morse-lookalike.json`. The asset is
+`site/public/demo/eclipse-demo.gif`, rendered from the Remotion composition
+`ReadmeDemo`. Regenerate it from `video/` (frames in `video/out/`, gitignored):
 
-E4 therefore cannot yet supply `blocked-attack.gif`. The required input is A8's
-actual shot 4 screen recording plus its receipt/decision record, transaction
-links, unchanged-balance evidence and the receipt numbers of held attempts.
-Jim signs each testnet attempt and cancels each held attempt before the next
-try, as required by D3 **Shot list**, shot 4, and **Before recording**. No signing
-command is run by the E4 generator. No simulated GIF is substituted.
+```powershell
+npx remotion render ReadmeDemo out/readme-demo-frames --sequence --image-format=png --image-sequence-pattern="f_[frame].[ext]"
+ffmpeg -y -framerate 25 -start_number 0 -i out/readme-demo-frames/f_%03d.png -vf "scale=1200:675:flags=lanczos,palettegen=max_colors=256:stats_mode=full" out/readme-demo-palette.png
+ffmpeg -y -framerate 25 -start_number 0 -i out/readme-demo-frames/f_%03d.png -i out/readme-demo-palette.png -lavfi "scale=1200:675:flags=lanczos[x];[x][1:v]paletteuse=dither=none:diff_mode=rectangle" -loop 0 ../site/public/demo/eclipse-demo.gif
+```
+
+Observed on 2026-11-14: `ffprobe` on `site/public/demo/eclipse-demo.gif` reports
+width 1200, height 675, 375 frames at `25/1`, duration 15.000000 s and
+2,621,981 bytes (under 8 MB); `cmp out/readme-demo-frames/f_000.png
+out/readme-demo-frames/f_374.png` printed nothing, so the first and last frames
+are identical and the GIF loops. Twelve stills of the final render (frames
+000, 050, 100, 126, 148, 200, 216, 221, 260, 300, 325, 360) were inspected.
 
 There is an existing documentation mismatch: `idea.md`'s older demo text mentions
 MELON and re-checking; D3 **Decisions**, item 6, explicitly records those as not
@@ -76,38 +85,6 @@ powershell -ExecutionPolicy Bypass -File site/scripts/render-demo-preview.ps1
 Open `site/public/demo/numbers-slide.html` or the PNG to review projection-size
 legibility. The HTML and SVG work offline; the PNG is the portable raster preview.
 
-## Capture and encode the GIF once footage exists
-
-Follow D3 **20-second GIF**, cut from the real shot 4 recording:
-
-| Seconds | Footage and caption |
-| --- | --- |
-| 0–4 | Actual Morse reply in the inbox; decoded instruction beneath it |
-| 4–8 | Actual proposed amount and `hostc0` receiver |
-| 8–15 | Check log, one line at a time; only the recorded run's fired signals |
-| 15–18 | `BLOCK`, `refused`, actual reason codes; “policy + counterparty agree, and Jev scored above the hold threshold” |
-| 18–20 | “0 tUSDC moved”, verified unchanged Guardian balance, explorer link |
-
-Keep captions legible at 1200 × 675. Include D3's run-variance disclosure:
-“Jev's score varies between runs; this attempt scored above the hold threshold.”
-Retain held attempts and their cancellation links in the capture notes. A
-cancelled hold must never be presented as a checker block. Do not hide latency
-edits; retain the uncut recording as evidence outside the public asset directory.
-
-Use the five beats above to edit an actual 20-second cut with captions. Then,
-with FFmpeg installed, encode that reviewed cut (replace the input path):
-
-```powershell
-ffmpeg -i shot4-cut.mp4 -filter_complex "[0:v]fps=15,scale=1200:675:force_original_aspect_ratio=decrease,pad=1200:675:(ow-iw)/2:(oh-ih)/2:color=0x15131D,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3" -t 20 -an -loop 0 site/public/demo/blocked-attack.gif
-ffprobe -v error -show_entries format=duration,size:stream=width,height,avg_frame_rate,nb_frames -of json site/public/demo/blocked-attack.gif
-```
-
-Verify the encoded GIF is exactly 20 seconds, 1200 × 675, 300 frames at nominal
-15 fps (GIF delays quantize to hundredths of a second), under 8 MB and loops
-cleanly. Inspect all five beats visually alongside D3. If encoding changes the
-duration, correct the final frame delay and check again. Do not mark E4 done
-until this verification and the actual asset exist.
-
 ## Checks
 
 ```powershell
@@ -119,8 +96,7 @@ npm run build
 Node tests cover format rejection, actual-row selection, count/percentage/unit
 mapping, missing data, sample labels, external-set isolation and generated SVG
 content. Generated assets include input hashes so later data or template changes
-can be detected and regenerated together. Capture evidence and GIF verification
-are still pending the source recording.
+can be detected and regenerated together.
 
 Observed on 2026-11-13: `npm test` passed all 41 tests (13 new E4 tests; existing
 parallel Vite SSR tests printed a nonfatal WebSocket-port warning). `npm run
@@ -128,4 +104,3 @@ build` passed with Vite 5.4.21. The PNG was rendered with headless Edge at
 1920 × 1080 and visually inspected: both headline values, the full secondary
 metrics row, family outcomes, cap line, caveats and sources fit without clipping.
 The SVG/HTML include the font license and make no external font request.
-No GIF exists yet, so its duration, file size and five beats are not verified.

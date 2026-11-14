@@ -13,7 +13,13 @@ A payment firewall for AI agents, on NEAR.
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](agent/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Live site](https://eclipse-9le.pages.dev/) · [Quick start](#quick-start) · [Results](#results) · [How it works](#how-it-works) · [FAQ](#faq) · [Limits](#limits) · [Built with](#built-with) · [All docs](docs/index.md)
+[Live site](https://eclipse-9le.pages.dev/) · [Demo video](https://drive.google.com/file/d/13YEZlaN2TEu1yxlvRQc6oXd-9RrjCPc5/view?usp=sharing) · [X post](https://x.com/Jimuelle17/status/2121470442712236097) · [Quick start](#quick-start) · [Results](#results) · [How it works](#how-it-works) · [FAQ](#faq) · [Limits](#limits) · [Built with](#built-with) · [All docs](docs/index.md)
+
+![Animation: a Morse-code X reply makes the agent propose 180 tUSDC to the lookalike account hostc0. The Guardian pauses the payment, the checker raises six flags, the verdict is block and 0 tUSDC moves. The normal 18 tUSDC invoice to hostco is then allowed and paid.](site/public/demo/eclipse-demo.gif)
+
+<sub>Animation of testnet receipts #6 (allow, paid) and #7 (block, refused) from 2026-11-13 (<a href="docs/build/sdd.md#outlayer-run-with-jev-2026-11-13">run log</a>); not a screen recording. Jev's score varies between runs; this attempt scored above the hold threshold.</sub>
+
+**[Watch the full demo video](https://drive.google.com/file/d/13YEZlaN2TEu1yxlvRQc6oXd-9RrjCPc5/view?usp=sharing)** · [X post](https://x.com/Jimuelle17/status/2121470442712236097)
 
 </div>
 
@@ -178,7 +184,7 @@ Complete list: [results-detail.md](docs/results/results-detail.md#limits).
 | Rust | near-sdk-rs, near-contract-standards, cargo-near, serde, serde_json, sha2, hex, ureq, wasi-http-client |
 | Python | uv, hatchling, py-near, openai, httpx, jsonschema, python-dotenv, pytest, matplotlib |
 | Frontend | React, React DOM, Vite, @vitejs/plugin-react, vite-plugin-singlefile, three, three-stdlib, @react-three/fiber, @react-three/drei, GSAP, Lenis, lucide-react, Google Fonts (Geist, Geist Mono), NEARBlocks testnet explorer, FastNEAR public testnet RPC |
-| Video | Remotion, @remotion/cli, @remotion/transitions, @remotion/google-fonts, TypeScript |
+| Video | Remotion, @remotion/cli, @remotion/transitions, @remotion/google-fonts, TypeScript, FFmpeg |
 
 Links, licenses and what each one is used for: [docs/third-party.md](docs/third-party.md).
 
