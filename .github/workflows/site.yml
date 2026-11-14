@@ -1,10 +1,7 @@
 name: site
 
-# CI: every PR touching the site or the files it reads runs the tests and the build.
-# CD: every push to main (and manual runs on main) deploys site/dist to the
-# Cloudflare Pages project `eclipse` (https://eclipse-9le.pages.dev/).
-# Needs repo secrets CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit)
-# and CLOUDFLARE_ACCOUNT_ID; see site/README.md "Deploy".
+# CI only: every PR and push to main touching the site or the files it reads runs the
+# tests and the build. Deploys are manual with wrangler (see site/README.md "Deploy").
 
 on:
   pull_request:
@@ -43,30 +40,3 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: site-dist
-          path: site/dist
-          retention-days: 7
-
-  deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://eclipse-9le.pages.dev/
-    concurrency:
-      group: site-deploy
-      cancel-in-progress: false
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: site-dist
-          path: dist
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.161.0"
-          command: pages deploy dist --project-name eclipse --branch main --commit-hash ${{ github.sha }}
