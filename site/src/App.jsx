@@ -16,7 +16,6 @@ import {
   Undo2,
   UserSearch,
   BarChart3,
-  Play,
   Radio,
   TriangleAlert,
   Menu,
@@ -448,15 +447,20 @@ export default function App() {
           {/* Demo */}
           <section className="sec" id="demo" aria-labelledby="demo-title">
             <Head id="demo-title" kicker="Demo" title="Same agent. Same attack. Different outcome.">
-              About two minutes, recorded on testnet with real transactions.
+              About three and a half minutes: the story first, then a live run on NEAR testnet with real transactions.
             </Head>
             {/* Bento: the video, then the six steps of the demo script as cards. */}
             <ol className="dbento">
               <li className="dcard dvideo">
-                <div className="video" role="img" aria-label="Demo video placeholder">
-                  <span className="vplay" aria-hidden="true"><Play size={22} strokeWidth={1.8} /></span>
-                  Demo video goes here once recorded
-                </div>
+                <video
+                  className="video"
+                  src={`${import.meta.env.BASE_URL}video/eclipse-demo.mp4`}
+                  poster={`${import.meta.env.BASE_URL}video/eclipse-demo-poster.jpg`}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  aria-label="Eclipse demo video"
+                />
               </li>
               {DEMO.map(([title, text], i) => {
                 const Icon = DEMO_ICONS[i];

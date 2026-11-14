@@ -1156,6 +1156,7 @@ footer { margin-top: clamp(40px, 5vw, 64px); border-top: 1px dashed var(--dash);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
   background: radial-gradient(80% 90% at 50% 100%, #edb1e81f, transparent 70%), #121019;
 }
+video.video { width: 100%; object-fit: contain; background: #000; }
 .vplay {
   width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; padding-left: 3px;
   background: var(--accent); color: var(--ink); box-shadow: 0 0 0 8px #edb1e81f, 0 12px 30px -10px #c77dc6;
