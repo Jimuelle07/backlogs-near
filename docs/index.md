@@ -34,9 +34,9 @@ Frontend D1/E1: [site/README.md](../site/README.md) — shared landing page and 
 | [reference.md](reference.md) | Evaluation and benchmark steps 7–12, configuration switches, local run and testnet instructions, function-call key | Running evals, changing config, running locally |
 | [try-it.md](try-it.md) | Try-it steps 1–6 in full: keyless dry-run, Jev-key dry-run, decision record, nightly dry-run, with expected output | Running the demo for the first time |
 | [third-party.md](third-party.md) | Every third-party library, tool and dataset with link, license and use | Checking attribution or licenses |
-| [../video/README.md](../video/README.md) | Remotion explainer video: how Eclipse runs (deployment, payment flow, allow / hold / block, receipts, results), scenes and commands | Previewing or editing the explainer video |
-| [build/demo-storyboard.md](build/demo-storyboard.md) | D3 demo storyboard: shot list for the 2-minute demo, numbers slide, 20-second GIF plan, open questions | Recording the demo (A8), making the GIF and slide (E4) |
-| [build/e4-demo-assets.md](build/e4-demo-assets.md) | E4 numbers-slide sources, regeneration and verification; actual shot 4 footage needed for the GIF | Regenerating the slide or completing the blocked-attack GIF |
+| [../video/README.md](../video/README.md) | Remotion explainer video: how Eclipse runs (deployment, payment flow, allow / hold / block, receipts, results), scenes and commands; `ReadmeDemo`, the 15 s README GIF | Previewing or editing the explainer video |
+| [build/demo-storyboard.md](build/demo-storyboard.md) | D3 demo storyboard: shot list for the 2-minute demo, numbers slide, README GIF plan, open questions | Recording the demo (A8), making the GIF and slide (E4) |
+| [build/e4-demo-assets.md](build/e4-demo-assets.md) | E4 numbers-slide sources, regeneration and verification; README GIF source and regeneration | Regenerating the slide or completing the blocked-attack GIF |
 | [hackathon-context/HACKATHON.md](hackathon-context/HACKATHON.md) | Official agent instructions and rules snapshot; the live https://nearhackathon.com/HACKATHON.md wins | Before any rules question or submission step |
 | [hackathon-context/near_hackathon_web.md](hackathon-context/near_hackathon_web.md) | Full site capture: timeline, prizes, judges, tracks, submission API | Looking up event facts |
 | [hackathon-context/near_hackathon_tracks_ranked.md](hackathon-context/near_hackathon_tracks_ranked.md) | Jev primer, track ranking, the three bets, winning checklist | Choosing the project; designing Jev usage |

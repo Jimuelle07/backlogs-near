@@ -1,0 +1,10 @@
+node_modules
+dist
+.DS_Store
+.env
+
+# Ignore the output video from Git but not videos you import into src/.
+out
+
+# Live demo footage and run data (agent/tools/showdown/video_data.py); local only, like data/.
+public/live-demo

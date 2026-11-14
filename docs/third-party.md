@@ -49,3 +49,4 @@ Moved from the README on 2026-11-13. The README keeps a names-only table: [READM
 
 - [Remotion](https://www.remotion.dev) (`remotion`, `@remotion/cli`, `@remotion/transitions`, `@remotion/google-fonts`): the explainer video of how Eclipse runs; Remotion License, free for individuals and companies of up to 3 people, company license otherwise (see [remotion.dev/license](https://www.remotion.dev/docs/license))
 - React and TypeScript: video components
+- [FFmpeg](https://ffmpeg.org) (LGPL-2.1-or-later / GPL depending on the build): encodes the README GIF from the rendered frames
